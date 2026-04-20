@@ -29,7 +29,7 @@ public final class CrystalBehavior implements WeaponBehavior {
     @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
         if (distance > MAX_DISTANCE) return 0;
-        if (!bot.getCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) return 0;
+        if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) return 0;
 
         BotInventory inv = bot.getBotInventory();
         if (!inv.hasCrystalKit()) return 0;
@@ -53,7 +53,7 @@ public final class CrystalBehavior implements WeaponBehavior {
         world.playSound(spawn, Sound.ENTITY_GENERIC_EXPLODE, 1f, 1f);
 
         consumeOne(inv.raw(), Material.END_CRYSTAL);
-        bot.getCooldowns().set(COOLDOWN_KEY, COOLDOWN, bot.getAliveTicks());
+        bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, bot.getAliveTicks());
         return COOLDOWN;
     }
 

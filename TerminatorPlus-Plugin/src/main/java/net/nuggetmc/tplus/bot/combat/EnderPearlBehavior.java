@@ -25,7 +25,7 @@ public final class EnderPearlBehavior implements WeaponBehavior {
     @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
         if (distance < MIN_DISTANCE || distance > MAX_DISTANCE) return 0;
-        if (!bot.getCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) return 0;
+        if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) return 0;
 
         int slot = bot.getBotInventory().findHotbar(Material.ENDER_PEARL);
         if (slot < 0) return 0;
@@ -63,7 +63,7 @@ public final class EnderPearlBehavior implements WeaponBehavior {
             }
         }
 
-        bot.getCooldowns().set(COOLDOWN_KEY, COOLDOWN, bot.getAliveTicks());
+        bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, bot.getAliveTicks());
         return COOLDOWN;
     }
 }

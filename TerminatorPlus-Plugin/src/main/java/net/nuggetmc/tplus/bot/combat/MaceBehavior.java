@@ -43,7 +43,7 @@ public final class MaceBehavior implements WeaponBehavior {
             case CHARGING:
             case IDLE:
             case RELEASE: {
-                if (!bot.getCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) {
+                if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) {
                     // Stay close but don't jump-smash. Fall through to melee on the sword if lateral.
                     if (distance <= ATTACK_RANGE && bot.tickDelay(5)) {
                         doAttack(bot, target);
@@ -58,7 +58,7 @@ public final class MaceBehavior implements WeaponBehavior {
                 Vector launch = horiz.setY(JUMP_Y);
 
                 bot.jump(launch);
-                bot.getCooldowns().set(COOLDOWN_KEY, JUMP_COOLDOWN, bot.getAliveTicks());
+                bot.getBotCooldowns().set(COOLDOWN_KEY, JUMP_COOLDOWN, bot.getAliveTicks());
                 state.setPhase(CombatState.Phase.AIRBORNE);
                 bot.getLocation().getWorld().playSound(bot.getLocation(), Sound.ENTITY_PLAYER_BIG_FALL, 0.3f, 1.6f);
                 return 0;

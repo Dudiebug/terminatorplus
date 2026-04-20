@@ -278,7 +278,7 @@ public class Bot extends ServerPlayer implements Terminator {
         return botInventory;
     }
 
-    public Cooldowns getCooldowns() {
+    public Cooldowns getBotCooldowns() {
         return cooldowns;
     }
 
