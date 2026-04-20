@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Push mc-1.21.11 / mc-26.1 / mc-26.1.1 / mc-26.1.2 branches and create matching
+# Push mc-1.21.11 / mc-26.1.2 branches and create matching
 # GitHub releases with the jars in this directory. Uses gh CLI; run `gh auth login` first.
 
 set -euo pipefail
@@ -17,15 +17,13 @@ REPO="terminatorplus"
 PUBLISH_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$PUBLISH_DIR/.." && pwd)"
 
-BRANCHES=(mc-1.21.11 mc-26.1 mc-26.1.1 mc-26.1.2)
-SUFFIXES=(mc1.21.11 mc26.1 mc26.1.1 mc26.1.2)
+BRANCHES=(mc-1.21.11 mc-26.1.2)
+SUFFIXES=(mc1.21.11 mc26.1.2)
 TITLES=(
-    "4.5.2-BETA for Minecraft 1.21.11"
-    "4.5.2-BETA for Minecraft 26.1"
-    "4.5.2-BETA for Minecraft 26.1.1"
-    "4.5.2-BETA for Minecraft 26.1.2"
+    "5.0.0-BETA for Minecraft 1.21.11"
+    "5.0.0-BETA for Minecraft 26.1.2"
 )
-TAGS=(v4.5.2-mc1.21.11 v4.5.2-mc26.1 v4.5.2-mc26.1.1 v4.5.2-mc26.1.2)
+TAGS=(v5.0.0-mc1.21.11 v5.0.0-mc26.1.2)
 
 cd "$REPO_DIR"
 
@@ -34,8 +32,8 @@ for i in "${!BRANCHES[@]}"; do
     suffix="${SUFFIXES[$i]}"
     title="${TITLES[$i]}"
     tag="${TAGS[$i]}"
-    plugin_jar="$PUBLISH_DIR/TerminatorPlus-4.5.2-BETA-${suffix}.jar"
-    api_jar="$PUBLISH_DIR/TerminatorPlus-API-4.5.2-BETA-${suffix}.jar"
+    plugin_jar="$PUBLISH_DIR/TerminatorPlus-5.0.0-BETA-${suffix}.jar"
+    api_jar="$PUBLISH_DIR/TerminatorPlus-API-5.0.0-BETA-${suffix}.jar"
 
     echo "=== $branch ==="
 
@@ -55,6 +53,15 @@ for i in "${!BRANCHES[@]}"; do
     notes_file=$(mktemp)
     cat >"$notes_file" <<EOF
 Built against Paper for Minecraft ${suffix#mc}.
+
+**What's new in 5.0.0-BETA**
+- Weapon-aware combat AI: mace smash, trident momentum throw, wind charges, ender pearls, crystal PvP, anchor bomb (Nether), cobweb utility, elytra glide + firework boost
+- Passive behaviors: elytra↔chestplate auto-swap, totem of undying auto-equip
+- Full per-bot inventory editor: \`/bot inventory <name>\` opens a 54-slot chest GUI
+- Built-in loadouts: \`sword\`, \`mace\`, \`trident\`, \`windcharge\`, \`skydiver\`, \`hybrid\`, \`crystalpvp\`, \`anchorbomb\`, \`pvp\`, \`clear\`
+- YAML preset system: save/apply/list/delete bot loadouts + behavior settings with full NBT preservation
+- \`/bot weapons [bot]\`: shows which behaviors each bot's inventory unlocks
+- \`terminatorplus.admin\` permission node for destructive commands
 
 **Files**
 - \`$(basename "$plugin_jar")\` — drop in \`plugins/\`.
@@ -80,4 +87,4 @@ EOF
 done
 
 echo ""
-echo "All four releases published on https://github.com/$OWNER/$REPO/releases"
+echo "Both releases published on https://github.com/$OWNER/$REPO/releases"
