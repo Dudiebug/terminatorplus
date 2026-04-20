@@ -32,6 +32,10 @@ import net.nuggetmc.tplus.api.event.BotDamageByPlayerEvent;
 import net.nuggetmc.tplus.api.event.BotFallDamageEvent;
 import net.nuggetmc.tplus.api.event.BotKilledByPlayerEvent;
 import net.nuggetmc.tplus.api.utils.*;
+import net.nuggetmc.tplus.bot.combat.CombatDirector;
+import net.nuggetmc.tplus.bot.combat.CombatState;
+import net.nuggetmc.tplus.bot.loadout.BotInventory;
+import net.nuggetmc.tplus.bot.loadout.Cooldowns;
 import net.nuggetmc.tplus.nms.MockConnection;
 import net.nuggetmc.tplus.utils.NMSUtils;
 import org.bukkit.*;
@@ -75,6 +79,9 @@ public class Bot extends ServerPlayer implements Terminator {
     private List<Block> standingOn = new ArrayList<>();
     private UUID targetPlayer = null;
     private boolean inPlayerList;
+    private final BotInventory botInventory;
+    private final Cooldowns cooldowns;
+    private final CombatState combatState;
 
     private Bot(MinecraftServer minecraftServer, ServerLevel worldServer, GameProfile profile, boolean addToPlayerList) {
         super(minecraftServer, worldServer, profile, ClientInformation.createDefault());
@@ -88,6 +95,9 @@ public class Bot extends ServerPlayer implements Terminator {
         this.noFallTicks = 60;
         this.removeOnDeath = true;
         this.offset = MathUtils.circleOffset(3);
+        this.botInventory = new BotInventory(this);
+        this.cooldowns = new Cooldowns();
+        this.combatState = new CombatState();
         if (addToPlayerList) {
             minecraftServer.getPlayerList().getPlayers().add(this);
             inPlayerList = true;
@@ -262,6 +272,34 @@ public class Bot extends ServerPlayer implements Terminator {
     @Override
     public boolean tickDelay(int i) {
         return aliveTicks % i == 0;
+    }
+
+    public BotInventory getBotInventory() {
+        return botInventory;
+    }
+
+    public Cooldowns getCooldowns() {
+        return cooldowns;
+    }
+
+    public CombatState getCombatState() {
+        return combatState;
+    }
+
+    @Override
+    public boolean combatTick(org.bukkit.entity.LivingEntity target) {
+        CombatDirector director = plugin.getCombatDirector();
+        if (director == null) return false;
+        return director.tick(this, target);
+    }
+
+    /**
+     * Change the active hotbar slot and sync the mainhand item. The bot's
+     * own inventory (all 41 slots) remains untouched; this only changes
+     * which slot is "held".
+     */
+    public void selectHotbarSlot(int slot) {
+        botInventory.setSelectedHotbarSlot(slot);
     }
 
     private void sendPacket(Packet<?> packet) {
@@ -504,10 +542,22 @@ public class Bot extends ServerPlayer implements Terminator {
         faceLocation(entity.getLocation());
         punch();
 
-        double damage = ItemUtils.getLegacyAttackDamage(defaultItem);
+        // Neural-network training relies on the deterministic legacy damage table so fitness
+        // scores are reproducible run-to-run. For everyone else, use the vanilla Bukkit attack
+        // so sweep attacks, mace fall-damage scaling, enchantments and density bonuses apply.
+        if (network != null) {
+            double damage = ItemUtils.getLegacyAttackDamage(
+                    getBukkitEntity().getInventory().getItemInMainHand());
+            if (entity instanceof Damageable) {
+                ((Damageable) entity).damage(damage, getBukkitEntity());
+            }
+            return;
+        }
 
-        if (entity instanceof Damageable) {
-            ((Damageable) entity).damage(damage, getBukkitEntity());
+        if (entity instanceof org.bukkit.entity.LivingEntity) {
+            getBukkitEntity().attack(entity);
+        } else if (entity instanceof Damageable d) {
+            d.damage(1.0, getBukkitEntity());
         }
     }
 
@@ -845,15 +895,21 @@ public class Bot extends ServerPlayer implements Terminator {
     public void setItem(org.bukkit.inventory.ItemStack item, EquipmentSlot slot) {
         if (item == null) item = defaultItem;
 
-        //System.out.println("set");
+        org.bukkit.inventory.PlayerInventory inv = getBukkitEntity().getInventory();
         if (slot == EquipmentSlot.MAINHAND) {
-            getBukkitEntity().getInventory().setItemInMainHand(item);
+            inv.setItemInMainHand(item);
         } else if (slot == EquipmentSlot.OFFHAND) {
-            getBukkitEntity().getInventory().setItemInOffHand(item);
+            inv.setItemInOffHand(item);
+        } else if (slot == EquipmentSlot.HEAD) {
+            inv.setHelmet(item);
+        } else if (slot == EquipmentSlot.CHEST) {
+            inv.setChestplate(item);
+        } else if (slot == EquipmentSlot.LEGS) {
+            inv.setLeggings(item);
+        } else if (slot == EquipmentSlot.FEET) {
+            inv.setBoots(item);
         }
 
-        //System.out.println("slot = " + slot);
-        //System.out.println("item = " + item);
         sendPacket(new ClientboundSetEquipmentPacket(getId(), new ArrayList<>(Collections.singletonList(
                 new Pair<>(slot, CraftItemStack.asNMSCopy(item))
         ))));

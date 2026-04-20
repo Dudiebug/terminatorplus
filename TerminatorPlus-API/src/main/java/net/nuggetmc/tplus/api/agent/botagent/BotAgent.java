@@ -67,6 +67,10 @@ public class BotAgent extends Agent {
 
         // bot.setSneaking(false);
         move(bot, player, loc, target);
+
+        // Let the combat director pick a weapon / ability; if it handled the turn, skip default attack.
+        boolean handled = bot.combatTick(player);
+        if (handled) return;
         /*if (disp == VerticalDisplacement.ABOVE) {
             if (bot.isOnGround()) { // checks this twice, again during .jump()
                 bot.sneak();
@@ -105,7 +109,7 @@ public class BotAgent extends Agent {
         if (!bot.isBotOnGround()) return; // calling this a second time later on
 
         bot.stand(); // eventually create a memory system so packets do not have to be sent every tick
-        bot.setItem(null); // method to check item in main hand, bot.getItemInHand()
+        // NOTE: previously cleared main-hand every tick; the combat director now owns weapon switching.
 
         try {
             vel.add(bot.getVelocity());

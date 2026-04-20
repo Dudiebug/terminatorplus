@@ -1394,7 +1394,14 @@ public class LegacyAgent extends Agent {
     }
 
     private void attack(Terminator bot, LivingEntity target, Location loc) {
-        if ((target instanceof Player && PlayerUtils.isInvincible(((Player) target).getGameMode())) || target.getNoDamageTicks() >= 5 || loc.distance(target.getLocation()) >= 4)
+        if ((target instanceof Player && PlayerUtils.isInvincible(((Player) target).getGameMode())))
+            return;
+
+        // Let the combat director (mace/trident/wind-charge/etc) run first; if it handled the turn,
+        // skip the default 4-block melee check below so weapon behaviors aren't double-fired.
+        if (bot.combatTick(target)) return;
+
+        if (target.getNoDamageTicks() >= 5 || loc.distance(target.getLocation()) >= 4)
             return;
 
         bot.attack(target);

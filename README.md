@@ -12,6 +12,27 @@ Additionally, the readme and wiki may be outdated.
 **TerminatorPlus** is a bukkit (paper) plugin that allows the creation of server-side player bots. Unlike many NPC
 plugins that already exist, this project has an emphasis on making the bots as human-like as possible.
 
+### Features
+
+- **Weapon-aware combat AI** — swords, maces (jump-smash), tridents (momentum throw), wind charges, ender pearls, end crystals, respawn anchors, cobwebs, totems of undying, and elytra gliding with firework boosts.
+- **Full editable inventory** — hotbar, storage, armor, offhand. Open it as a chest GUI with `/bot inventory <name>`.
+- **Loadouts** — `/bot loadout <name>` for built-in kits (`sword`, `mace`, `trident`, `windcharge`, `skydiver`, `hybrid`, `crystalpvp`, `anchorbomb`, `pvp`, `clear`).
+- **Presets** — save a bot's loadout + behavior settings to YAML, re-apply to any bot.
+- **Neural-network training mode** — preserved deterministic damage path for reinforcement-learning sessions.
+- **Paper API artifact** — drive bots from your own plugin via `Terminator.combatTick(target)`.
+
+### Documentation
+
+See the [Wiki](https://github.com/HorseNuggets/TerminatorPlus/wiki):
+[Installation](https://github.com/HorseNuggets/TerminatorPlus/wiki/Installation) ·
+[Quick Start](https://github.com/HorseNuggets/TerminatorPlus/wiki/Quick-Start) ·
+[Commands](https://github.com/HorseNuggets/TerminatorPlus/wiki/Commands) ·
+[Loadouts](https://github.com/HorseNuggets/TerminatorPlus/wiki/Loadouts) ·
+[Combat Behaviors](https://github.com/HorseNuggets/TerminatorPlus/wiki/Combat-Behaviors) ·
+[Presets](https://github.com/HorseNuggets/TerminatorPlus/wiki/Presets) ·
+[API](https://github.com/HorseNuggets/TerminatorPlus/wiki/API) ·
+[Troubleshooting](https://github.com/HorseNuggets/TerminatorPlus/wiki/Troubleshooting)
+
 ### Download
 
 Releases are currently available on our Discord server, which can be found [here](https://discord.gg/vZVSf2D6mz). You
@@ -41,8 +62,9 @@ This plugin requires [Paper 1.21.1](https://papermc.io/downloads/all).
 ### Future Updates
 
 This project is in a very early stage, and we have many more ideas to tackle.
+- [x] A GUI to view and edit currently loaded bot inventories (`/bot inventory <name>`)
+- [x] Loadout + behavior presets saved to the plugin data folder
 - [ ] Individual agents assigned per bot
-- [ ] A GUI to view currently loaded bots and cool data with them
 - [ ] AI data saved to the plugin data folder, able to be loaded into bots
 - [ ] Saving config data in memory
 

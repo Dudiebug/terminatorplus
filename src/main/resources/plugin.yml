@@ -4,12 +4,33 @@ version: ${version}
 api-version: 1.16 # Set to 1.16 so the plugin loads, and we can tell the user that it may not be compatible with their version, because people can't scroll up.
 author: HorseNuggets
 
+commands:
+  bot:
+    description: Root command for bot management (spawning, inventory, loadouts, presets).
+    aliases: [npc]
+    usage: /bot
+  terminatorplus:
+    description: Plugin-level command (debug info, version).
+    aliases: [tplus]
+    usage: /terminatorplus
+  ai:
+    description: Bot AI training sessions (reinforcement, random, stop, info).
+    usage: /ai
+  botenvironment:
+    description: Configure the bot's understanding of blocks and mobs.
+    aliases: [botenv]
+    usage: /botenvironment help
+
 permissions:
   terminatorplus.*:
-    description: TerminatorPlus parent permission.
+    description: TerminatorPlus parent permission (includes admin).
     default: op
     children:
       terminatorplus.manage: true
+      terminatorplus.admin: true
   terminatorplus.manage:
-    description: Allows for TerminatorPlus bot management.
+    description: Allows day-to-day bot management (spawn, loadout, inventory, preset apply/save/list).
+    default: op
+  terminatorplus.admin:
+    description: Allows destructive commands (reset, preset delete) and plugin reloads.
     default: op

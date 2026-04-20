@@ -128,4 +128,16 @@ public interface Terminator {
     World.Environment getDimension();
 
     void setShield(boolean b);
+
+    /**
+     * Runs the combat director for this bot against the given target,
+     * picking a hotbar weapon and triggering the appropriate behavior
+     * (melee, trident, mace, wind charge, elytra+firework, etc).
+     *
+     * @return true if combat was handled; false if the caller should
+     *         fall back to its default attack/targeting logic.
+     */
+    default boolean combatTick(LivingEntity target) {
+        return false;
+    }
 }

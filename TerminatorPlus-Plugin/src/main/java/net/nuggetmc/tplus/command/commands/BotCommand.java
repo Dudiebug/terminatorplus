@@ -5,7 +5,11 @@ import net.nuggetmc.tplus.api.Terminator;
 import net.nuggetmc.tplus.api.agent.legacyagent.EnumTargetGoal;
 import net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent;
 import net.nuggetmc.tplus.api.utils.ChatUtils;
+import net.nuggetmc.tplus.bot.Bot;
 import net.nuggetmc.tplus.bot.BotManagerImpl;
+import net.nuggetmc.tplus.bot.gui.BotInventoryGUI;
+import net.nuggetmc.tplus.bot.preset.BotPreset;
+import net.nuggetmc.tplus.bot.preset.PresetManager;
 import net.nuggetmc.tplus.command.CommandHandler;
 import net.nuggetmc.tplus.command.CommandInstance;
 import net.nuggetmc.tplus.command.annotation.*;
@@ -128,21 +132,82 @@ public class BotCommand extends CommandInstance {
 
     @Command(
             name = "give",
-            desc = "Gives a specified item to all bots."
+            desc = "Give an item to bot(s). Usage: /bot give <item> [bot-name] [slot]",
+            autofill = "giveAutofill"
     )
-    public void give(CommandSender sender, @Arg("item-name") String itemName) {
+    public void give(CommandSender sender, List<String> args) {
+        if (args.isEmpty()) {
+            sender.sendMessage(ChatColor.RED + "Usage: /bot give <item> [bot-name] [slot]");
+            return;
+        }
+        String itemName = args.get(0);
         Material type = Material.matchMaterial(itemName);
-
         if (type == null) {
             sender.sendMessage("The item " + ChatColor.YELLOW + itemName + ChatColor.RESET + " is not valid!");
             return;
         }
-
         ItemStack item = new ItemStack(type);
 
-        manager.fetch().forEach(bot -> bot.setDefaultItem(item));
+        // Single-arg form: legacy behavior — set default item for all bots.
+        if (args.size() == 1) {
+            manager.fetch().forEach(bot -> bot.setDefaultItem(item));
+            sender.sendMessage("Successfully set the default item to " + ChatColor.YELLOW + item.getType() + ChatColor.RESET + " for all current bots.");
+            return;
+        }
 
-        sender.sendMessage("Successfully set the default item to " + ChatColor.YELLOW + item.getType() + ChatColor.RESET + " for all current bots.");
+        String botName = args.get(1);
+        Integer slot = null;
+        if (args.size() >= 3) {
+            try {
+                slot = Integer.parseInt(args.get(2));
+            } catch (NumberFormatException e) {
+                sender.sendMessage(ChatColor.RED + "Slot must be a number 0-40.");
+                return;
+            }
+        }
+
+        Location viewer = sender instanceof Player p ? p.getLocation() : null;
+        Bot bot = findBot(botName, viewer);
+        if (bot == null) {
+            sender.sendMessage(ChatColor.RED + "Bot not found: " + ChatColor.YELLOW + botName);
+            return;
+        }
+        if (slot == null) {
+            // Put it in the first empty hotbar slot, falling back to slot 0.
+            int target = 0;
+            for (int i = 0; i < 9; i++) {
+                if (bot.getBukkitEntity().getInventory().getItem(i) == null) {
+                    target = i;
+                    break;
+                }
+            }
+            slot = target;
+        }
+        if (slot < 0 || slot > 40) {
+            sender.sendMessage(ChatColor.RED + "Slot must be 0-40 (0-8 hotbar, 9-35 storage, 36 boots, 37 legs, 38 chest, 39 head, 40 offhand).");
+            return;
+        }
+        applyLoadoutSlot(bot, slot, item);
+        sender.sendMessage("Gave " + ChatColor.YELLOW + type + ChatColor.RESET + " to "
+                + ChatColor.GREEN + bot.getBotName() + ChatColor.RESET + " at slot "
+                + ChatColor.BLUE + slot + ChatColor.RESET + ".");
+    }
+
+    @Autofill
+    public List<String> giveAutofill(CommandSender sender, String[] args) {
+        List<String> out = new ArrayList<>();
+        if (args.length == 2) {
+            String prefix = args[1].toUpperCase();
+            for (Material m : Material.values()) {
+                if (m.isItem() && m.name().startsWith(prefix)) out.add(m.name());
+                if (out.size() >= 40) break;
+            }
+        } else if (args.length == 3) {
+            out.addAll(manager.fetchNames());
+        } else if (args.length == 4) {
+            for (int i = 0; i <= 40; i++) out.add(String.valueOf(i));
+        }
+        return out;
     }
 
     private void armorTierSetup() {
@@ -537,6 +602,439 @@ public class BotCommand extends CommandInstance {
     @Autofill
     public List<String> debugAutofill(CommandSender sender, String[] args) {
         return args.length == 2 ? new ArrayList<>(Debugger.AUTOFILL_METHODS) : new ArrayList<>();
+    }
+
+    @Command(
+            name = "weapons",
+            desc = "Show which combat behaviors each bot's inventory unlocks.",
+            autofill = "weaponsAutofill"
+    )
+    public void weapons(CommandSender sender, @OptArg("bot-name") String botName) {
+        Location viewer = sender instanceof Player p ? p.getLocation() : null;
+
+        java.util.List<Bot> bots = new ArrayList<>();
+        if (botName != null && !botName.isEmpty()) {
+            Bot b = findBot(botName, viewer);
+            if (b == null) {
+                sender.sendMessage(ChatColor.RED + "Bot not found: " + ChatColor.YELLOW + botName);
+                return;
+            }
+            bots.add(b);
+        } else {
+            for (Terminator t : manager.fetch()) {
+                if (t instanceof Bot b) bots.add(b);
+            }
+        }
+        if (bots.isEmpty()) {
+            sender.sendMessage("No bots to report on.");
+            return;
+        }
+
+        sender.sendMessage(ChatUtils.LINE);
+        sender.sendMessage(ChatColor.GOLD + "Bot Weapons");
+        for (Bot bot : bots) {
+            net.nuggetmc.tplus.bot.loadout.BotInventory inv = bot.getBotInventory();
+            StringBuilder sb = new StringBuilder(ChatUtils.BULLET_FORMATTED);
+            sb.append(ChatColor.GREEN).append(bot.getBotName()).append(ChatColor.RESET).append(": ");
+            appendFlag(sb, "melee", inv.findSword() >= 0 || inv.findAxe() >= 0);
+            appendFlag(sb, "mace", inv.hasMace());
+            appendFlag(sb, "trident", inv.hasTrident());
+            appendFlag(sb, "pearl", inv.hasEnderPearl());
+            appendFlag(sb, "windcharge", inv.hasWindCharge());
+            appendFlag(sb, "crystal", inv.hasCrystalKit());
+            appendFlag(sb, "anchor", inv.hasAnchorKit());
+            appendFlag(sb, "cobweb", inv.hasCobweb());
+            appendFlag(sb, "totem", inv.hasTotem());
+            appendFlag(sb, "elytra", inv.hasElytra());
+            appendFlag(sb, "firework", inv.hasFirework());
+            sender.sendMessage(sb.toString());
+        }
+        sender.sendMessage(ChatUtils.LINE);
+    }
+
+    private static void appendFlag(StringBuilder sb, String label, boolean on) {
+        sb.append(on ? ChatColor.YELLOW : ChatColor.DARK_GRAY).append(label).append(ChatColor.RESET).append(' ');
+    }
+
+    @Autofill
+    public List<String> weaponsAutofill(CommandSender sender, String[] args) {
+        return args.length == 2 ? manager.fetchNames() : new ArrayList<>();
+    }
+
+    @Command(
+            name = "inventory",
+            desc = "Opens the inventory editor GUI for a bot.",
+            aliases = {"inv"},
+            autofill = "inventoryAutofill"
+    )
+    public void inventory(CommandSender sender, @Arg("bot-name") String name) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(ChatColor.RED + "This command can only be run by a player.");
+            return;
+        }
+        Bot bot = findBot(name, player.getLocation());
+        if (bot == null) {
+            sender.sendMessage("Could not find bot " + ChatColor.GREEN + name + ChatColor.RESET + "!");
+            return;
+        }
+        new BotInventoryGUI(bot).open(player);
+    }
+
+    @Autofill
+    public List<String> inventoryAutofill(CommandSender sender, String[] args) {
+        return args.length == 2 ? manager.fetchNames() : new ArrayList<>();
+    }
+
+    @Command(
+            name = "preset",
+            desc = "Save, load, list, and delete bot presets.",
+            autofill = "presetAutofill"
+    )
+    public void preset(CommandSender sender, List<String> args) {
+        PresetManager presets = plugin.getPresetManager();
+        String action = args.isEmpty() ? null : args.get(0);
+
+        if (action == null) {
+            sender.sendMessage(ChatUtils.LINE);
+            sender.sendMessage(ChatColor.GOLD + "Bot Presets" + ChatColor.GRAY + " [" + ChatColor.YELLOW + "/bot preset" + ChatColor.GRAY + "]");
+            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "save <name> <bot-name>" + ChatUtils.BULLET_FORMATTED + "Save a bot's state as a preset.");
+            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "apply <name> [bot-name]" + ChatUtils.BULLET_FORMATTED + "Apply a preset to one bot, or to ALL if no name given.");
+            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "list" + ChatUtils.BULLET_FORMATTED + "List all saved presets.");
+            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "delete <name>" + ChatUtils.BULLET_FORMATTED + "Delete a preset.");
+            sender.sendMessage(ChatUtils.LINE);
+            return;
+        }
+
+        switch (action.toLowerCase()) {
+            case "list" -> {
+                List<String> names = presets.list();
+                if (names.isEmpty()) {
+                    sender.sendMessage("No presets saved yet. Use " + ChatColor.YELLOW + "/bot preset save <name> <bot-name>" + ChatColor.RESET + ".");
+                    return;
+                }
+                sender.sendMessage(ChatUtils.LINE);
+                sender.sendMessage(ChatColor.GOLD + "Saved Presets (" + names.size() + ")");
+                names.forEach(n -> sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + n));
+                sender.sendMessage(ChatUtils.LINE);
+            }
+            case "save" -> {
+                if (args.size() < 3) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /bot preset save <preset-name> <bot-name>");
+                    return;
+                }
+                String presetName = args.get(1);
+                String botName = args.get(2);
+                Location viewer = sender instanceof Player p ? p.getLocation() : null;
+                Bot bot = findBot(botName, viewer);
+                if (bot == null) {
+                    sender.sendMessage(ChatColor.RED + "Bot not found: " + ChatColor.YELLOW + botName);
+                    return;
+                }
+                try {
+                    BotPreset preset = presets.capture(bot, presetName);
+                    presets.save(preset);
+                    sender.sendMessage("Saved preset " + ChatColor.YELLOW + presetName + ChatColor.RESET + " from " + ChatColor.GREEN + botName + ChatColor.RESET + ".");
+                } catch (Exception e) {
+                    sender.sendMessage(ChatColor.RED + "Failed to save preset: " + e.getMessage());
+                }
+            }
+            case "load", "apply" -> {
+                if (args.size() < 2) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /bot preset apply <preset-name> [bot-name]");
+                    return;
+                }
+                String presetName = args.get(1);
+                BotPreset preset = presets.load(presetName);
+                if (preset == null) {
+                    sender.sendMessage(ChatColor.RED + "Preset not found: " + ChatColor.YELLOW + presetName);
+                    return;
+                }
+                if (args.size() >= 3) {
+                    String botName = args.get(2);
+                    Location viewer = sender instanceof Player p ? p.getLocation() : null;
+                    Bot bot = findBot(botName, viewer);
+                    if (bot == null) {
+                        sender.sendMessage(ChatColor.RED + "Bot not found: " + ChatColor.YELLOW + botName);
+                        return;
+                    }
+                    presets.apply(preset, bot);
+                    sender.sendMessage("Applied preset " + ChatColor.YELLOW + presetName + ChatColor.RESET + " to " + ChatColor.GREEN + botName + ChatColor.RESET + ".");
+                } else {
+                    int n = presets.applyToAll(preset);
+                    sender.sendMessage("Applied preset " + ChatColor.YELLOW + presetName + ChatColor.RESET + " to " + ChatColor.BLUE + n + ChatColor.RESET + " bot(s).");
+                }
+            }
+            case "delete" -> {
+                if (args.size() < 2) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /bot preset delete <preset-name>");
+                    return;
+                }
+                String presetName = args.get(1);
+                if (presets.delete(presetName)) {
+                    sender.sendMessage("Deleted preset " + ChatColor.YELLOW + presetName + ChatColor.RESET + ".");
+                } else {
+                    sender.sendMessage(ChatColor.RED + "Preset not found: " + ChatColor.YELLOW + presetName);
+                }
+            }
+            default -> sender.sendMessage(ChatColor.RED + "Unknown action. See /bot preset for help.");
+        }
+    }
+
+    @Autofill
+    public List<String> presetAutofill(CommandSender sender, String[] args) {
+        List<String> out = new ArrayList<>();
+        if (args.length == 2) {
+            out.add("save");
+            out.add("load");
+            out.add("apply");
+            out.add("list");
+            out.add("delete");
+        } else if (args.length == 3) {
+            String action = args[1].toLowerCase();
+            if (action.equals("load") || action.equals("apply") || action.equals("delete")) {
+                out.addAll(plugin.getPresetManager().list());
+            } else if (action.equals("save")) {
+                out.add("<preset-name>");
+            }
+        } else if (args.length == 4) {
+            String action = args[1].toLowerCase();
+            if (action.equals("save") || action.equals("apply")) {
+                out.addAll(manager.fetchNames());
+            }
+        }
+        return out;
+    }
+
+    @Command(
+            name = "loadout",
+            desc = "Apply a predefined combat loadout. Usage: /bot loadout <name> [bot-name]",
+            autofill = "loadoutAutofill"
+    )
+    public void loadout(CommandSender sender, @Arg("name") String name, @OptArg("bot-name") String botName) {
+        String key = name == null ? "" : name.toLowerCase();
+        ItemStack[] kit = buildLoadout(key);
+        if (kit == null) {
+            sender.sendMessage(ChatColor.RED + "Unknown loadout: " + ChatColor.YELLOW + key);
+            sender.sendMessage("Available: " + ChatColor.YELLOW + String.join(", ", LOADOUT_NAMES));
+            return;
+        }
+
+        if (botName != null && !botName.isEmpty()) {
+            Location viewer = sender instanceof Player p ? p.getLocation() : null;
+            Bot bot = findBot(botName, viewer);
+            if (bot == null) {
+                sender.sendMessage(ChatColor.RED + "Bot not found: " + ChatColor.YELLOW + botName);
+                return;
+            }
+            applyLoadoutToBot(bot, kit);
+            sender.sendMessage("Applied loadout " + ChatColor.YELLOW + key + ChatColor.RESET + " to " + ChatColor.GREEN + bot.getBotName() + ChatColor.RESET + ".");
+            return;
+        }
+
+        int count = 0;
+        for (Terminator t : manager.fetch()) {
+            if (!(t instanceof Bot bot)) continue;
+            applyLoadoutToBot(bot, kit);
+            count++;
+        }
+        sender.sendMessage("Applied loadout " + ChatColor.YELLOW + key + ChatColor.RESET + " to " + ChatColor.BLUE + count + ChatColor.RESET + " bot(s).");
+    }
+
+    private static void applyLoadoutToBot(Bot bot, ItemStack[] kit) {
+        bot.getBukkitEntity().getInventory().clear();
+        for (int i = 0; i < kit.length && i < 41; i++) {
+            if (kit[i] == null) continue;
+            applyLoadoutSlot(bot, i, kit[i].clone());
+        }
+        bot.selectHotbarSlot(0);
+    }
+
+    @Autofill
+    public List<String> loadoutAutofill(CommandSender sender, String[] args) {
+        if (args.length == 2) return new ArrayList<>(Arrays.asList(LOADOUT_NAMES));
+        if (args.length == 3) return manager.fetchNames();
+        return new ArrayList<>();
+    }
+
+    private static final String[] LOADOUT_NAMES = {
+            "sword", "mace", "trident", "windcharge", "skydiver",
+            "crystalpvp", "anchorbomb", "pvp", "hybrid", "clear"
+    };
+
+    /**
+     * Build a 41-slot loadout array for a named preset.
+     * 0–8 hotbar, 9–35 storage, 36 boots, 37 legs, 38 chest, 39 head, 40 offhand.
+     */
+    private static ItemStack[] buildLoadout(String key) {
+        ItemStack[] kit = new ItemStack[41];
+        switch (key) {
+            case "sword" -> {
+                kit[0] = new ItemStack(Material.NETHERITE_SWORD);
+                kit[36] = new ItemStack(Material.NETHERITE_BOOTS);
+                kit[37] = new ItemStack(Material.NETHERITE_LEGGINGS);
+                kit[38] = new ItemStack(Material.NETHERITE_CHESTPLATE);
+                kit[39] = new ItemStack(Material.NETHERITE_HELMET);
+                kit[40] = new ItemStack(Material.SHIELD);
+            }
+            case "mace" -> {
+                kit[0] = new ItemStack(Material.MACE);
+                kit[1] = new ItemStack(Material.IRON_SWORD);
+                kit[36] = new ItemStack(Material.NETHERITE_BOOTS);
+                kit[37] = new ItemStack(Material.NETHERITE_LEGGINGS);
+                kit[38] = new ItemStack(Material.NETHERITE_CHESTPLATE);
+                kit[39] = new ItemStack(Material.NETHERITE_HELMET);
+            }
+            case "trident" -> {
+                kit[0] = new ItemStack(Material.TRIDENT);
+                kit[1] = new ItemStack(Material.IRON_SWORD);
+                kit[36] = new ItemStack(Material.IRON_BOOTS);
+                kit[37] = new ItemStack(Material.IRON_LEGGINGS);
+                kit[38] = new ItemStack(Material.IRON_CHESTPLATE);
+                kit[39] = new ItemStack(Material.IRON_HELMET);
+            }
+            case "windcharge" -> {
+                ItemStack wc = new ItemStack(Material.WIND_CHARGE);
+                wc.setAmount(16);
+                kit[0] = wc;
+                kit[1] = new ItemStack(Material.IRON_SWORD);
+                kit[36] = new ItemStack(Material.IRON_BOOTS);
+                kit[37] = new ItemStack(Material.IRON_LEGGINGS);
+                kit[38] = new ItemStack(Material.IRON_CHESTPLATE);
+                kit[39] = new ItemStack(Material.IRON_HELMET);
+            }
+            case "skydiver" -> {
+                // Elytra kit that swaps to chestplate on the ground (stored in inv).
+                kit[0] = new ItemStack(Material.TRIDENT);
+                kit[1] = new ItemStack(Material.IRON_SWORD);
+                ItemStack rockets = new ItemStack(Material.FIREWORK_ROCKET);
+                rockets.setAmount(8);
+                kit[2] = rockets;
+                kit[9] = new ItemStack(Material.DIAMOND_CHESTPLATE);
+                kit[36] = new ItemStack(Material.DIAMOND_BOOTS);
+                kit[37] = new ItemStack(Material.DIAMOND_LEGGINGS);
+                kit[38] = new ItemStack(Material.ELYTRA);
+                kit[39] = new ItemStack(Material.DIAMOND_HELMET);
+            }
+            case "hybrid" -> {
+                kit[0] = new ItemStack(Material.NETHERITE_SWORD);
+                kit[1] = new ItemStack(Material.MACE);
+                kit[2] = new ItemStack(Material.TRIDENT);
+                ItemStack wc = new ItemStack(Material.WIND_CHARGE);
+                wc.setAmount(16);
+                kit[3] = wc;
+                ItemStack apples = new ItemStack(Material.GOLDEN_APPLE);
+                apples.setAmount(4);
+                kit[8] = apples;
+                kit[36] = new ItemStack(Material.NETHERITE_BOOTS);
+                kit[37] = new ItemStack(Material.NETHERITE_LEGGINGS);
+                kit[38] = new ItemStack(Material.NETHERITE_CHESTPLATE);
+                kit[39] = new ItemStack(Material.NETHERITE_HELMET);
+                kit[40] = new ItemStack(Material.SHIELD);
+            }
+            case "crystalpvp" -> {
+                kit[0] = new ItemStack(Material.NETHERITE_SWORD);
+                ItemStack crystals = new ItemStack(Material.END_CRYSTAL);
+                crystals.setAmount(32);
+                kit[1] = crystals;
+                ItemStack obsidian = new ItemStack(Material.OBSIDIAN);
+                obsidian.setAmount(32);
+                kit[2] = obsidian;
+                ItemStack pearls = new ItemStack(Material.ENDER_PEARL);
+                pearls.setAmount(16);
+                kit[3] = pearls;
+                ItemStack gaps = new ItemStack(Material.GOLDEN_APPLE);
+                gaps.setAmount(8);
+                kit[4] = gaps;
+                kit[7] = new ItemStack(Material.TOTEM_OF_UNDYING);
+                kit[36] = new ItemStack(Material.NETHERITE_BOOTS);
+                kit[37] = new ItemStack(Material.NETHERITE_LEGGINGS);
+                kit[38] = new ItemStack(Material.NETHERITE_CHESTPLATE);
+                kit[39] = new ItemStack(Material.NETHERITE_HELMET);
+                kit[40] = new ItemStack(Material.TOTEM_OF_UNDYING);
+            }
+            case "anchorbomb" -> {
+                // Nether-focused: respawn anchors + glowstone + pearls to reposition.
+                kit[0] = new ItemStack(Material.NETHERITE_SWORD);
+                ItemStack anchors = new ItemStack(Material.RESPAWN_ANCHOR);
+                anchors.setAmount(16);
+                kit[1] = anchors;
+                ItemStack glow = new ItemStack(Material.GLOWSTONE);
+                glow.setAmount(32);
+                kit[2] = glow;
+                ItemStack pearls = new ItemStack(Material.ENDER_PEARL);
+                pearls.setAmount(16);
+                kit[3] = pearls;
+                kit[4] = new ItemStack(Material.POTION); // fire res (server can enchant)
+                kit[7] = new ItemStack(Material.TOTEM_OF_UNDYING);
+                kit[36] = new ItemStack(Material.NETHERITE_BOOTS);
+                kit[37] = new ItemStack(Material.NETHERITE_LEGGINGS);
+                kit[38] = new ItemStack(Material.NETHERITE_CHESTPLATE);
+                kit[39] = new ItemStack(Material.NETHERITE_HELMET);
+                kit[40] = new ItemStack(Material.TOTEM_OF_UNDYING);
+            }
+            case "pvp" -> {
+                // Everything bagel: tries every behavior.
+                kit[0] = new ItemStack(Material.NETHERITE_SWORD);
+                kit[1] = new ItemStack(Material.MACE);
+                kit[2] = new ItemStack(Material.TRIDENT);
+                ItemStack wc = new ItemStack(Material.WIND_CHARGE);
+                wc.setAmount(16);
+                kit[3] = wc;
+                ItemStack pearls = new ItemStack(Material.ENDER_PEARL);
+                pearls.setAmount(16);
+                kit[4] = pearls;
+                ItemStack crystals = new ItemStack(Material.END_CRYSTAL);
+                crystals.setAmount(16);
+                kit[5] = crystals;
+                ItemStack obsidian = new ItemStack(Material.OBSIDIAN);
+                obsidian.setAmount(32);
+                kit[6] = obsidian;
+                ItemStack webs = new ItemStack(Material.COBWEB);
+                webs.setAmount(16);
+                kit[7] = webs;
+                ItemStack gaps = new ItemStack(Material.GOLDEN_APPLE);
+                gaps.setAmount(8);
+                kit[8] = gaps;
+                ItemStack rockets = new ItemStack(Material.FIREWORK_ROCKET);
+                rockets.setAmount(16);
+                kit[9] = rockets;
+                kit[10] = new ItemStack(Material.DIAMOND_CHESTPLATE);
+                kit[36] = new ItemStack(Material.NETHERITE_BOOTS);
+                kit[37] = new ItemStack(Material.NETHERITE_LEGGINGS);
+                kit[38] = new ItemStack(Material.ELYTRA);
+                kit[39] = new ItemStack(Material.NETHERITE_HELMET);
+                kit[40] = new ItemStack(Material.TOTEM_OF_UNDYING);
+            }
+            case "clear" -> {
+                // Empty array → everything clears.
+            }
+            default -> {
+                return null;
+            }
+        }
+        return kit;
+    }
+
+    private static void applyLoadoutSlot(Bot bot, int slot, ItemStack item) {
+        if (slot < 36) {
+            bot.getBukkitEntity().getInventory().setItem(slot, item);
+        } else if (slot == 36) {
+            bot.setItem(item, EquipmentSlot.FEET);
+        } else if (slot == 37) {
+            bot.setItem(item, EquipmentSlot.LEGS);
+        } else if (slot == 38) {
+            bot.setItem(item, EquipmentSlot.CHEST);
+        } else if (slot == 39) {
+            bot.setItem(item, EquipmentSlot.HEAD);
+        } else if (slot == 40) {
+            bot.setItem(item, EquipmentSlot.OFF_HAND);
+        }
+    }
+
+    private Bot findBot(String name, Location near) {
+        Terminator t = manager.getFirst(name, near);
+        if (t instanceof Bot b) return b;
+        return null;
     }
 
     private double parseDoubleOrRelative(String pos, Location loc, int type) {

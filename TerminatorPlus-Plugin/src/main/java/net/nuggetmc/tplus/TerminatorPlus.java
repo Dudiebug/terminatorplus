@@ -2,6 +2,9 @@ package net.nuggetmc.tplus;
 
 import net.nuggetmc.tplus.api.TerminatorPlusAPI;
 import net.nuggetmc.tplus.bot.BotManagerImpl;
+import net.nuggetmc.tplus.bot.combat.CombatDirector;
+import net.nuggetmc.tplus.bot.gui.BotInventoryListener;
+import net.nuggetmc.tplus.bot.preset.PresetManager;
 import net.nuggetmc.tplus.bridge.InternalBridgeImpl;
 import net.nuggetmc.tplus.command.CommandHandler;
 import org.bukkit.Bukkit;
@@ -22,6 +25,8 @@ public class TerminatorPlus extends JavaPlugin {
 
     private BotManagerImpl manager;
     private CommandHandler handler;
+    private CombatDirector combatDirector;
+    private PresetManager presetManager;
 
     public static TerminatorPlus getInstance() {
         return instance;
@@ -47,6 +52,14 @@ public class TerminatorPlus extends JavaPlugin {
         return handler;
     }
 
+    public CombatDirector getCombatDirector() {
+        return combatDirector;
+    }
+
+    public PresetManager getPresetManager() {
+        return presetManager;
+    }
+
     @Override
     public void onEnable() {
         instance = this;
@@ -58,13 +71,15 @@ public class TerminatorPlus extends JavaPlugin {
 
         // Create Instances
         this.manager = new BotManagerImpl();
+        this.combatDirector = new CombatDirector();
+        this.presetManager = new PresetManager(this);
         this.handler = new CommandHandler(this);
 
         TerminatorPlusAPI.setBotManager(manager);
         TerminatorPlusAPI.setInternalBridge(new InternalBridgeImpl());
 
         // Register event listeners
-        this.registerEvents(manager);
+        this.registerEvents(manager, new BotInventoryListener(this));
 
         if (!correctVersion) {
             for (int i = 0; i < 20; i++) { // Kids are stupid so we need to make sure they see this
