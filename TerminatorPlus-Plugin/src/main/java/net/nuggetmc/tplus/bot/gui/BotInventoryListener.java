@@ -49,12 +49,18 @@ public final class BotInventoryListener implements Listener {
 
     @EventHandler
     public void onClose(InventoryCloseEvent event) {
-        Inventory top = event.getInventory();
+        Inventory top = event.getView().getTopInventory();
         InventoryHolder holder = top.getHolder();
         if (!(holder instanceof BotInventoryGUI gui)) return;
 
-        // Bot might have been removed while the GUI was open.
         if (!gui.getBot().isBotAlive()) return;
         gui.syncToBot();
+
+        // Propagate the same inventory to every other bot with the same name.
+        String name = gui.getBot().getBotName();
+        net.nuggetmc.tplus.bot.Bot source = gui.getBot();
+        plugin.getManager().getAllByName(name).stream()
+                .filter(b -> b != source && b.isBotAlive())
+                .forEach(b -> source.getBotInventory().copyInventoryTo(b));
     }
 }
