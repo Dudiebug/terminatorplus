@@ -259,6 +259,37 @@ public final class BotInventory {
     }
 
     // -------------------------------------------------------------------------
+    // Inventory copy (used to propagate GUI edits to all same-name bots)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Copy this bot's current full inventory (post-autoEquip state) to
+     * {@code target}, overwriting its hotbar, storage, armor, offhand, and
+     * selected hotbar slot.
+     */
+    public void copyInventoryTo(Bot target) {
+        PlayerInventory src = raw();
+        net.minecraft.world.entity.player.Inventory nmsTarget = target.getInventory();
+        for (int i = 0; i < 36; i++) {
+            ItemStack it = src.getItem(i);
+            nmsTarget.setItem(i, (it == null || it.getType() == Material.AIR)
+                    ? net.minecraft.world.item.ItemStack.EMPTY
+                    : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(it));
+        }
+        nmsTarget.setChanged();
+
+        ItemStack h   = src.getHelmet(),      ch  = src.getChestplate(),
+                  l   = src.getLeggings(),    b2  = src.getBoots(),
+                  off = src.getItemInOffHand();
+        target.setItem(h   != null ? h   : new ItemStack(Material.AIR), EquipmentSlot.HEAD);
+        target.setItem(ch  != null ? ch  : new ItemStack(Material.AIR), EquipmentSlot.CHEST);
+        target.setItem(l   != null ? l   : new ItemStack(Material.AIR), EquipmentSlot.LEGS);
+        target.setItem(b2  != null ? b2  : new ItemStack(Material.AIR), EquipmentSlot.FEET);
+        target.setItemOffhand(off != null ? off : new ItemStack(Material.AIR));
+        target.getBotInventory().setSelectedHotbarSlot(selectedHotbarSlot);
+    }
+
+    // -------------------------------------------------------------------------
     // Auto-equip
     // -------------------------------------------------------------------------
 

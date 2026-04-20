@@ -60,6 +60,14 @@ public class BotManagerImpl implements BotManager, Listener {
         bots.add(bot);
     }
 
+    public List<Bot> getAllByName(String name) {
+        List<Bot> result = new ArrayList<>();
+        for (Terminator t : bots) {
+            if (t instanceof Bot b && name.equals(b.getBotName())) result.add(b);
+        }
+        return result;
+    }
+
     @Override
     public Terminator getFirst(String name, Location target) {
         if (target != null) {
