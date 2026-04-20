@@ -116,7 +116,7 @@ public class Bot extends ServerPlayer implements Terminator {
 
         UUID uuid = BotUtils.randomSteveUUID();
 
-        CustomGameProfile profile = new CustomGameProfile(uuid, ChatUtils.trim16(name), skin);
+        GameProfile profile = CustomGameProfile.create(uuid, ChatUtils.trim16(name), skin);
 
         boolean addPlayerList = TerminatorPlus.getInstance().getManager().addToPlayerList();
 
