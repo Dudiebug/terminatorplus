@@ -2,6 +2,7 @@ package net.nuggetmc.tplus.bot.combat;
 
 import net.nuggetmc.tplus.bot.Bot;
 import net.nuggetmc.tplus.bot.loadout.BotInventory;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.LivingEntity;
@@ -49,6 +50,21 @@ public final class CombatDirector {
             selectType(inv, Material.MACE);
             mace.ticksFor(bot, target, distance);
             return true;
+        }
+        // Aerial dive: if falling freely with a mace, steer toward any target nearby below.
+        if (bot.getCombatState().getPhase() == CombatState.Phase.IDLE
+                && !bot.isBotOnGround() && bot.getVelocity().getY() < -0.3
+                && inv.hasMace()) {
+            Location botLoc    = bot.getLocation();
+            Location targetLoc = target.getLocation();
+            double dx = targetLoc.getX() - botLoc.getX();
+            double dz = targetLoc.getZ() - botLoc.getZ();
+            if (dx * dx + dz * dz <= 100.0 && targetLoc.getY() <= botLoc.getY() + 2.0) {
+                bot.getCombatState().setPhase(CombatState.Phase.AIRBORNE);
+                selectType(inv, Material.MACE);
+                mace.ticksFor(bot, target, distance);
+                return true;
+            }
         }
         if (bot.getCombatState().getPhase() == CombatState.Phase.CHARGING && inv.hasTrident()) {
             selectType(inv, Material.TRIDENT);
