@@ -68,16 +68,24 @@ Whether newly-spawned bots appear in the tab list (and are affected by `@a`/`@p`
 ### `/bot settings playertarget <name>`
 Set the player that bots focus on when goal is `PLAYER`.
 
-### `/bot settings region ...`
-Reserved for future region-based behaviors.
+### `/bot settings region <x1> <y1> <z1> <x2> <y2> <z2> <wX> <wY> <wZ>`
+Define a region that bots prioritize. Entities inside the bounding box are preferred; entities outside have their effective distance multiplied by the weight values before target selection.
+
+### `/bot settings region <x1> <y1> <z1> <x2> <y2> <z2> strict`
+Same as above but bots **only** target entities inside the region (zero-weight strict mode).
+
+### `/bot settings region clear`
+Remove the active region.
+
+Coordinates support `~` for relative-to-player notation. Run `/bot settings region` with no args to display the current region.
 
 ## AI Training (`/ai`)
 
-### `/ai random`
-Spawn bots with random neural networks and collect feed data.
+### `/ai random <amount> <name> [skin] [loc]`
+Spawn `<amount>` bots with random neural networks and begin collecting feed data.
 
-### `/ai reinforcement`
-Begin a reinforcement-learning session.
+### `/ai reinforcement <population-size> <name> [skin]`
+Begin a reinforcement-learning session with a fixed population size. Player-only.
 
 ### `/ai stop`
 End the current AI session.
