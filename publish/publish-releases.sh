@@ -70,11 +70,15 @@ for i in "${!BRANCHES[@]}"; do
     echo "Creating release $tag..."
     body="Built against Paper for Minecraft ${suffix#mc}.
 
-Files:
+**Files**
 - \`TerminatorPlus-4.5.2-BETA-${suffix}.jar\` — drop in \`plugins/\`.
 - \`TerminatorPlus-API-4.5.2-BETA-${suffix}.jar\` — API module for plugin developers.
 
-Branch: \`$branch\`."
+**Branch:** \`$branch\`
+
+---
+
+Fork of [HorseNuggets/TerminatorPlus](https://github.com/HorseNuggets/TerminatorPlus). Licensed under the Eclipse Public License 2.0 — see [LICENSE](https://github.com/$OWNER/$REPO/blob/$branch/LICENSE). This build modifies the upstream sources to compile and run on the target Paper runtime; the per-commit diff on branch \`$branch\` documents the changes."
 
     payload=$(printf '{"tag_name":"%s","name":"%s","target_commitish":"%s","body":%s,"prerelease":true}' \
         "$tag" "$title" "$branch" "$(printf '%s' "$body" | jsonify)")
