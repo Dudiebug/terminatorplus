@@ -9,3 +9,7 @@ out/
 target/
 *.class
 .DS_Store
+<<<<<<< HEAD
+=======
+publish/*.jar
+>>>>>>> 5430251 (Add publish script and multi-version port docs)
