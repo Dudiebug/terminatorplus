@@ -340,6 +340,16 @@ public class LegacyAgent extends Agent {
     @Override
     public void onFallDamage(BotFallDamageEvent event) {
         Terminator bot = event.getBot();
+        // Mace hits negate fall damage — skip the water-bucket clutch entirely.
+        if (bot.getBukkitEntity() instanceof Player macePlayer) {
+            for (int i = 0; i < 9; i++) {
+                ItemStack hotbarItem = macePlayer.getInventory().getItem(i);
+                if (hotbarItem != null && hotbarItem.getType() == Material.MACE) {
+                    event.setCancelled(true);
+                    return;
+                }
+            }
+        }
         World world = bot.getBukkitEntity().getWorld();
 
         bot.look(BlockFace.DOWN);
