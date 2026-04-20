@@ -31,8 +31,13 @@ public final class MaceBehavior implements WeaponBehavior {
         Location targetLoc = target.getLocation();
         bot.faceLocation(targetLoc);
 
-        if (distance > MAX_DISTANCE || distance < MIN_DISTANCE) {
-            if (state.getPhase() != CombatState.Phase.IDLE) state.reset();
+        if (distance < MIN_DISTANCE) {
+            state.reset();
+            return 0;
+        }
+        // During an aerial dive the bot may be far above the target; let it keep tracking.
+        if (distance > MAX_DISTANCE && state.getPhase() != CombatState.Phase.AIRBORNE) {
+            state.reset();
             return 0;
         }
 
@@ -64,13 +69,14 @@ public final class MaceBehavior implements WeaponBehavior {
                 return 0;
             }
             case AIRBORNE: {
-                // Track the target on the way down.
+                // Track the target on the way down; accelerate harder during a fast dive.
                 Vector vel = bot.getVelocity();
                 if (vel.getY() < -0.2) {
                     Vector horiz = toTarget.clone();
                     horiz.setY(0);
                     if (horiz.lengthSquared() > 1.0e-6) {
-                        horiz.normalize().multiply(0.15);
+                        double speed = vel.getY() < -0.6 ? 0.28 : 0.15;
+                        horiz.normalize().multiply(speed);
                         bot.walk(horiz);
                     }
                 }
