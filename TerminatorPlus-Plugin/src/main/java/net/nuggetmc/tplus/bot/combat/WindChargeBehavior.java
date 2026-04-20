@@ -23,7 +23,7 @@ public final class WindChargeBehavior implements WeaponBehavior {
     @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
         if (distance < MIN_DISTANCE || distance > MAX_DISTANCE) return 0;
-        if (!bot.getCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) return 0;
+        if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) return 0;
 
         Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
         Vector aim = target.getEyeLocation().toVector().subtract(spawn.toVector()).normalize();
@@ -37,7 +37,7 @@ public final class WindChargeBehavior implements WeaponBehavior {
         });
 
         spawn.getWorld().playSound(spawn, Sound.ENTITY_WIND_CHARGE_THROW, 1f, 1f);
-        bot.getCooldowns().set(COOLDOWN_KEY, COOLDOWN, bot.getAliveTicks());
+        bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, bot.getAliveTicks());
         return COOLDOWN;
     }
 }

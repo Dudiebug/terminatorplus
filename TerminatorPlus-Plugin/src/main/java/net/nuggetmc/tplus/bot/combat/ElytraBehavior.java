@@ -72,21 +72,21 @@ public final class ElytraBehavior {
 
             // Firework boost.
             if (bot.getBotInventory().hasFirework()
-                    && bot.getCooldowns().ready(FIREWORK_CD, bot.getAliveTicks())
+                    && bot.getBotCooldowns().ready(FIREWORK_CD, bot.getAliveTicks())
                     && target != null
                     && horizontalDistance(bot, target) > 6.0) {
                 launchFireworkBoost(bot, target);
-                bot.getCooldowns().set(FIREWORK_CD, FIREWORK_COOLDOWN, bot.getAliveTicks());
+                bot.getBotCooldowns().set(FIREWORK_CD, FIREWORK_COOLDOWN, bot.getAliveTicks());
             }
 
             // Devastating aerial trident: when gliding high above target, release a trident riding the glide velocity.
             if (target != null
                     && bot.getBotInventory().hasTrident()
-                    && bot.getCooldowns().ready(DIVE_TRIDENT_CD, bot.getAliveTicks())
+                    && bot.getBotCooldowns().ready(DIVE_TRIDENT_CD, bot.getAliveTicks())
                     && (bot.getLocation().getY() - target.getLocation().getY()) >= TARGET_DIVE_MIN_DY
                     && horizontalDistance(bot, target) < 18.0) {
                 hurlDiveTrident(bot, target);
-                bot.getCooldowns().set(DIVE_TRIDENT_CD, DIVE_TRIDENT_COOLDOWN, bot.getAliveTicks());
+                bot.getBotCooldowns().set(DIVE_TRIDENT_CD, DIVE_TRIDENT_COOLDOWN, bot.getAliveTicks());
             }
         } else {
             if (bot.getBukkitEntity().isGliding()) bot.getBukkitEntity().setGliding(false);
