@@ -77,18 +77,26 @@ public final class BotInventoryGUI implements InventoryHolder {
 
     /** Push GUI state back onto the bot (call when closing). */
     public void syncToBot() {
-        PlayerInventory pi = bot.getBukkitEntity().getInventory();
+        // Write hotbar + storage directly to the NMS Inventory, bypassing the Bukkit
+        // container-transaction system (which Paper 26.x would roll back for a MockConnection).
+        net.minecraft.world.entity.player.Inventory nmsInv = bot.getInventory();
         for (int i = 0; i < 36; i++) {
-            pi.setItem(i, safe(inventory.getItem(i)));
+            ItemStack it = inventory.getItem(i);
+            nmsInv.setItem(i, (it == null || it.getType() == Material.AIR)
+                    ? net.minecraft.world.item.ItemStack.EMPTY
+                    : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(it));
         }
+        nmsInv.setChanged();
+
+        // Armor + offhand go through bot.setItem() so ClientboundSetEquipmentPacket is sent.
         bot.setItem(safe(inventory.getItem(36)), org.bukkit.inventory.EquipmentSlot.HEAD);
         bot.setItem(safe(inventory.getItem(37)), org.bukkit.inventory.EquipmentSlot.CHEST);
         bot.setItem(safe(inventory.getItem(38)), org.bukkit.inventory.EquipmentSlot.LEGS);
         bot.setItem(safe(inventory.getItem(39)), org.bukkit.inventory.EquipmentSlot.FEET);
         bot.setItem(safe(inventory.getItem(40)), org.bukkit.inventory.EquipmentSlot.OFF_HAND);
 
-        // Re-sync the mainhand with the currently selected hotbar slot.
-        bot.selectHotbarSlot(bot.getBotInventory().getSelectedHotbarSlot());
+        // Auto-organise: move items into the best slots and select the primary weapon.
+        bot.getBotInventory().autoEquip();
     }
 
     /** Slots in the GUI that are decorative/locked. */

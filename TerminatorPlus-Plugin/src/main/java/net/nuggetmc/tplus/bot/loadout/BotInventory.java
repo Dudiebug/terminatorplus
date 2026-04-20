@@ -6,6 +6,9 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Helper around a bot's underlying PlayerInventory that adds a tracked
  * "selected hotbar slot" (since bots are not real players and don't get
@@ -19,6 +22,25 @@ import org.bukkit.inventory.PlayerInventory;
 public final class BotInventory {
 
     public static final int HOTBAR_SIZE = 9;
+
+    // Materials placed into the hotbar in this priority order by autoEquip().
+    private static final List<Material> HOTBAR_PRIORITY = List.of(
+        Material.MACE,
+        Material.NETHERITE_SWORD, Material.DIAMOND_SWORD, Material.IRON_SWORD,
+        Material.STONE_SWORD, Material.GOLDEN_SWORD, Material.WOODEN_SWORD,
+        Material.TRIDENT,
+        Material.NETHERITE_AXE, Material.DIAMOND_AXE, Material.IRON_AXE,
+        Material.STONE_AXE, Material.GOLDEN_AXE, Material.WOODEN_AXE,
+        Material.WIND_CHARGE,
+        Material.ENDER_PEARL,
+        Material.BOW, Material.CROSSBOW,
+        Material.END_CRYSTAL,    // OBSIDIAN paired inline
+        Material.RESPAWN_ANCHOR, // GLOWSTONE paired inline
+        Material.COBWEB,
+        Material.FIREWORK_ROCKET,
+        Material.ENCHANTED_GOLDEN_APPLE, Material.GOLDEN_APPLE,
+        Material.TOTEM_OF_UNDYING
+    );
 
     private final Bot bot;
     private int selectedHotbarSlot;
@@ -135,13 +157,12 @@ public final class BotInventory {
      */
     public int findStoredChestpieceOfType(Material type) {
         PlayerInventory inv = raw();
-        // Slots 0-35 are hotbar + main storage in Bukkit's PlayerInventory.
         for (int i = 0; i < 36; i++) {
             ItemStack it = inv.getItem(i);
             if (it != null && it.getType() == type) return i;
         }
         ItemStack off = inv.getItemInOffHand();
-        if (off != null && off.getType() == type) return 40; // offhand slot index
+        if (off != null && off.getType() == type) return 40;
         return -1;
     }
 
@@ -163,9 +184,7 @@ public final class BotInventory {
         ItemStack stored = inv.getItem(slot);
         ItemStack chestPrev = current == null ? new ItemStack(Material.AIR) : current.clone();
 
-        // Put desired item on the body.
         bot.setItem(stored.clone(), EquipmentSlot.CHEST);
-        // Stash the previous chest item where the desired one used to live.
         if (slot == 40) {
             inv.setItemInOffHand(chestPrev);
         } else {
@@ -237,5 +256,175 @@ public final class BotInventory {
         bot.setItemOffhand(pickup);
         inv.setItem(source, previous);
         return true;
+    }
+
+    // -------------------------------------------------------------------------
+    // Auto-equip
+    // -------------------------------------------------------------------------
+
+    /**
+     * Examines every item in the bot's full inventory (hotbar, storage, current
+     * armor, offhand) and reorganises them into the best combat configuration:
+     * best armor → armor slots, weapons/tools → hotbar (by priority), leftover → storage.
+     *
+     * Called automatically when the inventory GUI closes.
+     */
+    public void autoEquip() {
+        PlayerInventory inv = raw();
+
+        // Collect the entire inventory into a mutable pool (cloned items).
+        List<ItemStack> pool = new ArrayList<>();
+        for (int i = 0; i < 36; i++) addToPool(pool, inv.getItem(i));
+        addToPool(pool, inv.getHelmet());
+        addToPool(pool, inv.getChestplate());
+        addToPool(pool, inv.getLeggings());
+        addToPool(pool, inv.getBoots());
+        addToPool(pool, inv.getItemInOffHand());
+
+        // Clear everything.
+        clearAll();
+
+        // Armor slots.
+        pickAndEquip(pool, EquipmentSlot.HEAD,  "_HELMET");
+        pickAndEquipChest(pool);
+        pickAndEquip(pool, EquipmentSlot.LEGS,  "_LEGGINGS");
+        pickAndEquip(pool, EquipmentSlot.FEET,  "_BOOTS");
+
+        // Offhand: totem > shield.
+        for (Material m : new Material[]{Material.TOTEM_OF_UNDYING, Material.SHIELD}) {
+            ItemStack found = removeFirst(pool, m);
+            if (found != null) { bot.setItemOffhand(found); break; }
+        }
+
+        // Hotbar: fill by priority order.
+        int hotbarSlot = 0;
+        for (Material wanted : HOTBAR_PRIORITY) {
+            if (hotbarSlot >= HOTBAR_SIZE) break;
+            ItemStack found = removeFirst(pool, wanted);
+            if (found == null) continue;
+            nmsSet(hotbarSlot++, found);
+            // Crystal / anchor kits need their support block adjacent in hotbar.
+            if (wanted == Material.END_CRYSTAL && hotbarSlot < HOTBAR_SIZE) {
+                ItemStack obs = removeFirst(pool, Material.OBSIDIAN);
+                if (obs != null) nmsSet(hotbarSlot++, obs);
+            } else if (wanted == Material.RESPAWN_ANCHOR && hotbarSlot < HOTBAR_SIZE) {
+                ItemStack glow = removeFirst(pool, Material.GLOWSTONE);
+                if (glow != null) nmsSet(hotbarSlot++, glow);
+            }
+        }
+
+        // Dump remainder into storage (slots 9–35).
+        int storage = 9;
+        for (ItemStack leftover : pool) {
+            if (storage >= 36) break;
+            nmsSet(storage++, leftover);
+        }
+
+        // Select the first weapon/melee slot, or slot 0.
+        setSelectedHotbarSlot(findPrimaryWeaponSlot());
+    }
+
+    // ---- private helpers ----
+
+    /** Write directly to the NMS Inventory, bypassing the Bukkit container transaction system. */
+    private void nmsSet(int slot, ItemStack bukkit_item) {
+        net.minecraft.world.entity.player.Inventory nmsInv = bot.getInventory();
+        net.minecraft.world.item.ItemStack nms = (bukkit_item == null || bukkit_item.getType() == Material.AIR)
+                ? net.minecraft.world.item.ItemStack.EMPTY
+                : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(bukkit_item);
+        nmsInv.setItem(slot, nms);
+        nmsInv.setChanged();
+    }
+
+    /** Clear all 36 main slots via NMS, then clear armor/offhand via bot.setItem (sends packets). */
+    private void clearAll() {
+        net.minecraft.world.entity.player.Inventory nmsInv = bot.getInventory();
+        for (int i = 0; i < 36; i++) nmsInv.setItem(i, net.minecraft.world.item.ItemStack.EMPTY);
+        nmsInv.setChanged();
+        bot.setItem(new ItemStack(Material.AIR), EquipmentSlot.HEAD);
+        bot.setItem(new ItemStack(Material.AIR), EquipmentSlot.CHEST);
+        bot.setItem(new ItemStack(Material.AIR), EquipmentSlot.LEGS);
+        bot.setItem(new ItemStack(Material.AIR), EquipmentSlot.FEET);
+        bot.setItemOffhand(new ItemStack(Material.AIR));
+    }
+
+    private void pickAndEquip(List<ItemStack> pool, EquipmentSlot slot, String suffix) {
+        ItemStack best = null;
+        int bestTier = -1;
+        for (ItemStack it : pool) {
+            String n = it.getType().name();
+            boolean match = n.endsWith(suffix)
+                    || (suffix.equals("_HELMET") && n.equals("TURTLE_HELMET"));
+            if (match && armorTier(it.getType()) > bestTier) {
+                best = it;
+                bestTier = armorTier(it.getType());
+            }
+        }
+        if (best != null) {
+            pool.remove(best);
+            bot.setItem(best, slot);
+        }
+    }
+
+    /**
+     * Chest slot: elytra if fireworks are in the pool (skydiver mode),
+     * otherwise best chestplate, falling back to elytra if no chestplate.
+     */
+    private void pickAndEquipChest(List<ItemStack> pool) {
+        boolean hasFireworks = pool.stream().anyMatch(it -> it.getType() == Material.FIREWORK_ROCKET);
+        ItemStack elytra = findFirst(pool, Material.ELYTRA);
+        ItemStack bestChest = null;
+        int bestTier = -1;
+        for (ItemStack it : pool) {
+            if (it.getType().name().endsWith("_CHESTPLATE") && armorTier(it.getType()) > bestTier) {
+                bestChest = it;
+                bestTier = armorTier(it.getType());
+            }
+        }
+        ItemStack toEquip = (hasFireworks && elytra != null) ? elytra
+                : bestChest != null ? bestChest
+                : elytra;
+        if (toEquip != null) {
+            pool.remove(toEquip);
+            bot.setItem(toEquip, EquipmentSlot.CHEST);
+        }
+    }
+
+    private int findPrimaryWeaponSlot() {
+        PlayerInventory inv = raw();
+        for (int i = 0; i < HOTBAR_SIZE; i++) {
+            ItemStack it = inv.getItem(i);
+            if (it == null) continue;
+            String n = it.getType().name();
+            if (n.endsWith("_SWORD") || n.equals("MACE") || n.equals("TRIDENT") || n.endsWith("_AXE")) return i;
+        }
+        return 0;
+    }
+
+    private static int armorTier(Material m) {
+        String n = m.name();
+        if (n.startsWith("NETHERITE")) return 5;
+        if (n.startsWith("DIAMOND"))   return 4;
+        if (n.startsWith("IRON"))      return 3;
+        if (n.startsWith("CHAINMAIL")) return 2;
+        if (n.startsWith("GOLD"))      return 1;
+        if (n.startsWith("LEATHER"))   return 1;
+        return 0;
+    }
+
+    private static ItemStack removeFirst(List<ItemStack> pool, Material type) {
+        for (int i = 0; i < pool.size(); i++) {
+            if (pool.get(i).getType() == type) return pool.remove(i);
+        }
+        return null;
+    }
+
+    private static ItemStack findFirst(List<ItemStack> pool, Material type) {
+        for (ItemStack it : pool) if (it.getType() == type) return it;
+        return null;
+    }
+
+    private static void addToPool(List<ItemStack> pool, ItemStack it) {
+        if (it != null && it.getType() != Material.AIR) pool.add(it.clone());
     }
 }
