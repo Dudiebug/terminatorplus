@@ -1,6 +1,6 @@
 plugins {
     `java-library`
-    id("io.papermc.paperweight.userdev") version "1.7.5"
+    id("io.papermc.paperweight.userdev") version "2.0.0-beta.21"
     id("net.nuggetmc.java-conventions")
 }
 
@@ -12,8 +12,10 @@ java {
     toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 }
 
+paperweight.reobfArtifactConfiguration = io.papermc.paperweight.userdev.ReobfArtifactConfiguration.REOBF_PRODUCTION
+
 dependencies {
-    paperweight.paperDevBundle("1.21.1-R0.1-SNAPSHOT")
+    paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
 
     //add the TerminatorPlus-API module
     implementation(project(":TerminatorPlus-API"))

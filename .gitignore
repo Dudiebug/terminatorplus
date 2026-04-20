@@ -1,0 +1,11 @@
+.gradle/
+build/
+*/build/
+*/.gradle/
+.idea/
+*.iml
+.claude/
+out/
+target/
+*.class
+.DS_Store

@@ -1,8 +1,8 @@
 package net.nuggetmc.tplus.nms;
 
+import io.netty.channel.ChannelFutureListener;
 import net.minecraft.network.Connection;
 import net.minecraft.network.PacketListener;
-import net.minecraft.network.PacketSendListener;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
 import org.jetbrains.annotations.NotNull;
@@ -49,11 +49,11 @@ public class MockConnection extends Connection {
     }
 
     @Override
-    public void send(@NotNull Packet<?> packet, PacketSendListener sendListener) {
+    public void send(@NotNull Packet<?> packet, ChannelFutureListener sendListener) {
     }
 
     @Override
-    public void send(@NotNull Packet<?> packet, PacketSendListener sendListener, boolean flag) {
+    public void send(@NotNull Packet<?> packet, ChannelFutureListener sendListener, boolean flag) {
     }
 
     @Override

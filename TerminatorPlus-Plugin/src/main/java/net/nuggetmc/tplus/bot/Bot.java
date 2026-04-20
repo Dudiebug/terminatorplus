@@ -362,7 +362,7 @@ public class Bot extends ServerPlayer implements Terminator {
             plugin.getManager().getAgent().onFallDamage(event);
 
             if (!event.isCancelled()) {
-                hurt(damageSources().fall(), (float) Math.pow(3.6, -oldVelocity.getY()));
+                hurtServer((ServerLevel) level(), damageSources().fall(), (float) Math.pow(3.6, -oldVelocity.getY()));
             }
         }
     }
@@ -621,7 +621,7 @@ public class Bot extends ServerPlayer implements Terminator {
         }
         this.removeVisually();
         if (inPlayerList)
-            this.server.getPlayerList().getPlayers().remove(this);
+            ((CraftServer) Bukkit.getServer()).getServer().getPlayerList().getPlayers().remove(this);
     }
 
     private void removeTab() {
@@ -693,7 +693,7 @@ public class Bot extends ServerPlayer implements Terminator {
     }
 
     @Override
-    public boolean hurt(DamageSource damagesource, float f) {
+    public boolean hurtServer(ServerLevel worldServer, DamageSource damagesource, float f) {
         Entity attacker = damagesource.getEntity();
 
         float damage;
@@ -719,7 +719,7 @@ public class Bot extends ServerPlayer implements Terminator {
             damage = f;
         }
 
-        boolean damaged = super.hurt(damagesource, damage);
+        boolean damaged = super.hurtServer(worldServer, damagesource, damage);
 
         if (!damaged && blocking) {
             getBukkitEntity().getWorld().playSound(getLocation(), Sound.ITEM_SHIELD_BLOCK, 1, 1);
@@ -887,7 +887,7 @@ public class Bot extends ServerPlayer implements Terminator {
 
     @Override
     public void doTick() {
-        detectEquipmentUpdatesPublic();
+        detectEquipmentUpdates();
         baseTick();
     }
 

@@ -132,7 +132,8 @@ public class LegacyMats {
     
     public static final Set<Material> OBSTACLES = new HashSet<>(concatTypes(Lists.newArrayList(
     	Material.IRON_BARS,
-    	Material.CHAIN,
+    	Material.IRON_CHAIN,
+    	Material.COPPER_CHAIN,
     	Material.END_ROD,
     	Material.LIGHTNING_ROD,
     	Material.COBWEB,
@@ -282,7 +283,8 @@ public class LegacyMats {
     
     public static boolean canPlaceWater(Block block, Optional<Double> entityYPos) {
     	if (isSolid(block.getType())) {
-    		if (block.getType() == Material.CHAIN && ((Chain)block.getBlockData()).getAxis() == Axis.Y
+    		if ((block.getType() == Material.IRON_CHAIN || block.getType() == Material.COPPER_CHAIN)
+    			&& ((Chain)block.getBlockData()).getAxis() == Axis.Y
     			&& !((Chain)block.getBlockData()).isWaterlogged())
     			return false;
     		if ((block.getType().data == Leaves.class || block.getType() == Material.MANGROVE_ROOTS
@@ -387,7 +389,8 @@ public class LegacyMats {
     			case CACTUS:
     			case DRAGON_EGG:
     			case TURTLE_EGG:
-    			case CHAIN:
+    			case IRON_CHAIN:
+    			case COPPER_CHAIN:
     			case IRON_BARS:
     			case LANTERN:
     			case SOUL_LANTERN:

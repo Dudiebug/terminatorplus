@@ -17,6 +17,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     compileOnly("com.mojang:authlib:3.2.38")
+    compileOnly("com.googlecode.json-simple:json-simple:1.1.1")
 }

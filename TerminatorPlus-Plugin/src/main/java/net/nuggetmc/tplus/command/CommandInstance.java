@@ -8,7 +8,6 @@ import net.nuggetmc.tplus.command.annotation.TextArg;
 import net.nuggetmc.tplus.command.exception.ArgCountException;
 import net.nuggetmc.tplus.command.exception.ArgParseException;
 import net.nuggetmc.tplus.command.exception.NonPlayerException;
-import org.apache.commons.lang.StringUtils;
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.defaults.BukkitCommand;
@@ -125,7 +124,7 @@ public abstract class CommandInstance extends BukkitCommand {
                         if (index >= arguments.size()) {
                             parsedArguments.add("");
                         } else {
-                            parsedArguments.add(StringUtils.join(arguments.subList(index, arguments.size()), " "));
+                            parsedArguments.add(String.join(" ", arguments.subList(index, arguments.size())));
                         }
 
                         continue;
@@ -216,7 +215,7 @@ public abstract class CommandInstance extends BukkitCommand {
             });
 
             sender.sendMessage("Command Usage: " + org.bukkit.ChatColor.YELLOW + "/" + getName() + (method.getName().isEmpty() ? "" : " " + method.getName())
-                    + " " + StringUtils.join(usageArgs, " "));
+                    + " " + String.join(" ", usageArgs));
             return true;
         }
 

@@ -1314,7 +1314,7 @@ public class LegacyAgent extends Agent {
                 bot.look(BlockFace.DOWN);
                 bot.punch();
 
-                Boat boat = (Boat) world.spawnEntity(place, EntityType.BOAT);
+                Boat boat = (Boat) world.spawnEntity(place, EntityType.OAK_BOAT);
 
                 scheduler.runTaskLater(plugin, () -> {
                     if (!boat.isDead()) {
