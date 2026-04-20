@@ -32,8 +32,9 @@ for i in "${!BRANCHES[@]}"; do
     suffix="${SUFFIXES[$i]}"
     title="${TITLES[$i]}"
     tag="${TAGS[$i]}"
-    plugin_jar="$PUBLISH_DIR/TerminatorPlus-5.0.0-BETA-${suffix}.jar"
-    api_jar="$PUBLISH_DIR/TerminatorPlus-API-5.0.0-BETA-${suffix}.jar"
+    # Root fat jar (includes plugin.yml + all classes); API jar is for developers only.
+    plugin_jar="$REPO_DIR/build/libs/TerminatorPlus-5.0.0-BETA-${suffix}.jar"
+    api_jar="$REPO_DIR/TerminatorPlus-API/build/libs/TerminatorPlus-API-5.0.0-BETA-${suffix}.jar"
 
     echo "=== $branch ==="
 
