@@ -16,16 +16,27 @@ public class MockConnection extends Connection {
     private static final Field DISCONNECT_LISTENER_FIELD;
 
     static {
-        try {
-            // https://mappings.cephx.dev/1.20.4/net/minecraft/network/Connection.html packetListener & disconnectListener
-            PACKET_LISTENER_FIELD = Connection.class.getDeclaredField("q");
-            DISCONNECT_LISTENER_FIELD = Connection.class.getDeclaredField("p");
-
-            PACKET_LISTENER_FIELD.setAccessible(true);
-            DISCONNECT_LISTENER_FIELD.setAccessible(true);
-        } catch (NoSuchFieldException e) {
-            throw new RuntimeException(e);
+        // Resolve by type + declaration order so this works across both Mojang-mapped
+        // (26.x, unobfuscated) and Spigot-reobf'd (1.21.x) runtimes, where field names
+        // are different (`packetListener`/`disconnectListener` vs obf letters).
+        Field disconnectListenerField = null;
+        Field packetListenerField = null;
+        for (Field field : Connection.class.getDeclaredFields()) {
+            if (!field.getType().equals(PacketListener.class)) continue;
+            if (disconnectListenerField == null) {
+                disconnectListenerField = field;
+            } else if (packetListenerField == null) {
+                packetListenerField = field;
+                break;
+            }
         }
+        if (disconnectListenerField == null || packetListenerField == null) {
+            throw new RuntimeException("Could not locate PacketListener fields on Connection");
+        }
+        disconnectListenerField.setAccessible(true);
+        packetListenerField.setAccessible(true);
+        DISCONNECT_LISTENER_FIELD = disconnectListenerField;
+        PACKET_LISTENER_FIELD = packetListenerField;
     }
 
     public MockConnection() {
