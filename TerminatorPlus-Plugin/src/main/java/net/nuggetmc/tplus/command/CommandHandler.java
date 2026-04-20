@@ -57,6 +57,12 @@ public class CommandHandler {
             commandMap.put(command.getName(), command);
             bukkitCommandMap.register(fallback, command);
 
+            org.bukkit.command.PluginCommand pluginCmd = plugin.getCommand(command.getName());
+            if (pluginCmd != null) {
+                pluginCmd.setExecutor((sender, cmd, label, args) -> command.execute(sender, label, args));
+                pluginCmd.setTabCompleter((sender, cmd, label, args) -> command.tabComplete(sender, label, args));
+            }
+
             Method[] methods = command.getClass().getMethods();
 
             for (Method method : methods) {
