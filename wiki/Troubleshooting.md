@@ -1,5 +1,15 @@
 # Troubleshooting / FAQ
 
+## Updating the plugin
+
+1. Stop the server.
+2. Delete `plugins/TerminatorPlus-*.jar` (both the plugin jar and the API jar if present).
+3. Download the new jar(s) from the [Releases page](https://github.com/Dudiebug/terminatorplus/releases) — choose the build matching your server version (`mc26.1.2` or `mc1.21.11`).
+4. Drop the new jar(s) into `plugins/`.
+5. Start the server and confirm the version line in the startup log reads `correct version: true`.
+
+> **Never mix jars from different releases.** If you see `TerminatorPlus-API-*.jar` listed separately, make sure both the API jar and plugin jar are from the same release.
+
 ## Version mismatch banner on startup
 
 ```
