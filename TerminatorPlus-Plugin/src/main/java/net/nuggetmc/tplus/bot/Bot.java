@@ -170,7 +170,7 @@ public class Bot extends ServerPlayer implements Terminator {
 
     private void renderAll() {
         Packet<?>[] packets = getRenderPacketsNoInfo();
-        this.entityData.set(new EntityDataAccessor<>(17, EntityDataSerializers.BYTE), (byte) 0x7F);
+        this.entityData.set(net.minecraft.world.entity.player.Player.DATA_PLAYER_MODE_CUSTOMISATION, (byte) 0x7F);
         Bukkit.getOnlinePlayers().forEach(p -> renderNoInfo(((CraftPlayer) p).getHandle().connection, packets, false));
     }
 
