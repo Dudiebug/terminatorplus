@@ -71,7 +71,7 @@ public final class CombatDirector {
 
         if (env != World.Environment.NETHER && inv.hasCrystalKit()
                 && distance <= 6.0
-                && bot.getCooldowns().ready(CrystalBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
+                && bot.getBotCooldowns().ready(CrystalBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
             selectType(inv, Material.END_CRYSTAL);
             crystal.ticksFor(bot, target, distance);
             return true;
@@ -79,7 +79,7 @@ public final class CombatDirector {
 
         if (env == World.Environment.NETHER && inv.hasAnchorKit()
                 && distance <= 5.0
-                && bot.getCooldowns().ready(AnchorBombBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
+                && bot.getBotCooldowns().ready(AnchorBombBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
             selectType(inv, Material.RESPAWN_ANCHOR);
             anchor.ticksFor(bot, target, distance);
             return true;
@@ -88,7 +88,7 @@ public final class CombatDirector {
         boolean grounded = bot.isBotOnGround();
 
         if (distance <= 3.5 && inv.hasMace() && grounded
-                && bot.getCooldowns().ready(MaceBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
+                && bot.getBotCooldowns().ready(MaceBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
             selectType(inv, Material.MACE);
             mace.ticksFor(bot, target, distance);
             return true;
@@ -104,34 +104,34 @@ public final class CombatDirector {
         }
 
         if (distance >= 5.0 && distance <= 28.0 && inv.hasTrident()
-                && bot.getCooldowns().ready(TridentBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
+                && bot.getBotCooldowns().ready(TridentBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
             selectType(inv, Material.TRIDENT);
             trident.ticksFor(bot, target, distance);
             return true;
         }
 
         if (distance >= 14.0 && distance <= 35.0 && inv.hasEnderPearl()
-                && bot.getCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
+                && bot.getBotCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
             pearl.ticksFor(bot, target, distance);
             return true;
         }
 
         if (distance >= 4.0 && inv.hasWindCharge()
-                && bot.getCooldowns().ready(WindChargeBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
+                && bot.getBotCooldowns().ready(WindChargeBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
             selectType(inv, Material.WIND_CHARGE);
             windCharge.ticksFor(bot, target, distance);
             return true;
         }
 
         if (inv.hasCobweb() && distance <= 4.5
-                && bot.getCooldowns().ready(UtilityBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
+                && bot.getBotCooldowns().ready(UtilityBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
             if (utility.ticksFor(bot, target, distance) > 0) return true;
         }
 
         // Healing: if hurt, try to use a golden apple.
-        if (bot.getBotHealth() < bot.getBotMaxHealth() * 0.4f && bot.getCooldowns().ready("heal", bot.getAliveTicks())) {
+        if (bot.getBotHealth() < bot.getBotMaxHealth() * 0.4f && bot.getBotCooldowns().ready("heal", bot.getAliveTicks())) {
             if (tryHeal(bot)) {
-                bot.getCooldowns().set("heal", 100, bot.getAliveTicks());
+                bot.getBotCooldowns().set("heal", 100, bot.getAliveTicks());
                 return true;
             }
         }

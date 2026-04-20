@@ -26,7 +26,7 @@ public final class TridentBehavior implements WeaponBehavior {
 
     @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
-        if (!bot.getCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) return 0;
+        if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) return 0;
         if (distance < MIN_DISTANCE || distance > MAX_DISTANCE) return 0;
 
         CombatState state = bot.getCombatState();
@@ -55,7 +55,7 @@ public final class TridentBehavior implements WeaponBehavior {
         if (charge >= MAX_CHARGE_TICKS || out) {
             release(bot, target, dir);
             state.reset();
-            bot.getCooldowns().set(COOLDOWN_KEY, RELEASE_COOLDOWN, bot.getAliveTicks());
+            bot.getBotCooldowns().set(COOLDOWN_KEY, RELEASE_COOLDOWN, bot.getAliveTicks());
             return RELEASE_COOLDOWN;
         }
 

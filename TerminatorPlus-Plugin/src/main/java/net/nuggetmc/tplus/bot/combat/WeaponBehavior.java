@@ -11,7 +11,7 @@ import org.bukkit.entity.LivingEntity;
  *
  * <p>{@link #ticksFor(Bot, LivingEntity, double)} is called every tick
  * while the bot's combat director has chosen this weapon. The behavior
- * is responsible for its own cooldown management via {@link Bot#getCooldowns()}.
+ * is responsible for its own cooldown management via {@link Bot#getBotCooldowns()}.
  */
 public interface WeaponBehavior {
 

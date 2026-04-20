@@ -278,7 +278,7 @@ public class Bot extends ServerPlayer implements Terminator {
         return botInventory;
     }
 
-    public Cooldowns getCooldowns() {
+    public Cooldowns getBotCooldowns() {
         return cooldowns;
     }
 
@@ -367,8 +367,8 @@ public class Bot extends ServerPlayer implements Terminator {
     private void loadChunks() {
         Level world = level();
 
-        for (int i = chunkPosition().x() - 1; i <= chunkPosition().x() + 1; i++) {
-            for (int j = chunkPosition().z() - 1; j <= chunkPosition().z() + 1; j++) {
+        for (int i = chunkPosition().x - 1; i <= chunkPosition().x + 1; i++) {
+            for (int j = chunkPosition().z - 1; j <= chunkPosition().z + 1; j++) {
                 LevelChunk chunk = world.getChunk(i, j);
 
                 if (!chunk.loaded) {

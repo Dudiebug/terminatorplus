@@ -8,11 +8,11 @@ group = "net.nuggetmc"
 description = "TerminatorPlus"
 
 java {
-    toolchain.languageVersion.set(JavaLanguageVersion.of(25))
+    toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 }
 
 dependencies {
-    paperweight.paperDevBundle("26.1.2.build.+")
+    paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
 
     implementation(project(":TerminatorPlus-API"))
 }
@@ -20,7 +20,7 @@ dependencies {
 tasks {
     compileJava {
         options.encoding = Charsets.UTF_8.name()
-        options.release.set(25)
+        options.release.set(21)
     }
     javadoc {
         options.encoding = Charsets.UTF_8.name()

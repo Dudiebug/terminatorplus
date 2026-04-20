@@ -27,7 +27,7 @@ public final class AnchorBombBehavior implements WeaponBehavior {
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
         if (target.getWorld().getEnvironment() != World.Environment.NETHER) return 0;
         if (distance > MAX_DISTANCE) return 0;
-        if (!bot.getCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) return 0;
+        if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) return 0;
 
         BotInventory inv = bot.getBotInventory();
         if (!inv.hasAnchorKit()) return 0;
@@ -50,7 +50,7 @@ public final class AnchorBombBehavior implements WeaponBehavior {
         world.createExplosion(boom, 5.0f, false, true, bot.getBukkitEntity());
         world.playSound(boom, Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 1f, 0.7f);
 
-        bot.getCooldowns().set(COOLDOWN_KEY, COOLDOWN, bot.getAliveTicks());
+        bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, bot.getAliveTicks());
         return COOLDOWN;
     }
 
