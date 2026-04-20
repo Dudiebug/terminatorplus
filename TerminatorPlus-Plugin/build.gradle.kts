@@ -12,7 +12,7 @@ java {
 }
 
 dependencies {
-    paperweight.paperDevBundle("26.1.1.build.+")
+    paperweight.paperDevBundle("26.1.2.build.+")
 
     implementation(project(":TerminatorPlus-API"))
 }
