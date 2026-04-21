@@ -1043,7 +1043,8 @@ public final class OpportunityScanner {
      */
     private boolean executeWaterDouse(Bot bot) {
         Block feet = bot.getLocation().getBlock();
-        if (!feet.getType().isAir()) return true;
+        // Feet occupied: can't place water here, let the next priority fire.
+        if (!feet.getType().isAir()) return false;
 
         int slot = bot.getBotInventory().findHotbar(Material.WATER_BUCKET);
         if (slot >= 0) bot.selectHotbarSlot(slot);

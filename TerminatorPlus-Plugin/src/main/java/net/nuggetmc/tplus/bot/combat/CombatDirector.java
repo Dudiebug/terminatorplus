@@ -121,8 +121,12 @@ public final class CombatDirector {
 
         World.Environment env = bot.getDimension();
 
+        // Minimum range 2.0 so the bot isn't caught inside its own crystal
+        // blast — explosion radius is 6 blocks, and wiki "End crystals"
+        // notes the user only survives if at least ~1 block away. 2.0 gives
+        // a margin that still allows knockup-crystal setups.
         if (env != World.Environment.NETHER && inv.hasCrystalKit()
-                && distance <= 6.0
+                && distance >= 2.0 && distance <= 6.0
                 && bot.getBotCooldowns().ready(CrystalBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
             CombatDebugger.weaponPick(bot, "END_CRYSTAL", distance, true);
             selectType(inv, Material.END_CRYSTAL);
@@ -131,7 +135,7 @@ public final class CombatDirector {
         }
 
         if (env == World.Environment.NETHER && inv.hasAnchorKit()
-                && distance <= 5.0
+                && distance >= 2.0 && distance <= 5.0
                 && bot.getBotCooldowns().ready(AnchorBombBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
             CombatDebugger.weaponPick(bot, "RESPAWN_ANCHOR", distance, true);
             selectType(inv, Material.RESPAWN_ANCHOR);
@@ -164,7 +168,8 @@ public final class CombatDirector {
 
             int slot = sword >= 0 ? sword : axe;
             if (slot >= 0) {
-                bot.selectHotbarSlot(slot);
+                int hotbar = inv.bringToHotbar(slot);
+                if (hotbar >= 0) bot.selectHotbarSlot(hotbar);
                 CombatDebugger.weaponPick(bot, sword >= 0 ? "SWORD" : "AXE", distance, true);
             } else {
                 CombatDebugger.weaponPick(bot, "MELEE(empty)", distance, true);
@@ -206,6 +211,8 @@ public final class CombatDirector {
 
     private void selectType(BotInventory inv, Material type) {
         int slot = inv.findHotbar(type);
-        if (slot >= 0) inv.getBot().selectHotbarSlot(slot);
+        if (slot < 0) return;
+        int hotbar = inv.bringToHotbar(slot);
+        if (hotbar >= 0) inv.getBot().selectHotbarSlot(hotbar);
     }
 }
