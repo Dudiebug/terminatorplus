@@ -132,12 +132,17 @@ public class LegacyAgent extends Agent {
             return;
         }
 
-        // Stuck detection: only meaningful when the bot HAS somewhere to go.
-        // Count consecutive ticks within 0.1 block of the last position; when
-        // we cross the threshold, apply a random-strafe jump to jolt the bot
-        // out of corners / bot-on-bot overlap / doorway stalls.
+        // Stuck detection: only meaningful when the bot has somewhere to go
+        // AND isn't already in melee range. A bot that's standing on top of
+        // its target looks "stuck" to a position-delta check even though it's
+        // legitimately swinging — jolting it here just makes a crowd of bots
+        // jump forever (per the screenshot around the sleeping villager).
+        double distToTarget = loc.getWorld() == livingTarget.getWorld()
+                ? loc.distance(livingTarget.getLocation())
+                : Double.MAX_VALUE;
+        boolean inMeleeRange = distToTarget <= 4.5;
         Location prev = stuckLastLoc.get(botEntity);
-        if (prev != null && prev.getWorld() == loc.getWorld()
+        if (!inMeleeRange && prev != null && prev.getWorld() == loc.getWorld()
                 && prev.distanceSquared(loc) < 0.01) {
             int count = stuckTicks.getOrDefault(botEntity, 0) + 1;
             if (count >= STUCK_THRESHOLD_TICKS && bot.isBotOnGround()) {
