@@ -5,6 +5,7 @@ import org.bukkit.Material;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -312,6 +313,10 @@ public final class BotInventory {
         addToPool(pool, inv.getBoots());
         addToPool(pool, inv.getItemInOffHand());
 
+        // Inject auto-stocked movement supplies into the pool BEFORE organization
+        // so HOTBAR_PRIORITY can place WIND_CHARGE / ENDER_PEARL into hotbar slots.
+        injectMovementSuppliesIntoPool(pool);
+
         // Clear everything.
         clearAll();
 
@@ -353,6 +358,168 @@ public final class BotInventory {
 
         // Select the first weapon/melee slot, or slot 0.
         setSelectedHotbarSlot(findPrimaryWeaponSlot());
+
+        // Re-tier any swords/axes that ended up in slots, now that armor is final.
+        syncToolsToArmorTier();
+    }
+
+    /** Adds wind charges + ender pearls to {@code pool} if the existing pool count is below threshold. */
+    private static void injectMovementSuppliesIntoPool(List<ItemStack> pool) {
+        topUpPool(pool, Material.WIND_CHARGE, WIND_CHARGE_TARGET);
+        topUpPool(pool, Material.ENDER_PEARL, ENDER_PEARL_TARGET);
+    }
+
+    private static void topUpPool(List<ItemStack> pool, Material mat, int target) {
+        int present = 0;
+        for (ItemStack it : pool) if (it.getType() == mat) present += it.getAmount();
+        if (present >= REFILL_THRESHOLD) return;
+        int needed = target - present;
+        if (needed > 0) pool.add(new ItemStack(mat, needed));
+    }
+
+    // -------------------------------------------------------------------------
+    // Armor-tier-driven tool sync
+    // -------------------------------------------------------------------------
+
+    /** Floor for tool tier when bot has only low-tier (or no) armor. IRON = 3. */
+    public static final int MIN_TOOL_TIER = 3;
+
+    /** Returns the highest tier among the bot's currently-worn armor pieces (0 if none). */
+    public int getMaxArmorTier() {
+        PlayerInventory inv = raw();
+        int best = 0;
+        ItemStack[] worn = { inv.getHelmet(), inv.getChestplate(), inv.getLeggings(), inv.getBoots() };
+        for (ItemStack it : worn) {
+            if (it == null || it.getType() == Material.AIR) continue;
+            int t = armorTier(it.getType());
+            if (t > best) best = t;
+        }
+        return best;
+    }
+
+    /**
+     * Re-tier every sword / axe / pickaxe / shovel / hoe in the bot's inventory
+     * (hotbar + storage + offhand) to {@code max(getMaxArmorTier(), MIN_TOOL_TIER)},
+     * preserving stack size, durability, enchantments, and display name.
+     * Mace and trident have no tiers and are left alone.
+     */
+    public void syncToolsToArmorTier() {
+        int tier = Math.max(getMaxArmorTier(), MIN_TOOL_TIER);
+        String prefix = tierPrefix(tier);
+        if (prefix == null) return;
+
+        PlayerInventory inv = raw();
+        for (int i = 0; i < 36; i++) {
+            ItemStack it = inv.getItem(i);
+            ItemStack upgraded = upgradedTool(it, prefix, tier);
+            if (upgraded != null) inv.setItem(i, upgraded);
+        }
+        ItemStack off = inv.getItemInOffHand();
+        ItemStack upgradedOff = upgradedTool(off, prefix, tier);
+        if (upgradedOff != null) inv.setItemInOffHand(upgradedOff);
+
+        // Mainhand may still be a stale clone the renderer pushed last frame; re-emit.
+        ItemStack held = inv.getItem(selectedHotbarSlot);
+        bot.setItem(held == null ? new ItemStack(Material.AIR) : held.clone(), EquipmentSlot.HAND);
+    }
+
+    /** Returns an upgraded clone if {@code it} is a tier-able tool below {@code targetTier}; null otherwise. */
+    private static ItemStack upgradedTool(ItemStack it, String targetPrefix, int targetTier) {
+        if (it == null || it.getType() == Material.AIR) return null;
+        String suffix = toolSuffix(it.getType());
+        if (suffix == null) return null;
+        if (armorTier(it.getType()) >= targetTier) return null;
+
+        Material newType;
+        try {
+            newType = Material.valueOf(targetPrefix + suffix);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+        ItemStack out = new ItemStack(newType, it.getAmount());
+        ItemMeta meta = it.getItemMeta();
+        if (meta != null) out.setItemMeta(meta);
+        return out;
+    }
+
+    /** Tool family suffix shared with armor-tier prefixes ("_SWORD", "_AXE", etc), or null if not tier-able. */
+    private static String toolSuffix(Material m) {
+        String n = m.name();
+        if (n.endsWith("_SWORD"))   return "_SWORD";
+        if (n.endsWith("_AXE") && !n.endsWith("PICKAXE")) return "_AXE";
+        if (n.endsWith("_PICKAXE")) return "_PICKAXE";
+        if (n.endsWith("_SHOVEL"))  return "_SHOVEL";
+        if (n.endsWith("_HOE"))     return "_HOE";
+        return null;
+    }
+
+    private static String tierPrefix(int tier) {
+        return switch (tier) {
+            case 5 -> "NETHERITE";
+            case 4 -> "DIAMOND";
+            case 3 -> "IRON";
+            default -> null;
+        };
+    }
+
+    // -------------------------------------------------------------------------
+    // Auto-stocked movement consumables (wind charges + ender pearls)
+    // -------------------------------------------------------------------------
+
+    private static final int WIND_CHARGE_TARGET = 16;
+    private static final int ENDER_PEARL_TARGET = 16;
+    private static final int REFILL_THRESHOLD = 4;
+
+    /**
+     * Ensure the bot has at least {@link #REFILL_THRESHOLD} wind charges and
+     * ender pearls; tops each one back up to its target stack. Called from
+     * {@link #autoEquip()} and from the periodic tick in {@link Bot#doTick()}.
+     */
+    public void ensureMovementSupplies() {
+        topUp(Material.WIND_CHARGE, WIND_CHARGE_TARGET);
+        topUp(Material.ENDER_PEARL, ENDER_PEARL_TARGET);
+    }
+
+    private void topUp(Material mat, int target) {
+        PlayerInventory inv = raw();
+        int present = countAcrossInventory(inv, mat);
+        if (present >= REFILL_THRESHOLD) return;
+
+        int needed = target - present;
+        if (needed <= 0) return;
+
+        // Try to merge into an existing partial stack first.
+        for (int i = 0; i < 36 && needed > 0; i++) {
+            ItemStack it = inv.getItem(i);
+            if (it == null || it.getType() != mat) continue;
+            int max = it.getMaxStackSize();
+            int room = max - it.getAmount();
+            if (room <= 0) continue;
+            int add = Math.min(room, needed);
+            it.setAmount(it.getAmount() + add);
+            inv.setItem(i, it);
+            needed -= add;
+        }
+
+        // Then drop a new stack into the first empty hotbar slot, then storage.
+        for (int i = 0; i < 36 && needed > 0; i++) {
+            ItemStack it = inv.getItem(i);
+            if (it != null && it.getType() != Material.AIR) continue;
+            int amt = Math.min(needed, new ItemStack(mat).getMaxStackSize());
+            inv.setItem(i, new ItemStack(mat, amt));
+            needed -= amt;
+        }
+    }
+
+    private static int countAcrossInventory(PlayerInventory inv, Material mat) {
+        int n = 0;
+        for (int i = 0; i < 36; i++) {
+            ItemStack it = inv.getItem(i);
+            if (it != null && it.getType() == mat) n += it.getAmount();
+        }
+        ItemStack off = inv.getItemInOffHand();
+        if (off != null && off.getType() == mat) n += off.getAmount();
+        return n;
     }
 
     // ---- private helpers ----
@@ -432,7 +599,8 @@ public final class BotInventory {
         return 0;
     }
 
-    private static int armorTier(Material m) {
+    /** Tier score for any armor or tool material name. NETHERITE=5, DIAMOND=4, IRON=3, CHAINMAIL=2, GOLD/LEATHER=1, otherwise 0. */
+    public static int armorTier(Material m) {
         String n = m.name();
         if (n.startsWith("NETHERITE")) return 5;
         if (n.startsWith("DIAMOND"))   return 4;

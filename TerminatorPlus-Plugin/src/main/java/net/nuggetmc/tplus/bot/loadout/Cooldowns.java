@@ -12,6 +12,17 @@ public final class Cooldowns {
 
     private final Map<String, Integer> readyAt = new HashMap<>();
 
+    /** 0 = no hop pending, 1 = hop issued last tick (swing this tick to capitalize on fallDistance > 0). */
+    private byte meleeHopState = 0;
+
+    public byte getMeleeHopState() {
+        return meleeHopState;
+    }
+
+    public void setMeleeHopState(byte state) {
+        this.meleeHopState = state;
+    }
+
     public boolean ready(String key, int aliveTicks) {
         Integer at = readyAt.get(key);
         return at == null || aliveTicks >= at;

@@ -99,6 +99,12 @@ public class BotAgent extends Agent {
         if (PlayerUtils.isInvincible(player.getGameMode()) || player.getNoDamageTicks() >= 5 || loc.distance(player.getLocation()) >= 4)
             return;
 
+        // Wait for the bot's vanilla attack cooldown so each hit is full-damage and crit/sweep eligible.
+        if (!bot.hasNeuralNetwork() && bot.getBukkitEntity() instanceof Player attacker
+                && attacker.getAttackCooldown() < 0.95f) {
+            return;
+        }
+
         bot.attack(player);
     }
 

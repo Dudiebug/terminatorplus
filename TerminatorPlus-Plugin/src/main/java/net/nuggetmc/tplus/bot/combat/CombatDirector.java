@@ -77,11 +77,12 @@ public final class CombatDirector {
         //  2. Anchor bomb in Nether at short range
         //  3. Mace smash (ground + mace + CD ready)
         //  4. Sword melee
-        //  5. Trident momentum throw (mid range)
-        //  6. Ender pearl gap-close (long range)
-        //  7. Wind charge (long range, zoning)
-        //  8. Cobweb utility (target fleeing)
-        //  9. Healing
+        //  5. Wind charge BOOST (grounded + needs to traverse) — launches self upward+forward
+        //  6. Trident momentum throw (mid range)
+        //  7. Ender pearl (long range gap-close + traversal)
+        //  8. Wind charge zone (combat throw at target)
+        //  9. Cobweb utility (target fleeing)
+        // 10. Healing
 
         World.Environment env = bot.getDimension();
 
@@ -119,6 +120,15 @@ public final class CombatDirector {
             return true;
         }
 
+        // Wind charge BOOST — pure-traversal launch. Throws straight down at the bot's feet so
+        // the explosion knocks it upward; horizontal velocity from pathing carries it toward target.
+        // Combines with elytra for sustained flight. Runs only when grounded AND there's distance to close.
+        if (grounded && distance >= 12.0 && inv.hasWindCharge()
+                && bot.getBotCooldowns().ready(WindChargeBehavior.BOOST_COOLDOWN_KEY, bot.getAliveTicks())) {
+            selectType(inv, Material.WIND_CHARGE);
+            if (windCharge.boostTowards(bot, target) > 0) return true;
+        }
+
         if (distance >= 5.0 && distance <= 28.0 && inv.hasTrident()
                 && bot.getBotCooldowns().ready(TridentBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
             selectType(inv, Material.TRIDENT);
@@ -126,7 +136,7 @@ public final class CombatDirector {
             return true;
         }
 
-        if (distance >= 14.0 && distance <= 35.0 && inv.hasEnderPearl()
+        if (distance >= 14.0 && distance <= 80.0 && inv.hasEnderPearl()
                 && bot.getBotCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
             pearl.ticksFor(bot, target, distance);
             return true;

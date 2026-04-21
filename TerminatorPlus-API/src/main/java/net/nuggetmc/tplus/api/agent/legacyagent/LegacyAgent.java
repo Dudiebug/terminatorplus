@@ -1414,6 +1414,14 @@ public class LegacyAgent extends Agent {
         if (target.getNoDamageTicks() >= 5 || loc.distance(target.getLocation()) >= 4)
             return;
 
+        // Respect vanilla attack-strength charge so each swing lands at full damage and is
+        // crit/sweep eligible. Training (neural-network) bots use a deterministic damage table
+        // that doesn't consume the ticker — leave them on the legacy fixed cadence.
+        if (!bot.hasNeuralNetwork() && bot.getBukkitEntity() instanceof Player attacker
+                && attacker.getAttackCooldown() < 0.95f) {
+            return;
+        }
+
         bot.attack(target);
     }
     

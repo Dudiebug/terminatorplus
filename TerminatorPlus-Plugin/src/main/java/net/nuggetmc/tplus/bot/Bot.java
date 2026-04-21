@@ -944,6 +944,16 @@ public class Bot extends ServerPlayer implements Terminator {
     @Override
     public void doTick() {
         detectEquipmentUpdates();
+
+        // Periodic upkeep for non-training bots:
+        //  - keep wind charges + ender pearls topped up so movement abilities are always available
+        //  - keep tool tiers in sync with the bot's current armor (iron floor)
+        // 1 Hz cadence is plenty; both methods are short and bail out fast when nothing changed.
+        if (network == null && aliveTicks > 0 && aliveTicks % 20 == 0) {
+            botInventory.ensureMovementSupplies();
+            botInventory.syncToolsToArmorTier();
+        }
+
         baseTick();
     }
 

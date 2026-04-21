@@ -49,8 +49,9 @@ public final class MaceBehavior implements WeaponBehavior {
             case IDLE:
             case RELEASE: {
                 if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) {
-                    // Stay close but don't jump-smash. Fall through to melee on the sword if lateral.
-                    if (distance <= ATTACK_RANGE && bot.tickDelay(5)) {
+                    // Stay close but don't jump-smash. Fall back to a normal melee swing
+                    // gated on the vanilla attack-strength meter so each hit lands at full damage.
+                    if (distance <= ATTACK_RANGE && BotCombatTiming.canSwing(bot, target)) {
                         doAttack(bot, target);
                     }
                     return 0;
@@ -80,8 +81,11 @@ public final class MaceBehavior implements WeaponBehavior {
                         bot.walk(horiz);
                     }
                 }
-                // Impact check.
-                if (distance <= ATTACK_RANGE && (bot.isBotOnGround() || vel.getY() < -0.6)) {
+                // Impact check. Smash density bonus dominates the base hit so the lower
+                // 0.848 charge gate is fine; i-frames still strictly checked.
+                if (distance <= ATTACK_RANGE && (bot.isBotOnGround() || vel.getY() < -0.6)
+                        && BotCombatTiming.smashChargeReady(bot)
+                        && !BotCombatTiming.targetHasIFrames(target)) {
                     doAttack(bot, target);
                     state.reset();
                 }
