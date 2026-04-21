@@ -45,6 +45,11 @@ public class LegacyAgent extends Agent {
     private final Map<LivingEntity, Location> btList = new HashMap<>();
     private final Map<LivingEntity, Boolean> btCheck = new HashMap<>();
     private final Map<LivingEntity, Location> towerList = new HashMap<>();
+    // Stuck-detection state: how many ticks the bot has been within 0.1 blocks
+    // of its previous position, and that previous position.
+    private final Map<LivingEntity, Integer> stuckTicks = new HashMap<>();
+    private final Map<LivingEntity, Location> stuckLastLoc = new HashMap<>();
+    private static final int STUCK_THRESHOLD_TICKS = 20;
     private final Set<Terminator> boatCooldown = new HashSet<>();
     private final Map<Block, Short> crackList = new HashMap<>();
     private final Map<BukkitRunnable, Byte> mining = new HashMap<>();
@@ -112,6 +117,29 @@ public class LegacyAgent extends Agent {
         }
 
         Location loc = bot.getLocation();
+        LivingEntity botEntity = bot.getBukkitEntity();
+
+        // Stuck detection: count consecutive ticks within 0.1 block of the last
+        // position. When we cross the threshold, apply a random-strafe jump to
+        // jolt the bot out of corners / bot-on-bot overlap / open-doorway
+        // stalls. Safe to fire before combat dispatch — the jolt is a velocity
+        // impulse, so combat still runs this tick.
+        Location prev = stuckLastLoc.get(botEntity);
+        if (prev != null && prev.getWorld() == loc.getWorld()
+                && prev.distanceSquared(loc) < 0.01) {
+            int count = stuckTicks.getOrDefault(botEntity, 0) + 1;
+            if (count >= STUCK_THRESHOLD_TICKS && bot.isBotOnGround()) {
+                double ang = 2 * Math.random() * Math.PI;
+                bot.jump(new Vector(Math.cos(ang) * 0.35, 0.42, Math.sin(ang) * 0.35));
+                stuckTicks.put(botEntity, 0);
+            } else {
+                stuckTicks.put(botEntity, count);
+            }
+        } else {
+            stuckTicks.put(botEntity, 0);
+        }
+        stuckLastLoc.put(botEntity, loc.clone());
+
         LivingEntity livingTarget = locateTarget(bot, loc);
 
         blockCheck.tryPreMLG(bot, loc);
@@ -187,9 +215,13 @@ public class LegacyAgent extends Agent {
 
             if (checkAt(bot, block, botPlayer)) return;
 
-            if (checkFenceAndGates(bot, loc.getBlock(), botPlayer)) return;
-            
-            if (checkObstacles(bot, loc.getBlock(), botPlayer)) return;
+            // Gate/obstacle handlers kick off block-break animations. Previously
+            // they returned early, so the bot stopped walking entirely while the
+            // block was being broken — in a corner with something in front of
+            // the bot, that's a lockup. Fall through to move() so the bot keeps
+            // pressing into the path while the block crumbles.
+            checkFenceAndGates(bot, loc.getBlock(), botPlayer);
+            checkObstacles(bot, loc.getBlock(), botPlayer);
 
             if (checkDown(bot, botPlayer, livingTarget.getLocation(), bothXZ)) return;
 
