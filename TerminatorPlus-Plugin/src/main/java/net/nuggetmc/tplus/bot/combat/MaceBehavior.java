@@ -49,13 +49,18 @@ public final class MaceBehavior implements WeaponBehavior {
             case IDLE:
             case RELEASE: {
                 if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) {
+                    int left = bot.getBotCooldowns().remaining(COOLDOWN_KEY, bot.getAliveTicks());
+                    CombatDebugger.maceCd(bot, left);
                     // Stay close but don't jump-smash. Fall through to melee on the sword if lateral.
                     if (distance <= ATTACK_RANGE && BotCombatTiming.canSwing(bot, target)) {
                         doAttack(bot, target);
                     }
                     return 0;
                 }
-                if (!bot.isBotOnGround()) return 0;
+                if (!bot.isBotOnGround()) {
+                    CombatDebugger.log(bot, "mace-skip", "reason=airborne-no-commit");
+                    return 0;
+                }
 
                 Vector horiz = toTarget.clone();
                 horiz.setY(0);
@@ -64,6 +69,7 @@ public final class MaceBehavior implements WeaponBehavior {
 
                 bot.jump(launch);
                 bot.getBotCooldowns().set(COOLDOWN_KEY, JUMP_COOLDOWN, bot.getAliveTicks());
+                CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.AIRBORNE);
                 state.setPhase(CombatState.Phase.AIRBORNE);
                 bot.getLocation().getWorld().playSound(bot.getLocation(), Sound.ENTITY_PLAYER_BIG_FALL, 0.3f, 1.6f);
                 return 0;
@@ -84,9 +90,12 @@ public final class MaceBehavior implements WeaponBehavior {
                 // density + fall-damage bonus dominates base damage. Just skip deep i-frames
                 // so the smash isn't wasted on a target that can't take the hit.
                 if (distance <= ATTACK_RANGE && (bot.isBotOnGround() || vel.getY() < -0.6)) {
-                    if (!BotCombatTiming.targetHasIFrames(target)) {
+                    boolean iframes = BotCombatTiming.targetHasIFrames(target);
+                    CombatDebugger.maceSmash(bot, vel.getY(), iframes, bot.isBotOnGround());
+                    if (!iframes) {
                         doAttack(bot, target);
                     }
+                    CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.IDLE);
                     state.reset();
                 }
                 return 0;

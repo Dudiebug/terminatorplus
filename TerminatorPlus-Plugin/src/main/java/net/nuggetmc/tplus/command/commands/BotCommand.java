@@ -664,6 +664,60 @@ public class BotCommand extends CommandInstance {
     }
 
     @Command(
+            name = "combatdebug",
+            desc = "Toggle verbose combat-decision logging for one bot or all bots.",
+            aliases = {"cdbg"},
+            autofill = "combatDebugAutofill"
+    )
+    public void combatDebug(CommandSender sender, @Arg("name-or-all") String target, @Arg("on-off") String state) {
+        boolean turnOn;
+        if (state.equalsIgnoreCase("on") || state.equalsIgnoreCase("true") || state.equalsIgnoreCase("1")) {
+            turnOn = true;
+        } else if (state.equalsIgnoreCase("off") || state.equalsIgnoreCase("false") || state.equalsIgnoreCase("0")) {
+            turnOn = false;
+        } else {
+            sender.sendMessage(ChatColor.RED + "Usage: /bot combatdebug <botName|all> <on|off>");
+            return;
+        }
+
+        if (target.equalsIgnoreCase("all")) {
+            if (turnOn) {
+                net.nuggetmc.tplus.bot.combat.CombatDebugger.enableAll();
+                sender.sendMessage(ChatColor.GREEN + "Combat debug enabled for ALL bots. Output goes to server console / server.log.");
+            } else {
+                net.nuggetmc.tplus.bot.combat.CombatDebugger.disableAll();
+                sender.sendMessage(ChatColor.YELLOW + "Combat debug disabled for all bots.");
+            }
+            return;
+        }
+
+        java.util.List<Bot> matches = manager.getAllByName(target);
+        if (matches.isEmpty()) {
+            sender.sendMessage(ChatColor.RED + "No bots named " + ChatColor.YELLOW + target);
+            return;
+        }
+        for (Bot b : matches) {
+            if (turnOn) net.nuggetmc.tplus.bot.combat.CombatDebugger.enable(b.getUUID());
+            else net.nuggetmc.tplus.bot.combat.CombatDebugger.disable(b.getUUID());
+        }
+        sender.sendMessage((turnOn ? ChatColor.GREEN + "Enabled" : ChatColor.YELLOW + "Disabled")
+                + ChatColor.RESET + " combat debug for " + matches.size() + " bot(s) named "
+                + ChatColor.YELLOW + target + ChatColor.RESET
+                + (turnOn ? ". Tail server.log or watch the console for [tplus-cbt] lines." : "."));
+    }
+
+    @Autofill
+    public List<String> combatDebugAutofill(CommandSender sender, String[] args) {
+        if (args.length == 2) {
+            List<String> out = new ArrayList<>(manager.fetchNames());
+            out.add("all");
+            return out;
+        }
+        if (args.length == 3) return Arrays.asList("on", "off");
+        return new ArrayList<>();
+    }
+
+    @Command(
             name = "inventory",
             desc = "Opens the inventory editor GUI for a bot.",
             aliases = {"inv"},
