@@ -1414,6 +1414,11 @@ public class LegacyAgent extends Agent {
         if (target.getNoDamageTicks() >= 5 || loc.distance(target.getLocation()) >= 4)
             return;
 
+        // Respect vanilla attack-strength charge: a 3-tick swing loop on a sword produces
+        // ~25% damage every hit and never crits/sweeps. canSwingAttack also checks i-frames
+        // so we don't waste a swing on a target that can't take the hit.
+        if (!bot.canSwingAttack(target)) return;
+
         bot.attack(target);
     }
     

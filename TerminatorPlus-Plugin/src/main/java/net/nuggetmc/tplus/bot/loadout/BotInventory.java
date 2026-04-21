@@ -5,6 +5,8 @@ import org.bukkit.Material;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.inventory.meta.PotionMeta;
+import org.bukkit.potion.PotionType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -144,6 +146,14 @@ public final class BotInventory {
         return hasHotbar(Material.COBWEB);
     }
 
+    public boolean hasBow() {
+        return hasHotbar(Material.BOW);
+    }
+
+    public boolean hasCrossbow() {
+        return hasHotbar(Material.CROSSBOW);
+    }
+
     public boolean hasElytra() {
         ItemStack chest = raw().getChestplate();
         if (chest != null && chest.getType() == Material.ELYTRA) return true;
@@ -216,7 +226,7 @@ public final class BotInventory {
         return -1;
     }
 
-    /** Heuristic: first hotbar slot that heals (golden apple / potion of healing / totem). */
+    /** Heuristic: first hotbar slot that heals (golden apple / potion of healing / totem / splash healing). */
     public int findHealing() {
         PlayerInventory inv = raw();
         for (int i = 0; i < HOTBAR_SIZE; i++) {
@@ -224,11 +234,88 @@ public final class BotInventory {
             if (it == null) continue;
             Material m = it.getType();
             if (m == Material.GOLDEN_APPLE || m == Material.ENCHANTED_GOLDEN_APPLE
-                    || m == Material.TOTEM_OF_UNDYING || m == Material.POTION) {
+                    || m == Material.TOTEM_OF_UNDYING) {
                 return i;
+            }
+            if (m == Material.POTION || m == Material.SPLASH_POTION) {
+                if (isHealingPotion(it)) return i;
             }
         }
         return -1;
+    }
+
+    // -------------------------------------------------------------------------
+    // Consumable / potion finders
+    //
+    // These scan only the hotbar (slots 0-8) so the ConsumableBehavior doesn't
+    // spend cycles on storage. If a kit keeps consumables outside the hotbar,
+    // the bot must auto-equip them first (see autoEquip).
+    // -------------------------------------------------------------------------
+
+    /** First hotbar slot matching {@code type} + (optionally) {@code potionTypes}. Returns -1 if none. */
+    public int findHotbarPotion(Material container, PotionType... potionTypes) {
+        if (container == null) return -1;
+        PlayerInventory inv = raw();
+        for (int i = 0; i < HOTBAR_SIZE; i++) {
+            ItemStack it = inv.getItem(i);
+            if (it == null || it.getType() != container) continue;
+            if (!(it.getItemMeta() instanceof PotionMeta pm)) continue;
+            PotionType pt = pm.getBasePotionType();
+            if (pt == null) continue;
+            if (potionTypes == null || potionTypes.length == 0) return i;
+            for (PotionType wanted : potionTypes) {
+                if (pt == wanted) return i;
+            }
+        }
+        return -1;
+    }
+
+    /** First hotbar drinkable potion with a healing base. */
+    public int findHealingPotion() {
+        return findHotbarPotion(Material.POTION, PotionType.HEALING, PotionType.STRONG_HEALING);
+    }
+
+    /** First hotbar splash potion of healing (for on-self self-heal). */
+    public int findSplashHealing() {
+        return findHotbarPotion(Material.SPLASH_POTION, PotionType.HEALING, PotionType.STRONG_HEALING);
+    }
+
+    /** First hotbar drinkable strength potion (for pre-combat buff-up). */
+    public int findStrengthPotion() {
+        return findHotbarPotion(Material.POTION, PotionType.STRENGTH, PotionType.STRONG_STRENGTH);
+    }
+
+    /** First hotbar drinkable fire-resistance potion. */
+    public int findFireResPotion() {
+        return findHotbarPotion(Material.POTION, PotionType.FIRE_RESISTANCE, PotionType.LONG_FIRE_RESISTANCE);
+    }
+
+    /** First hotbar offensive splash (harming / poison / slowness). Used against enemies. */
+    public int findSplashHarming() {
+        return findHotbarPotion(Material.SPLASH_POTION,
+                PotionType.HARMING, PotionType.STRONG_HARMING,
+                PotionType.POISON, PotionType.STRONG_POISON, PotionType.LONG_POISON,
+                PotionType.SLOWNESS, PotionType.STRONG_SLOWNESS, PotionType.LONG_SLOWNESS);
+    }
+
+    /** Cheap pre-check: does the bot have ANY consumable (apple / potion / splash) on its hotbar? */
+    public boolean hasAnyConsumable() {
+        PlayerInventory inv = raw();
+        for (int i = 0; i < HOTBAR_SIZE; i++) {
+            ItemStack it = inv.getItem(i);
+            if (it == null) continue;
+            Material m = it.getType();
+            if (m == Material.GOLDEN_APPLE || m == Material.ENCHANTED_GOLDEN_APPLE) return true;
+            if (m == Material.POTION || m == Material.SPLASH_POTION || m == Material.LINGERING_POTION) return true;
+        }
+        return false;
+    }
+
+    /** True if this stack is a drinkable or splash potion whose base type heals. */
+    private static boolean isHealingPotion(ItemStack it) {
+        if (!(it.getItemMeta() instanceof PotionMeta pm)) return false;
+        PotionType pt = pm.getBasePotionType();
+        return pt == PotionType.HEALING || pt == PotionType.STRONG_HEALING;
     }
 
     /**
@@ -432,7 +519,9 @@ public final class BotInventory {
         return 0;
     }
 
-    private static int armorTier(Material m) {
+    /** Numeric armor/tool tier from a material name. 5=NETHERITE, 4=DIAMOND, 3=IRON, 2=CHAINMAIL, 1=GOLD/LEATHER, 0=none. */
+    public static int armorTier(Material m) {
+        if (m == null) return 0;
         String n = m.name();
         if (n.startsWith("NETHERITE")) return 5;
         if (n.startsWith("DIAMOND"))   return 4;
@@ -441,6 +530,63 @@ public final class BotInventory {
         if (n.startsWith("GOLD"))      return 1;
         if (n.startsWith("LEATHER"))   return 1;
         return 0;
+    }
+
+    /** Highest tier across the four equipped armor pieces. 0 if no armor is worn. */
+    public int getEquippedArmorTier() {
+        PlayerInventory inv = raw();
+        int best = 0;
+        ItemStack[] pieces = { inv.getHelmet(), inv.getChestplate(), inv.getLeggings(), inv.getBoots() };
+        for (ItemStack p : pieces) {
+            if (p == null || p.getType() == Material.AIR) continue;
+            int t = armorTier(p.getType());
+            if (t > best) best = t;
+        }
+        return best;
+    }
+
+    /**
+     * Guarantee the bot has at least one ender pearl and one wind charge in its hotbar,
+     * with the stack topped up to {@link #MOVEMENT_KIT_STACK}. If there are no free hotbar
+     * slots, packs them into storage instead so they can be auto-equipped on the next pass.
+     *
+     * <p>Bots get these unconditionally — they're treated as part of every bot's baseline kit
+     * rather than something a preset must opt into.
+     */
+    public void ensureMovementKit() {
+        ensureStocked(Material.ENDER_PEARL, MOVEMENT_KIT_STACK);
+        ensureStocked(Material.WIND_CHARGE, MOVEMENT_KIT_STACK);
+    }
+
+    public static final int MOVEMENT_KIT_STACK = 16;
+
+    private void ensureStocked(Material type, int target) {
+        PlayerInventory inv = raw();
+        int slot = findHotbar(type);
+        if (slot >= 0) {
+            ItemStack held = inv.getItem(slot);
+            if (held != null && held.getAmount() < target) {
+                held.setAmount(target);
+                inv.setItem(slot, held);
+            }
+            return;
+        }
+        // No hotbar copy — find an empty hotbar slot first.
+        int free = -1;
+        for (int i = 0; i < HOTBAR_SIZE; i++) {
+            ItemStack it = inv.getItem(i);
+            if (it == null || it.getType() == Material.AIR) { free = i; break; }
+        }
+        if (free < 0) {
+            // Hotbar full: park it in storage so a later autoEquip can promote it.
+            for (int i = 9; i < 36; i++) {
+                ItemStack it = inv.getItem(i);
+                if (it == null || it.getType() == Material.AIR) { free = i; break; }
+            }
+        }
+        if (free < 0) return;
+        ItemStack stack = new ItemStack(type, target);
+        inv.setItem(free, stack);
     }
 
     private static ItemStack removeFirst(List<ItemStack> pool, Material type) {

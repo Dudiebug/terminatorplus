@@ -6,7 +6,6 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.LivingEntity;
-import org.bukkit.inventory.ItemStack;
 
 /**
  * Per-tick combat decision maker. Given a bot and its current target,
@@ -28,6 +27,10 @@ public final class CombatDirector {
     private final CrystalBehavior crystal = new CrystalBehavior();
     private final AnchorBombBehavior anchor = new AnchorBombBehavior();
     private final UtilityBehavior utility = new UtilityBehavior();
+    private final ConsumableBehavior consumable = new ConsumableBehavior();
+    private final ComboBehavior combo = new ComboBehavior();
+    private final OpportunityScanner scanner = new OpportunityScanner();
+    private final CombatSnapshot snapshot = new CombatSnapshot();
 
     /**
      * @return true if the director handled combat this tick and the
@@ -38,12 +41,22 @@ public final class CombatDirector {
         // Bots used for AI training rely on the legacy deterministic damage table; skip.
         if (bot.hasNeuralNetwork()) return false;
 
+        double distance = bot.getLocation().distance(target.getLocation());
+        BotInventory inv = bot.getBotInventory();
+
         // Passive behaviors run every tick regardless of weapon choice.
         elytra.tick(bot, target);
         totem.tick(bot, target);
+        // Reactive consumable use (eat apples, drink potions, throw splash).
+        // Totem clutch-swap runs first so a fatal hit's failsafe is never preempted.
+        consumable.tick(bot, target);
+        // Wind-charge self-propulsion: only fires in the 12–28 block approach zone,
+        // not during combat, with a 4-tick windup and a 6s cooldown. Most calls no-op.
+        windCharge.tickMovementBoost(bot, target, distance);
 
-        double distance = bot.getLocation().distance(target.getLocation());
-        BotInventory inv = bot.getBotInventory();
+        // If a combo (wind+pearl) is mid-flight, let it finish — the scheduled
+        // pearl task handles the second step; don't dispatch other weapons.
+        if (combo.inProgress(bot)) return true;
 
         // Mid-attack commitment: stay on the chosen weapon.
         if (bot.getCombatState().getPhase() == CombatState.Phase.AIRBORNE && inv.hasMace()) {
@@ -72,16 +85,29 @@ public final class CombatDirector {
             return true;
         }
 
-        // Priority order (highest first):
+        // Read the battlefield once, reuse across the scanner and the pipeline.
+        snapshot.update(bot, target);
+
+        // Opportunity scanner first: every wiki-tier PvP play (crystals, cobwebs,
+        // tipped arrows, interrupts, splash potions, combos) is evaluated here in
+        // priority order. If anything fires, we're done this tick.
+        if (scanner.scan(bot, target, snapshot, combo)) {
+            return true;
+        }
+
+        // --- Standard priority pipeline (highest first) --------------------
         //  1. Crystal PvP at short range (huge burst)
         //  2. Anchor bomb in Nether at short range
         //  3. Mace smash (ground + mace + CD ready)
         //  4. Sword melee
         //  5. Trident momentum throw (mid range)
         //  6. Ender pearl gap-close (long range)
-        //  7. Wind charge (long range, zoning)
-        //  8. Cobweb utility (target fleeing)
-        //  9. Healing
+        //  7. Cobweb utility (target fleeing)
+        //
+        // Wind charges are intentionally absent from the standalone pipeline —
+        // they are driven exclusively by OpportunityScanner (knockup-crystal,
+        // interrupts, aerial strike) and ComboBehavior (engage/escape launches).
+        // This stops the old "wind charge at any distance >= 4" spam behaviour.
 
         World.Environment env = bot.getDimension();
 
@@ -126,16 +152,9 @@ public final class CombatDirector {
             return true;
         }
 
-        if (distance >= 14.0 && distance <= 35.0 && inv.hasEnderPearl()
+        if (distance >= 28.0 && distance <= 64.0 && inv.hasEnderPearl()
                 && bot.getBotCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
             pearl.ticksFor(bot, target, distance);
-            return true;
-        }
-
-        if (distance >= 4.0 && inv.hasWindCharge()
-                && bot.getBotCooldowns().ready(WindChargeBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
-            selectType(inv, Material.WIND_CHARGE);
-            windCharge.ticksFor(bot, target, distance);
             return true;
         }
 
@@ -144,34 +163,10 @@ public final class CombatDirector {
             if (utility.ticksFor(bot, target, distance) > 0) return true;
         }
 
-        // Healing: if hurt, try to use a golden apple.
-        if (bot.getBotHealth() < bot.getBotMaxHealth() * 0.4f && bot.getBotCooldowns().ready("heal", bot.getAliveTicks())) {
-            if (tryHeal(bot)) {
-                bot.getBotCooldowns().set("heal", 100, bot.getAliveTicks());
-                return true;
-            }
-        }
+        // Healing — subsumed by ConsumableBehavior.tick() which runs every tick
+        // as a passive behavior (see above). Kept as an intentional no-op so the
+        // fall-through to `return false` is obvious.
 
-        return false;
-    }
-
-    private boolean tryHeal(Bot bot) {
-        int slot = bot.getBotInventory().findHealing();
-        if (slot < 0) return false;
-        ItemStack it = bot.getBotInventory().raw().getItem(slot);
-        if (it == null) return false;
-        bot.selectHotbarSlot(slot);
-        if (it.getType() == Material.GOLDEN_APPLE || it.getType() == Material.ENCHANTED_GOLDEN_APPLE) {
-            float max = bot.getBotMaxHealth();
-            bot.getBukkitEntity().setHealth(Math.min(max, bot.getBotHealth() + 8.0f));
-            int amt = it.getAmount();
-            if (amt <= 1) bot.getBotInventory().raw().setItem(slot, new ItemStack(Material.AIR));
-            else {
-                it.setAmount(amt - 1);
-                bot.getBotInventory().raw().setItem(slot, it);
-            }
-            return true;
-        }
         return false;
     }
 
