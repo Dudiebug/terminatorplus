@@ -98,6 +98,9 @@ public class BotAgent extends Agent {
     private void attack(Terminator bot, Player player, Location loc) {
         if (PlayerUtils.isInvincible(player.getGameMode()) || player.getNoDamageTicks() >= 5 || loc.distance(player.getLocation()) >= 4)
             return;
+        // Respect vanilla attack-strength charge + target i-frames so we don't throw away 75%
+        // of a swing's damage on a partially-recharged attack.
+        if (!bot.canSwingAttack(player)) return;
 
         bot.attack(player);
     }

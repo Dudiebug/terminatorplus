@@ -56,11 +56,12 @@ for i in "${!BRANCHES[@]}"; do
 Built against Paper for Minecraft ${suffix#mc}.
 
 **What's new in 5.0.1-BETA**
+- **Attack cooldown fixed** (the headline bug). Melee bots previously swung every 3 ticks regardless of weapon, producing ~25% of full damage per hit and never crossing vanilla's 0.848 crit/sweep/sprint-knockback threshold. \`MeleeBehavior\` + \`MaceBehavior\` fallback + \`LegacyAgent\` + \`BotAgent\` all now gate their swings on attack-strength charge >= 0.95 AND target i-frame count <= 10. Net result: a sword bot swings every 13t (full charge) at 100% damage and produces crits/sweeps normally — roughly 4× the previous effective DPS on sword, ~5× on mace.
+- **Swing-gate helper** \`BotCombatTiming\` exposes \`canSwing(bot, target)\` / \`chargeReady(bot)\` / \`targetHasIFrames(target)\`; API consumers can use \`Terminator.canSwingAttack(target)\`.
 - **Automatic movement kit**: every bot now always carries ender pearls and wind charges. The stacks top up every 2s, so no preset or \`/bot give\` is required to unlock gap-closes and wind-charge boosts.
 - **Ender pearls for long-range travel**: bots throw a pearl whenever the target is 28+ blocks away (was 14–35). Pearls no longer decrement the stack — the 3s cooldown paces them.
-- **Wind-charge self-propulsion**: while chasing a target 8+ blocks away, grounded bots fire a wind charge at their feet every 1.5s for an explosive forward boost. Runs alongside combat, not instead of it.
-- **Tools auto-tier to armor**: swords and axes are re-tiered every 2s to match the bot's highest-tier equipped armor, floored at iron. Chainmail / gold / leather / no-armor bots all carry iron tools; diamond armor → diamond tools; netherite → netherite.
-- \`BotInventory.armorTier(Material)\`, \`getEquippedArmorTier()\`, \`getEffectiveToolTier()\`, \`upgradeToolsToArmorTier()\`, \`ensureMovementKit()\` are now public for API consumers.
+- **Wind-charge self-propulsion — direction-aware and deliberate**: bots plan a wind-charge throw based on target geometry — below them if the target is on a ledge (launches UP), above them if the target is below (launches DOWN), behind them for flat-ground traversal (launches FORWARD). There's a 4-tick windup so the throw reads as a build, and a 6-second cooldown between attempts. Only fires in the 12–28 block approach window, never during combat or while mid-mace-jump / mid-trident-charge.
+- \`BotInventory.armorTier(Material)\`, \`getEquippedArmorTier()\`, \`ensureMovementKit()\` are now public for API consumers.
 
 **Carried over from 5.0.0-BETA**
 - Weapon-aware combat AI: mace smash, trident momentum throw, wind charges, ender pearls, crystal PvP, anchor bomb (Nether), cobweb utility, elytra glide + firework boost

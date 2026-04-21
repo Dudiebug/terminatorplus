@@ -445,8 +445,6 @@ public final class BotInventory {
         return 0;
     }
 
-    public static final int IRON_TIER = 3;
-
     /** Highest tier across the four equipped armor pieces. 0 if no armor is worn. */
     public int getEquippedArmorTier() {
         PlayerInventory inv = raw();
@@ -458,58 +456,6 @@ public final class BotInventory {
             if (t > best) best = t;
         }
         return best;
-    }
-
-    /** Tool tier the bot should be using: max(armor tier, IRON). Chainmail and below floor to iron. */
-    public int getEffectiveToolTier() {
-        return Math.max(getEquippedArmorTier(), IRON_TIER);
-    }
-
-    /**
-     * Re-tier any sword or axe in the bot's hotbar so it's at least
-     * {@link #getEffectiveToolTier()}. Existing higher-tier tools are left alone.
-     * Enchantments / display name are preserved through {@link ItemStack#setType(Material)}.
-     */
-    public void upgradeToolsToArmorTier() {
-        int targetTier = getEffectiveToolTier();
-        PlayerInventory inv = raw();
-        for (int i = 0; i < HOTBAR_SIZE; i++) {
-            ItemStack it = inv.getItem(i);
-            if (it == null || it.getType() == Material.AIR) continue;
-            Material newMat = upgradedToolMaterial(it.getType(), targetTier);
-            if (newMat != null && newMat != it.getType()) {
-                it.setType(newMat);
-                inv.setItem(i, it);
-                if (i == selectedHotbarSlot) {
-                    bot.setItem(it.clone(), EquipmentSlot.HAND);
-                }
-            }
-        }
-    }
-
-    /** Returns the material to use for a tool family if the current tier is below {@code targetTier}, else null. */
-    private static Material upgradedToolMaterial(Material current, int targetTier) {
-        String n = current.name();
-        String suffix;
-        if (n.endsWith("_SWORD")) suffix = "_SWORD";
-        else if (n.endsWith("_AXE")) suffix = "_AXE";
-        else return null;
-
-        int currentTier = armorTier(current);
-        if (currentTier >= targetTier) return null;
-
-        String prefix = switch (targetTier) {
-            case 5 -> "NETHERITE";
-            case 4 -> "DIAMOND";
-            case 3 -> "IRON";
-            // No chain/gold/leather tools — fall back to iron for anything below.
-            default -> "IRON";
-        };
-        try {
-            return Material.valueOf(prefix + suffix);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
     }
 
     /**

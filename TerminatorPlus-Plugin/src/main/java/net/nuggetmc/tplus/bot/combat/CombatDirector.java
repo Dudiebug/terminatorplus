@@ -44,7 +44,8 @@ public final class CombatDirector {
         // Passive behaviors run every tick regardless of weapon choice.
         elytra.tick(bot, target);
         totem.tick(bot, target);
-        // Self-boost with wind charges when chasing — runs alongside the chosen weapon.
+        // Wind-charge self-propulsion: only fires in the 12–28 block approach zone,
+        // not during combat, with a 4-tick windup and a 6s cooldown. Most calls no-op.
         windCharge.tickMovementBoost(bot, target, distance);
 
         // Mid-attack commitment: stay on the chosen weapon.
