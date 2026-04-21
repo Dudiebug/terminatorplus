@@ -61,18 +61,23 @@ public final class BotInventoryGUI implements InventoryHolder {
     public void syncFromBot() {
         PlayerInventory pi = bot.getBukkitEntity().getInventory();
         for (int i = 0; i < 36; i++) {
-            inventory.setItem(i, pi.getItem(i));
+            ItemStack it = pi.getItem(i);
+            inventory.setItem(i, it == null ? null : it.clone());
         }
-        inventory.setItem(36, pi.getHelmet());
-        inventory.setItem(37, pi.getChestplate());
-        inventory.setItem(38, pi.getLeggings());
-        inventory.setItem(39, pi.getBoots());
-        inventory.setItem(40, pi.getItemInOffHand());
+        inventory.setItem(36, cloneOrNull(pi.getHelmet()));
+        inventory.setItem(37, cloneOrNull(pi.getChestplate()));
+        inventory.setItem(38, cloneOrNull(pi.getLeggings()));
+        inventory.setItem(39, cloneOrNull(pi.getBoots()));
+        inventory.setItem(40, cloneOrNull(pi.getItemInOffHand()));
 
         ItemStack filler = buildFiller();
         for (int i = 41; i < SIZE; i++) {
             inventory.setItem(i, filler);
         }
+    }
+
+    private static ItemStack cloneOrNull(ItemStack it) {
+        return it == null ? null : it.clone();
     }
 
     /** Push GUI state back onto the bot (call when closing). */
