@@ -1,7 +1,9 @@
 package net.nuggetmc.tplus.bot.gui;
 
 import net.nuggetmc.tplus.TerminatorPlus;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
@@ -21,19 +23,26 @@ public final class BotInventoryListener implements Listener {
         this.plugin = plugin;
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onClick(InventoryClickEvent event) {
         Inventory top = event.getView().getTopInventory();
         InventoryHolder holder = top.getHolder();
         if (!(holder instanceof BotInventoryGUI gui)) return;
 
-        // Block interaction with decorative slots regardless of which inventory was clicked.
+        // Filler slots: lock down hard.
         if (event.getClickedInventory() == top && BotInventoryGUI.isFillerSlot(event.getRawSlot())) {
             event.setCancelled(true);
+            event.setResult(Event.Result.DENY);
+            return;
         }
+
+        // For every other slot in our GUI, force-allow the click in case another plugin
+        // (or Paper's protection layer) tried to cancel it.
+        event.setCancelled(false);
+        event.setResult(Event.Result.ALLOW);
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onDrag(InventoryDragEvent event) {
         Inventory top = event.getView().getTopInventory();
         InventoryHolder holder = top.getHolder();
@@ -42,9 +51,13 @@ public final class BotInventoryListener implements Listener {
         for (int slot : event.getRawSlots()) {
             if (slot < top.getSize() && BotInventoryGUI.isFillerSlot(slot)) {
                 event.setCancelled(true);
+                event.setResult(Event.Result.DENY);
                 return;
             }
         }
+
+        event.setCancelled(false);
+        event.setResult(Event.Result.ALLOW);
     }
 
     @EventHandler
