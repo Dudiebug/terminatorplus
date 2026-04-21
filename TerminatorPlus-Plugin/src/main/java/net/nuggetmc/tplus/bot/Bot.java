@@ -728,8 +728,8 @@ public class Bot extends ServerPlayer implements Terminator {
     @Override
     public void push(Entity entity) {
         if (!this.isPassengerOfSameVehicle(entity) && !entity.noPhysics && !this.noPhysics) {
-            double d0 = entity.getX() - this.getZ();
-            double d1 = entity.getX() - this.getZ();
+            double d0 = entity.getX() - this.getX();
+            double d1 = entity.getZ() - this.getZ();
             double d2 = Mth.absMax(d0, d1);
             if (d2 >= 0.009999999776482582D) {
                 d2 = Math.sqrt(d2);

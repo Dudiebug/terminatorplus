@@ -86,6 +86,11 @@ public final class BotInventory {
         return item == null ? new ItemStack(Material.AIR) : item;
     }
 
+    /**
+     * Find a slot anywhere in the main 36 inventory slots (hotbar + storage)
+     * containing {@code type}. Prefers hotbar matches so the common case
+     * (weapon already on the bar) is O(9). Returns -1 if not found.
+     */
     public int findHotbar(Material type) {
         if (type == null) return -1;
         PlayerInventory inv = raw();
@@ -93,12 +98,55 @@ public final class BotInventory {
             ItemStack it = inv.getItem(i);
             if (it != null && it.getType() == type) return i;
         }
+        for (int i = HOTBAR_SIZE; i < 36; i++) {
+            ItemStack it = inv.getItem(i);
+            if (it != null && it.getType() == type) return i;
+        }
         return -1;
     }
 
-    /** Any hotbar slot contains a stack of {@code type}. */
+    /** Any slot in hotbar or storage contains a stack of {@code type}. */
     public boolean hasHotbar(Material type) {
         return findHotbar(type) >= 0;
+    }
+
+    /**
+     * If {@code slot} is in storage (9–35), swap it with a hotbar slot so it
+     * can be wielded. Skips hotbar slots that already hold a primary weapon
+     * (sword/axe/mace) so we don't kick a real melee weapon out for a utility
+     * item. Returns the new hotbar index (0–8), the original slot if already
+     * on the hotbar, or -1 if no swap target was available.
+     */
+    public int bringToHotbar(int slot) {
+        if (slot < 0 || slot >= 36) return -1;
+        if (slot < HOTBAR_SIZE) return slot;
+        PlayerInventory inv = raw();
+        int target = -1;
+        for (int i = 0; i < HOTBAR_SIZE; i++) {
+            ItemStack it = inv.getItem(i);
+            if (it == null || it.getType() == Material.AIR) { target = i; break; }
+        }
+        if (target < 0) {
+            // Hotbar full: pick the rightmost non-weapon slot to evict.
+            for (int i = HOTBAR_SIZE - 1; i >= 0; i--) {
+                ItemStack it = inv.getItem(i);
+                if (it == null) continue;
+                String n = it.getType().name();
+                if (n.endsWith("_SWORD") || n.endsWith("_AXE") || it.getType() == Material.MACE) continue;
+                target = i;
+                break;
+            }
+        }
+        if (target < 0) return -1;
+        ItemStack moving = inv.getItem(slot);
+        ItemStack evicted = inv.getItem(target);
+        net.minecraft.world.entity.player.Inventory nms = bot.getInventory();
+        nms.setItem(target, moving == null ? net.minecraft.world.item.ItemStack.EMPTY
+                : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(moving));
+        nms.setItem(slot, evicted == null ? net.minecraft.world.item.ItemStack.EMPTY
+                : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(evicted));
+        nms.setChanged();
+        return target;
     }
 
     public boolean hasMace() {
@@ -203,25 +251,24 @@ public final class BotInventory {
         return true;
     }
 
-    /** First hotbar slot whose item is a sword, or -1. */
+    /** First slot (hotbar first, then storage) whose item is a sword, or -1. */
     public int findSword() {
-        PlayerInventory inv = raw();
-        for (int i = 0; i < HOTBAR_SIZE; i++) {
-            ItemStack it = inv.getItem(i);
-            if (it == null) continue;
-            String n = it.getType().name();
-            if (n.endsWith("_SWORD")) return i;
-        }
-        return -1;
+        return findByNameSuffix("_SWORD");
     }
 
     public int findAxe() {
+        return findByNameSuffix("_AXE");
+    }
+
+    private int findByNameSuffix(String suffix) {
         PlayerInventory inv = raw();
         for (int i = 0; i < HOTBAR_SIZE; i++) {
             ItemStack it = inv.getItem(i);
-            if (it == null) continue;
-            String n = it.getType().name();
-            if (n.endsWith("_AXE")) return i;
+            if (it != null && it.getType().name().endsWith(suffix)) return i;
+        }
+        for (int i = HOTBAR_SIZE; i < 36; i++) {
+            ItemStack it = inv.getItem(i);
+            if (it != null && it.getType().name().endsWith(suffix)) return i;
         }
         return -1;
     }
