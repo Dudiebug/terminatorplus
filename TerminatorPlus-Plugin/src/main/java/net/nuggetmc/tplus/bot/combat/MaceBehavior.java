@@ -86,15 +86,28 @@ public final class MaceBehavior implements WeaponBehavior {
                         bot.walk(horiz);
                     }
                 }
-                // Impact check. The dive itself is committed, so don't gate on charge — the
-                // density + fall-damage bonus dominates base damage. Just skip deep i-frames
-                // so the smash isn't wasted on a target that can't take the hit.
-                if (distance <= ATTACK_RANGE && (bot.isBotOnGround() || vel.getY() < -0.6)) {
+                // Fire the smash WHILE STILL AIRBORNE so fallDistance > 0 when
+                // Player.attack() reads it — that's what makes the hit a crit
+                // AND what triggers the mace smash's density/fall-damage bonus.
+                // Waiting for bot.isBotOnGround() means fallDistance is already
+                // reset to 0 by then, downgrading the smash to a normal 6-dmg
+                // mace swing.
+                if (distance <= ATTACK_RANGE && !bot.isBotOnGround() && vel.getY() < -0.3) {
                     boolean iframes = BotCombatTiming.targetHasIFrames(target);
                     CombatDebugger.maceSmash(bot, vel.getY(), iframes, bot.isBotOnGround());
                     if (!iframes) {
                         doAttack(bot, target);
                     }
+                    CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.IDLE);
+                    state.reset();
+                    return 0;
+                }
+                // Safety reset: if the bot has landed without firing (target
+                // ran out of range, grazed the ground, etc.), drop back to
+                // IDLE so the pipeline can try a different weapon. Without
+                // this the bot ticks forever in AIRBORNE swinging with stale
+                // items in hand.
+                if (bot.isBotOnGround()) {
                     CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.IDLE);
                     state.reset();
                 }
