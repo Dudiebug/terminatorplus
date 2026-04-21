@@ -359,6 +359,13 @@ public class Bot extends ServerPlayer implements Terminator {
 
         fallDamageCheck();
 
+        // Every 2s: keep wind charges + ender pearls topped up, and re-tier
+        // any sword/axe to the bot's current armor tier (min iron).
+        if (aliveTicks % 40 == 0) {
+            botInventory.ensureMovementKit();
+            botInventory.upgradeToolsToArmorTier();
+        }
+
         oldVelocity = velocity.clone();
 
         doTick();

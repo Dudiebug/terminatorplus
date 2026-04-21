@@ -432,7 +432,9 @@ public final class BotInventory {
         return 0;
     }
 
-    private static int armorTier(Material m) {
+    /** Numeric armor/tool tier from a material name. 5=NETHERITE, 4=DIAMOND, 3=IRON, 2=CHAINMAIL, 1=GOLD/LEATHER, 0=none. */
+    public static int armorTier(Material m) {
+        if (m == null) return 0;
         String n = m.name();
         if (n.startsWith("NETHERITE")) return 5;
         if (n.startsWith("DIAMOND"))   return 4;
@@ -441,6 +443,117 @@ public final class BotInventory {
         if (n.startsWith("GOLD"))      return 1;
         if (n.startsWith("LEATHER"))   return 1;
         return 0;
+    }
+
+    public static final int IRON_TIER = 3;
+
+    /** Highest tier across the four equipped armor pieces. 0 if no armor is worn. */
+    public int getEquippedArmorTier() {
+        PlayerInventory inv = raw();
+        int best = 0;
+        ItemStack[] pieces = { inv.getHelmet(), inv.getChestplate(), inv.getLeggings(), inv.getBoots() };
+        for (ItemStack p : pieces) {
+            if (p == null || p.getType() == Material.AIR) continue;
+            int t = armorTier(p.getType());
+            if (t > best) best = t;
+        }
+        return best;
+    }
+
+    /** Tool tier the bot should be using: max(armor tier, IRON). Chainmail and below floor to iron. */
+    public int getEffectiveToolTier() {
+        return Math.max(getEquippedArmorTier(), IRON_TIER);
+    }
+
+    /**
+     * Re-tier any sword or axe in the bot's hotbar so it's at least
+     * {@link #getEffectiveToolTier()}. Existing higher-tier tools are left alone.
+     * Enchantments / display name are preserved through {@link ItemStack#setType(Material)}.
+     */
+    public void upgradeToolsToArmorTier() {
+        int targetTier = getEffectiveToolTier();
+        PlayerInventory inv = raw();
+        for (int i = 0; i < HOTBAR_SIZE; i++) {
+            ItemStack it = inv.getItem(i);
+            if (it == null || it.getType() == Material.AIR) continue;
+            Material newMat = upgradedToolMaterial(it.getType(), targetTier);
+            if (newMat != null && newMat != it.getType()) {
+                it.setType(newMat);
+                inv.setItem(i, it);
+                if (i == selectedHotbarSlot) {
+                    bot.setItem(it.clone(), EquipmentSlot.HAND);
+                }
+            }
+        }
+    }
+
+    /** Returns the material to use for a tool family if the current tier is below {@code targetTier}, else null. */
+    private static Material upgradedToolMaterial(Material current, int targetTier) {
+        String n = current.name();
+        String suffix;
+        if (n.endsWith("_SWORD")) suffix = "_SWORD";
+        else if (n.endsWith("_AXE")) suffix = "_AXE";
+        else return null;
+
+        int currentTier = armorTier(current);
+        if (currentTier >= targetTier) return null;
+
+        String prefix = switch (targetTier) {
+            case 5 -> "NETHERITE";
+            case 4 -> "DIAMOND";
+            case 3 -> "IRON";
+            // No chain/gold/leather tools — fall back to iron for anything below.
+            default -> "IRON";
+        };
+        try {
+            return Material.valueOf(prefix + suffix);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Guarantee the bot has at least one ender pearl and one wind charge in its hotbar,
+     * with the stack topped up to {@link #MOVEMENT_KIT_STACK}. If there are no free hotbar
+     * slots, packs them into storage instead so they can be auto-equipped on the next pass.
+     *
+     * <p>Bots get these unconditionally — they're treated as part of every bot's baseline kit
+     * rather than something a preset must opt into.
+     */
+    public void ensureMovementKit() {
+        ensureStocked(Material.ENDER_PEARL, MOVEMENT_KIT_STACK);
+        ensureStocked(Material.WIND_CHARGE, MOVEMENT_KIT_STACK);
+    }
+
+    public static final int MOVEMENT_KIT_STACK = 16;
+
+    private void ensureStocked(Material type, int target) {
+        PlayerInventory inv = raw();
+        int slot = findHotbar(type);
+        if (slot >= 0) {
+            ItemStack held = inv.getItem(slot);
+            if (held != null && held.getAmount() < target) {
+                held.setAmount(target);
+                inv.setItem(slot, held);
+            }
+            return;
+        }
+        // No hotbar copy — find an empty hotbar slot first.
+        int free = -1;
+        for (int i = 0; i < HOTBAR_SIZE; i++) {
+            ItemStack it = inv.getItem(i);
+            if (it == null || it.getType() == Material.AIR) { free = i; break; }
+        }
+        if (free < 0) {
+            // Hotbar full: park it in storage so a later autoEquip can promote it.
+            for (int i = 9; i < 36; i++) {
+                ItemStack it = inv.getItem(i);
+                if (it == null || it.getType() == Material.AIR) { free = i; break; }
+            }
+        }
+        if (free < 0) return;
+        ItemStack stack = new ItemStack(type, target);
+        inv.setItem(free, stack);
     }
 
     private static ItemStack removeFirst(List<ItemStack> pool, Material type) {

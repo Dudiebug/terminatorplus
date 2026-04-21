@@ -38,12 +38,14 @@ public final class CombatDirector {
         // Bots used for AI training rely on the legacy deterministic damage table; skip.
         if (bot.hasNeuralNetwork()) return false;
 
+        double distance = bot.getLocation().distance(target.getLocation());
+        BotInventory inv = bot.getBotInventory();
+
         // Passive behaviors run every tick regardless of weapon choice.
         elytra.tick(bot, target);
         totem.tick(bot, target);
-
-        double distance = bot.getLocation().distance(target.getLocation());
-        BotInventory inv = bot.getBotInventory();
+        // Self-boost with wind charges when chasing — runs alongside the chosen weapon.
+        windCharge.tickMovementBoost(bot, target, distance);
 
         // Mid-attack commitment: stay on the chosen weapon.
         if (bot.getCombatState().getPhase() == CombatState.Phase.AIRBORNE && inv.hasMace()) {
@@ -126,7 +128,7 @@ public final class CombatDirector {
             return true;
         }
 
-        if (distance >= 14.0 && distance <= 35.0 && inv.hasEnderPearl()
+        if (distance >= 28.0 && distance <= 64.0 && inv.hasEnderPearl()
                 && bot.getBotCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
             pearl.ticksFor(bot, target, distance);
             return true;

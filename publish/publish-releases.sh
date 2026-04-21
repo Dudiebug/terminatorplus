@@ -20,10 +20,10 @@ REPO_DIR="$(cd "$PUBLISH_DIR/.." && pwd)"
 BRANCHES=(mc-1.21.11 mc-26.1.2)
 SUFFIXES=(mc1.21.11 mc26.1.2)
 TITLES=(
-    "5.0.0-BETA for Minecraft 1.21.11"
-    "5.0.0-BETA for Minecraft 26.1.2"
+    "5.0.1-BETA for Minecraft 1.21.11"
+    "5.0.1-BETA for Minecraft 26.1.2"
 )
-TAGS=(v5.0.0-mc1.21.11 v5.0.0-mc26.1.2)
+TAGS=(v5.0.1-mc1.21.11 v5.0.1-mc26.1.2)
 
 cd "$REPO_DIR"
 
@@ -33,8 +33,8 @@ for i in "${!BRANCHES[@]}"; do
     title="${TITLES[$i]}"
     tag="${TAGS[$i]}"
     # Root fat jar (includes plugin.yml + all classes); API jar is for developers only.
-    plugin_jar="$REPO_DIR/build/libs/TerminatorPlus-5.0.0-BETA-${suffix}.jar"
-    api_jar="$REPO_DIR/TerminatorPlus-API/build/libs/TerminatorPlus-API-5.0.0-BETA-${suffix}.jar"
+    plugin_jar="$REPO_DIR/build/libs/TerminatorPlus-5.0.1-BETA-${suffix}.jar"
+    api_jar="$REPO_DIR/TerminatorPlus-API/build/libs/TerminatorPlus-API-5.0.1-BETA-${suffix}.jar"
 
     echo "=== $branch ==="
 
@@ -55,7 +55,14 @@ for i in "${!BRANCHES[@]}"; do
     cat >"$notes_file" <<EOF
 Built against Paper for Minecraft ${suffix#mc}.
 
-**What's new in 5.0.0-BETA**
+**What's new in 5.0.1-BETA**
+- **Automatic movement kit**: every bot now always carries ender pearls and wind charges. The stacks top up every 2s, so no preset or \`/bot give\` is required to unlock gap-closes and wind-charge boosts.
+- **Ender pearls for long-range travel**: bots throw a pearl whenever the target is 28+ blocks away (was 14–35). Pearls no longer decrement the stack — the 3s cooldown paces them.
+- **Wind-charge self-propulsion**: while chasing a target 8+ blocks away, grounded bots fire a wind charge at their feet every 1.5s for an explosive forward boost. Runs alongside combat, not instead of it.
+- **Tools auto-tier to armor**: swords and axes are re-tiered every 2s to match the bot's highest-tier equipped armor, floored at iron. Chainmail / gold / leather / no-armor bots all carry iron tools; diamond armor → diamond tools; netherite → netherite.
+- \`BotInventory.armorTier(Material)\`, \`getEquippedArmorTier()\`, \`getEffectiveToolTier()\`, \`upgradeToolsToArmorTier()\`, \`ensureMovementKit()\` are now public for API consumers.
+
+**Carried over from 5.0.0-BETA**
 - Weapon-aware combat AI: mace smash, trident momentum throw, wind charges, ender pearls, crystal PvP, anchor bomb (Nether), cobweb utility, elytra glide + firework boost
 - Passive behaviors: elytra↔chestplate auto-swap, totem of undying auto-equip
 - Full per-bot inventory editor: \`/bot inventory <name>\` opens a 54-slot chest GUI
