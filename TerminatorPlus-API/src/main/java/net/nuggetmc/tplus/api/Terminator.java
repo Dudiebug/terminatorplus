@@ -140,4 +140,19 @@ public interface Terminator {
     default boolean combatTick(LivingEntity target) {
         return false;
     }
+
+    /**
+     * Vanilla-safe swing gate: true only when the bot's attack-strength charge is
+     * fully recharged AND the target isn't deep in an i-frame window. Callers
+     * that go through {@link #attack(Entity)} directly (legacy agent, bot agent,
+     * etc) should consult this before swinging so the bot doesn't waste 75% of
+     * its damage on a partially-charged strike.
+     *
+     * <p>Default returns true so unimplemented adapters don't silently block
+     * attacks; real bot impls ({@link net.nuggetmc.tplus.api.Terminator} → {@code Bot})
+     * back this with the actual attack-strength ticker check.
+     */
+    default boolean canSwingAttack(LivingEntity target) {
+        return true;
+    }
 }

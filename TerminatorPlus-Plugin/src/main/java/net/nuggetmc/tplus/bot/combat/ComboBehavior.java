@@ -1,0 +1,161 @@
+package net.nuggetmc.tplus.bot.combat;
+
+import net.nuggetmc.tplus.bot.Bot;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.Sound;
+import org.bukkit.entity.EnderPearl;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.WindCharge;
+import org.bukkit.plugin.Plugin;
+import org.bukkit.util.Vector;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+/**
+ * Two-step wind-charge + ender-pearl combos. The wind charge detonation
+ * stacks its velocity onto the pearl thrown immediately after, producing a
+ * launch the target cannot follow:
+ *
+ * <ul>
+ *   <li><b>WIND_PEARL_ENGAGE</b> — wind charge behind the bot, pearl forward.
+ *       The explosion pushes the bot AND the pearl toward the target, halving
+ *       travel time and closing a 20+ block gap in a single combo.</li>
+ *   <li><b>WIND_PEARL_ESCAPE</b> — wind charge between bot and target, pearl
+ *       backwards over the shoulder. The explosion shoves the bot away and
+ *       the pearl lands far behind, resulting in a long-range disengage.</li>
+ * </ul>
+ *
+ * <p>A single instance is shared across all bots. Per-bot state lives in the
+ * {@link #active} map and is cleaned up after the scheduled pearl fires.
+ */
+public final class ComboBehavior {
+
+    public static final String COOLDOWN_KEY = "combo";
+    private static final int COOLDOWN_TICKS = 100;
+    /** Delay between wind charge spawn and pearl throw. Short enough that the pearl rides the blast wave. */
+    private static final int PEARL_DELAY_TICKS = 2;
+
+    public enum ComboType {
+        WIND_PEARL_ENGAGE,
+        WIND_PEARL_ESCAPE
+    }
+
+    private final Plugin plugin;
+    private final Map<UUID, Integer> active = new HashMap<>();
+
+    public ComboBehavior(Plugin plugin) {
+        this.plugin = plugin;
+    }
+
+    public ComboBehavior() {
+        this(Bukkit.getPluginManager().getPlugin("TerminatorPlus"));
+    }
+
+    public boolean inProgress(Bot bot) {
+        Integer endTick = active.get(bot.getUUID());
+        if (endTick == null) return false;
+        if (bot.getAliveTicks() > endTick) {
+            active.remove(bot.getUUID());
+            return false;
+        }
+        return true;
+    }
+
+    public boolean canCombo(Bot bot) {
+        if (inProgress(bot)) return false;
+        return bot.getBotCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks());
+    }
+
+    public boolean start(Bot bot, LivingEntity target, ComboType type) {
+        if (!canCombo(bot)) return false;
+        if (!bot.getBotInventory().hasWindCharge()) return false;
+        if (!bot.getBotInventory().hasEnderPearl()) return false;
+
+        int alive = bot.getAliveTicks();
+        active.put(bot.getUUID(), alive + PEARL_DELAY_TICKS + 10);
+
+        bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN_TICKS, alive);
+        bot.getBotCooldowns().set(WindChargeBehavior.COOLDOWN_KEY, 55, alive);
+
+        return switch (type) {
+            case WIND_PEARL_ENGAGE -> launchEngage(bot, target);
+            case WIND_PEARL_ESCAPE -> launchEscape(bot, target);
+        };
+    }
+
+    private boolean launchEngage(Bot bot, LivingEntity target) {
+        Location botLoc = bot.getLocation();
+        Vector forward = horizontalTo(botLoc, target.getLocation());
+        if (forward == null) return false;
+
+        // Step 1: wind charge behind the bot. Explosion pushes the bot forward.
+        Location behind = botLoc.clone().add(forward.clone().multiply(-0.8)).add(0, 0.4, 0);
+        spawnWindCharge(bot, behind, forward.clone().multiply(-0.4).setY(-0.2));
+
+        // Step 2 (2 ticks later): throw pearl forward along the same line.
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (!bot.isBotAlive()) return;
+            int slot = bot.getBotInventory().findHotbar(Material.ENDER_PEARL);
+            if (slot >= 0) bot.selectHotbarSlot(slot);
+            Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
+            Vector aim = target.getEyeLocation().toVector().subtract(spawn.toVector()).normalize();
+            aim.setY(aim.getY() + 0.08).normalize();
+            bot.faceLocation(target.getLocation());
+            bot.punch();
+            spawn.getWorld().spawn(spawn, EnderPearl.class, p -> {
+                p.setShooter(bot.getBukkitEntity());
+                p.setVelocity(aim.multiply(2.2));
+            });
+            spawn.getWorld().playSound(spawn, Sound.ENTITY_ENDER_PEARL_THROW, 1f, 1f);
+        }, PEARL_DELAY_TICKS);
+        return true;
+    }
+
+    private boolean launchEscape(Bot bot, LivingEntity target) {
+        Location botLoc = bot.getLocation();
+        Vector toTarget = horizontalTo(botLoc, target.getLocation());
+        if (toTarget == null) return false;
+
+        // Step 1: wind charge between bot and target. Explosion shoves bot away.
+        Location front = botLoc.clone().add(toTarget.clone().multiply(0.8)).add(0, 0.4, 0);
+        spawnWindCharge(bot, front, toTarget.clone().multiply(0.3).setY(0.1));
+
+        // Step 2 (2 ticks later): throw pearl BEHIND to land far from target.
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (!bot.isBotAlive()) return;
+            int slot = bot.getBotInventory().findHotbar(Material.ENDER_PEARL);
+            if (slot >= 0) bot.selectHotbarSlot(slot);
+            Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
+            Vector away = toTarget.clone().multiply(-1);
+            away.setY(0.45).normalize();
+            bot.punch();
+            spawn.getWorld().spawn(spawn, EnderPearl.class, p -> {
+                p.setShooter(bot.getBukkitEntity());
+                p.setVelocity(away.multiply(1.9));
+            });
+            spawn.getWorld().playSound(spawn, Sound.ENTITY_ENDER_PEARL_THROW, 1f, 1f);
+        }, PEARL_DELAY_TICKS);
+        return true;
+    }
+
+    private static void spawnWindCharge(Bot bot, Location at, Vector velocity) {
+        int slot = bot.getBotInventory().findHotbar(Material.WIND_CHARGE);
+        if (slot >= 0) bot.selectHotbarSlot(slot);
+        bot.punch();
+        at.getWorld().spawn(at, WindCharge.class, w -> {
+            w.setShooter(bot.getBukkitEntity());
+            w.setVelocity(velocity);
+        });
+        at.getWorld().playSound(at, Sound.ENTITY_WIND_CHARGE_THROW, 1f, 1.0f);
+    }
+
+    private static Vector horizontalTo(Location from, Location to) {
+        Vector v = to.toVector().subtract(from.toVector()).setY(0);
+        if (v.lengthSquared() < 1.0e-6) return null;
+        return v.normalize();
+    }
+}

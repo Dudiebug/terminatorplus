@@ -50,7 +50,7 @@ public final class MaceBehavior implements WeaponBehavior {
             case RELEASE: {
                 if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) {
                     // Stay close but don't jump-smash. Fall through to melee on the sword if lateral.
-                    if (distance <= ATTACK_RANGE && bot.tickDelay(5)) {
+                    if (distance <= ATTACK_RANGE && BotCombatTiming.canSwing(bot, target)) {
                         doAttack(bot, target);
                     }
                     return 0;
@@ -80,9 +80,13 @@ public final class MaceBehavior implements WeaponBehavior {
                         bot.walk(horiz);
                     }
                 }
-                // Impact check.
+                // Impact check. The dive itself is committed, so don't gate on charge — the
+                // density + fall-damage bonus dominates base damage. Just skip deep i-frames
+                // so the smash isn't wasted on a target that can't take the hit.
                 if (distance <= ATTACK_RANGE && (bot.isBotOnGround() || vel.getY() < -0.6)) {
-                    doAttack(bot, target);
+                    if (!BotCombatTiming.targetHasIFrames(target)) {
+                        doAttack(bot, target);
+                    }
                     state.reset();
                 }
                 return 0;
