@@ -342,10 +342,25 @@ public class Bot extends ServerPlayer implements Terminator {
         if (jumpTicks > 0) --jumpTicks;
         if (noFallTicks > 0) --noFallTicks;
 
-        if (checkGround()) {
+        boolean onTheGround = checkGround();
+        if (onTheGround) {
             if (groundTicks < 5) groundTicks++;
         } else {
             groundTicks = 0;
+        }
+
+        // Vanilla Player.attack() reads this.fallDistance and this.onGround()
+        // to decide whether an attack is a crit (1.5× damage + particles). We
+        // override doTick() to skip aiStep(), which is where vanilla advances
+        // those fields, so without this block they stay at 0/true forever and
+        // every swing reads as a ground-hit. Maintain them from the bot's own
+        // velocity and ground tracker so natural falls and mace dives register
+        // as vanilla crits, and so mace smashes get their fall-distance bonus.
+        this.setOnGround(onTheGround);
+        if (onTheGround) {
+            this.fallDistance = 0f;
+        } else if (velocity.getY() < 0) {
+            this.fallDistance += (float) -velocity.getY();
         }
 
         updateLocation();

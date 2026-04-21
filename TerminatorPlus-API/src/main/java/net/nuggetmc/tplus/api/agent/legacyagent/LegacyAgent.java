@@ -254,7 +254,11 @@ public class LegacyAgent extends Agent {
         if (!bot.isBotOnGround()) return; // calling this a second time later on
 
         bot.stand(); // eventually create a memory system so packets do not have to be sent every tick
-        bot.setItem(null); // method to check item in main hand, bot.getItemInHand()
+        // (Previously: bot.setItem(null). That blanked the mainhand every move
+        //  tick, so if a scanner play or combat branch fires later in the same
+        //  server tick the bot swings with EquipmentSlot.HAND = AIR. A 274k-
+        //  line log showed 6,472 melee-hits with w=AIR because of this line.
+        //  The hotbar slot tracker is authoritative — leave the hand alone.)
 
         try {
             vel.add(bot.getVelocity());
