@@ -959,6 +959,11 @@ public class Bot extends ServerPlayer implements Terminator {
     public void doTick() {
         detectEquipmentUpdates();
         baseTick();
+        // Vanilla Player.aiStep() normally advances this each tick; we skip aiStep
+        // to avoid hunger/ability mutations on bots, but BotCombatTiming reads the
+        // resulting attack-strength scale as the gate for full-damage/crit swings.
+        // Without this, the scale stays pinned at 0 and no swing ever lands.
+        this.attackStrengthTicker++;
     }
 
     @Override
