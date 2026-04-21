@@ -119,11 +119,23 @@ public class LegacyAgent extends Agent {
         Location loc = bot.getLocation();
         LivingEntity botEntity = bot.getBukkitEntity();
 
-        // Stuck detection: count consecutive ticks within 0.1 block of the last
-        // position. When we cross the threshold, apply a random-strafe jump to
-        // jolt the bot out of corners / bot-on-bot overlap / open-doorway
-        // stalls. Safe to fire before combat dispatch — the jolt is a velocity
-        // impulse, so combat still runs this tick.
+        LivingEntity livingTarget = locateTarget(bot, loc);
+
+        blockCheck.tryPreMLG(bot, loc);
+
+        if (livingTarget == null) {
+            stopMining(bot);
+            // Idle (no target) — clear any pending stuck counter so we don't
+            // jolt the bot when they legitimately have nowhere to go.
+            stuckTicks.remove(botEntity);
+            stuckLastLoc.remove(botEntity);
+            return;
+        }
+
+        // Stuck detection: only meaningful when the bot HAS somewhere to go.
+        // Count consecutive ticks within 0.1 block of the last position; when
+        // we cross the threshold, apply a random-strafe jump to jolt the bot
+        // out of corners / bot-on-bot overlap / doorway stalls.
         Location prev = stuckLastLoc.get(botEntity);
         if (prev != null && prev.getWorld() == loc.getWorld()
                 && prev.distanceSquared(loc) < 0.01) {
@@ -139,15 +151,6 @@ public class LegacyAgent extends Agent {
             stuckTicks.put(botEntity, 0);
         }
         stuckLastLoc.put(botEntity, loc.clone());
-
-        LivingEntity livingTarget = locateTarget(bot, loc);
-
-        blockCheck.tryPreMLG(bot, loc);
-        
-        if (livingTarget == null) {
-            stopMining(bot);
-            return;
-        }
 
         blockCheck.clutch(bot, livingTarget);
 
