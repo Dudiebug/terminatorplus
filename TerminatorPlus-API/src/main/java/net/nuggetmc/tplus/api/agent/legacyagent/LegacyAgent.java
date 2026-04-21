@@ -137,7 +137,13 @@ public class LegacyAgent extends Agent {
             network.feed(BotData.generate(bot, livingTarget));
         }
 
-        if (bot.tickDelay(3) && !miningAnim.containsKey(botPlayer)) {
+        // Neural-network training needs the deterministic 3-tick cadence so
+        // fitness scores are reproducible run-to-run. Everyone else runs every
+        // tick so CombatDirector can react at 20 Hz — canSwing() gates the
+        // actual damage event on the vanilla attack-strength charge, so this
+        // does not over-swing.
+        boolean combatTickReady = ai ? bot.tickDelay(3) : true;
+        if (combatTickReady && !miningAnim.containsKey(botPlayer)) {
             Location botEyeLoc = botPlayer.getEyeLocation();
             Location playerEyeLoc = livingTarget.getEyeLocation();
             Location playerLoc = livingTarget.getLocation();
