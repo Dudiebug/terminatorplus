@@ -533,6 +533,13 @@ public class Bot extends ServerPlayer implements Terminator {
         if (jumpTicks == 0 && groundTicks > 1) {
             jumpTicks = 4;
             velocity = vel;
+            return;
+        }
+        // Airborne: jump impulse is rejected but LegacyAgent.move uses this
+        // to carry horizontal momentum too. Preserve the XZ component via
+        // walk() so the bot doesn't lose all forward motion mid-hop.
+        if (vel.getX() != 0 || vel.getZ() != 0) {
+            walk(new Vector(vel.getX(), 0, vel.getZ()));
         }
     }
 

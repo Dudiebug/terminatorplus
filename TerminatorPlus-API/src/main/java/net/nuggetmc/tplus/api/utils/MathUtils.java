@@ -54,11 +54,16 @@ public class MathUtils {
     }
 
     public static Vector circleOffset(double r) {
+        // Uniform disk sampling: the radius scales by sqrt(random) so density
+        // is even across the disk, and the same radius drives both x and z.
+        // The previous version used two independent Math.random() calls and a
+        // linear radius, which both clustered samples near the origin and
+        // produced a non-disk shape — roughly 200 bots spawned on top of each
+        // other in a mobwave.
         double rad = 2 * Math.random() * Math.PI;
-
-        double x = r * Math.random() * Math.cos(rad);
-        double z = r * Math.random() * Math.sin(rad);
-
+        double dist = r * Math.sqrt(Math.random());
+        double x = dist * Math.cos(rad);
+        double z = dist * Math.sin(rad);
         return new Vector(x, 0, z);
     }
 
