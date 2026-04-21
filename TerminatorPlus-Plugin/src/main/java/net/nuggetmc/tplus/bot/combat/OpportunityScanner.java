@@ -122,6 +122,7 @@ public final class OpportunityScanner {
     private static final String HIT_CRYSTAL_CD      = "opp_hit_crystal";
     private static final String LEDGE_CRYSTAL_CD    = "opp_ledge_crystal";
     private static final String STUN_SLAM_CD        = "opp_stun_slam";
+    private static final String WIND_MACE_CD        = "opp_wind_mace";
     private static final String AERIAL_STRIKE_CD    = "opp_aerial_strike";
     private static final String PEARL_FLASH_CD      = "opp_pearl_flash";
     private static final String FACE_PLACE_CD       = "opp_face_place";
@@ -249,6 +250,30 @@ public final class OpportunityScanner {
                 && bot.getBotCooldowns().ready(MaceBehavior.COOLDOWN_KEY, alive)) {
             if (executeStunSlam(bot, target)) {
                 bot.getBotCooldowns().set(STUN_SLAM_CD, 90, alive);
+                return true;
+            }
+        }
+
+        // 5b. WIND_MACE_SMASH -- mace + wind charge + open sky.
+        //     The wiki "Mace PvP" core play: the bot fires a wind charge under
+        //     itself and jumps on the same tick, which blasts it ~5 blocks up.
+        //     It immediately swaps to the mace so the mace-cooldown ticks
+        //     during the ascent; by the time the bot peaks and falls, the
+        //     mace is ready for a full-fall smash. Gated on openSkyAboveBot —
+        //     if there's a ceiling, the bot can't gain altitude and would
+        //     faceplant its own blast, so it falls through to normal melee.
+        if (snap.botOnGround && snap.openSkyAboveBot
+                && inv.hasMace() && inv.hasWindCharge()
+                && snap.distance <= 5.0
+                && bot.getBotCooldowns().ready(WIND_MACE_CD, alive)
+                && bot.getBotCooldowns().ready(MaceBehavior.COOLDOWN_KEY, alive)
+                && bot.getBotCooldowns().ready(WindChargeBehavior.COOLDOWN_KEY, alive)) {
+            if (executeWindMaceSmash(bot, target)) {
+                // Long cooldown so this doesn't dominate every fight; mace
+                // cooldown (see MaceBehavior.JUMP_COOLDOWN) gates the smash
+                // window itself, but we space out the wind-launch setup.
+                bot.getBotCooldowns().set(WIND_MACE_CD, 160, alive);
+                bot.getBotCooldowns().set(WindChargeBehavior.COOLDOWN_KEY, 55, alive);
                 return true;
             }
         }
@@ -652,6 +677,63 @@ public final class OpportunityScanner {
         int maceSlot = bot.getBotInventory().findHotbar(Material.MACE);
         if (maceSlot >= 0) bot.selectHotbarSlot(maceSlot);
         bot.getCombatState().setPhase(CombatState.Phase.IDLE);
+        return true;
+    }
+
+    /**
+     * Wind-launched mace smash. Single-tick sequence:
+     *   1) select the wind-charge slot,
+     *   2) spawn a wind charge at the bot's feet pointing straight down so
+     *      the explosion reflects off the ground and launches the bot up ~5
+     *      blocks (matches the wiki Mace-PvP "build up, wind+jump" altitude
+     *      gain that lets the smash crit land for full fall damage),
+     *   3) apply an explicit upward velocity as a safety net in case the
+     *      wind-charge physics race gets eaten by tick ordering,
+     *   4) hotkey to the mace and mark state AIRBORNE so MaceBehavior's
+     *      dive / impact path takes over on subsequent ticks — that path
+     *      already faces the target, tracks mid-fall, and fires
+     *      bot.attack() on ground contact with the mace held. The
+     *      MaceBehavior cooldown starts now, so even if the smash whiffs
+     *      the bot doesn't immediately re-attempt.
+     */
+    private boolean executeWindMaceSmash(Bot bot, LivingEntity target) {
+        int windSlot = bot.getBotInventory().findHotbar(Material.WIND_CHARGE);
+        if (windSlot < 0) return false;
+        int hotbarWind = bot.getBotInventory().bringToHotbar(windSlot);
+        if (hotbarWind < 0) return false;
+        bot.selectHotbarSlot(hotbarWind);
+
+        Location feet = bot.getLocation();
+        bot.faceLocation(target.getLocation());
+        bot.punch();
+
+        // Spawn ~0.3 blocks below the feet with straight-down velocity. The
+        // wind charge detonates on ground impact and its knockback launches
+        // the bot straight up.
+        Location spawn = feet.clone().add(0, 0.3, 0);
+        spawn.getWorld().spawn(spawn, WindCharge.class, w -> {
+            w.setVelocity(new Vector(0, -1.2, 0));
+            w.setShooter(bot.getBukkitEntity());
+        });
+        spawn.getWorld().playSound(feet, Sound.ENTITY_WIND_CHARGE_THROW, 1f, 1.1f);
+        consumeOne(bot, Material.WIND_CHARGE);
+
+        // Safety-net upward impulse in case the wind-charge blast is late.
+        Vector current = bot.getVelocity();
+        bot.jump(new Vector(current.getX() * 0.4, 1.35, current.getZ() * 0.4));
+
+        // Swap to mace same tick. MaceBehavior takes over from here via the
+        // AIRBORNE commitment branch in CombatDirector.
+        int maceSlot = bot.getBotInventory().findHotbar(Material.MACE);
+        if (maceSlot >= 0) {
+            int hotbarMace = bot.getBotInventory().bringToHotbar(maceSlot);
+            if (hotbarMace >= 0) bot.selectHotbarSlot(hotbarMace);
+        }
+        bot.getCombatState().setPhase(CombatState.Phase.AIRBORNE);
+
+        // Start the mace cooldown now — keeps the bot from immediately retrying
+        // if the smash whiffs and preserves the wiki-correct ~2.5s cadence.
+        bot.getBotCooldowns().set(MaceBehavior.COOLDOWN_KEY, 55, bot.getAliveTicks());
         return true;
     }
 
