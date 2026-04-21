@@ -40,8 +40,16 @@ public final class BotCombatTiming {
     }
 
     public static boolean canSwing(Bot bot, LivingEntity target, float minCharge) {
-        if (bot.getAttackStrengthScale(0.0f) < minCharge) return false;
-        return !targetHasIFrames(target);
+        float charge = bot.getAttackStrengthScale(0.0f);
+        if (charge < minCharge) {
+            CombatDebugger.swingBlock(bot, "charge", charge);
+            return false;
+        }
+        if (targetHasIFrames(target)) {
+            CombatDebugger.swingBlock(bot, "iframes", ((CraftLivingEntity) target).getHandle().invulnerableTime);
+            return false;
+        }
+        return true;
     }
 
     /** Attack-strength charge scaled to [0, 1]; 1.0 means fully recharged. */

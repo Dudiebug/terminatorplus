@@ -22,9 +22,18 @@ public final class MeleeBehavior implements WeaponBehavior {
 
     @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
-        if (distance > ATTACK_RANGE) return 0;
-        if (!BotCombatTiming.canSwing(bot, target)) return 0;
+        if (distance > ATTACK_RANGE) {
+            CombatDebugger.log(bot, "melee-oor", "dist=" + String.format("%.2f", distance));
+            return 0;
+        }
+        float charge = bot.getAttackStrengthScale(0.0f);
+        boolean iframes = BotCombatTiming.targetHasIFrames(target);
+        CombatDebugger.meleeTry(bot, charge, iframes, distance);
+        if (!BotCombatTiming.canSwing(bot, target)) {
+            return 0;
+        }
         bot.attack(target);
+        CombatDebugger.meleeHit(bot, bot.getBotInventory().getSelected().getType().name());
         return 0;
     }
 }
