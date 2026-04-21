@@ -169,8 +169,17 @@ public class BotManagerImpl implements BotManager, Listener {
 
         double f = n < 100 ? .004 * n : .4;
 
+        // If the user supplied a `%` placeholder (e.g. "bot%"), substitute the
+        // index into that. If not and we're spawning more than one bot, append
+        // the index so they're distinguishable — was spawning 200 bots all
+        // named "bot" otherwise, which made every debug log and command
+        // ambiguous.
+        boolean hasPlaceholder = name.contains("%");
         for (NeuralNetwork network : networks) {
-            Bot bot = Bot.createBot(loc, name.replace("%", String.valueOf(i)), skin);
+            String botName = hasPlaceholder
+                    ? name.replace("%", String.valueOf(i))
+                    : (n > 1 ? name + i : name);
+            Bot bot = Bot.createBot(loc, botName, skin);
 
             if (network != null) {
                 bot.setNeuralNetwork(network == NeuralNetwork.RANDOM ? NeuralNetwork.generateRandomNetwork() : network);
