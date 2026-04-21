@@ -34,6 +34,7 @@ import net.nuggetmc.tplus.api.event.BotKilledByPlayerEvent;
 import net.nuggetmc.tplus.api.utils.*;
 import net.nuggetmc.tplus.bot.combat.CombatDirector;
 import net.nuggetmc.tplus.bot.combat.CombatState;
+import net.nuggetmc.tplus.bot.combat.WindChargeMovePlan;
 import net.nuggetmc.tplus.bot.loadout.BotInventory;
 import net.nuggetmc.tplus.bot.loadout.Cooldowns;
 import net.nuggetmc.tplus.nms.MockConnection;
@@ -82,6 +83,8 @@ public class Bot extends ServerPlayer implements Terminator {
     private final BotInventory botInventory;
     private final Cooldowns cooldowns;
     private final CombatState combatState;
+    /** Pending wind-charge self-boost (aim + fire tick). Null when not planning a throw. */
+    public WindChargeMovePlan pendingWindChargePlan;
 
     private Bot(MinecraftServer minecraftServer, ServerLevel worldServer, GameProfile profile, boolean addToPlayerList) {
         super(minecraftServer, worldServer, profile, ClientInformation.createDefault());
@@ -293,6 +296,11 @@ public class Bot extends ServerPlayer implements Terminator {
         return director.tick(this, target);
     }
 
+    @Override
+    public boolean canSwingAttack(org.bukkit.entity.LivingEntity target) {
+        return net.nuggetmc.tplus.bot.combat.BotCombatTiming.canSwing(this, target);
+    }
+
     /**
      * Change the active hotbar slot and sync the mainhand item. The bot's
      * own inventory (all 41 slots) remains untouched; this only changes
@@ -358,6 +366,12 @@ public class Bot extends ServerPlayer implements Terminator {
         setHealth(amount);
 
         fallDamageCheck();
+
+        // Every 2s: keep wind charges + ender pearls topped up.
+        // (Swords and axes are intentionally NOT auto-tiered — the loadout is authoritative.)
+        if (aliveTicks % 40 == 0) {
+            botInventory.ensureMovementKit();
+        }
 
         oldVelocity = velocity.clone();
 

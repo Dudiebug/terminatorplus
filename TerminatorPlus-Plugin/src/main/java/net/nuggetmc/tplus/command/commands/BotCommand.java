@@ -19,6 +19,8 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.PotionMeta;
+import org.bukkit.potion.PotionType;
 import org.bukkit.scheduler.BukkitScheduler;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
@@ -858,7 +860,10 @@ public class BotCommand extends CommandInstance {
 
     private static final String[] LOADOUT_NAMES = {
             "sword", "mace", "trident", "windcharge", "skydiver",
-            "crystalpvp", "anchorbomb", "pvp", "hybrid", "clear"
+            "crystalpvp", "anchorbomb", "pvp", "hybrid",
+            // Minecraft Wiki PvP kit taxonomy (cart + UHC intentionally excluded).
+            "vanilla", "axe", "smp", "pot", "spear",
+            "clear"
     };
 
     /**
@@ -964,7 +969,7 @@ public class BotCommand extends CommandInstance {
                 ItemStack pearls = new ItemStack(Material.ENDER_PEARL);
                 pearls.setAmount(16);
                 kit[3] = pearls;
-                kit[4] = new ItemStack(Material.POTION); // fire res (server can enchant)
+                kit[4] = makePotion(Material.POTION, PotionType.FIRE_RESISTANCE);
                 kit[7] = new ItemStack(Material.TOTEM_OF_UNDYING);
                 kit[36] = new ItemStack(Material.NETHERITE_BOOTS);
                 kit[37] = new ItemStack(Material.NETHERITE_LEGGINGS);
@@ -1005,6 +1010,103 @@ public class BotCommand extends CommandInstance {
                 kit[39] = new ItemStack(Material.NETHERITE_HELMET);
                 kit[40] = new ItemStack(Material.TOTEM_OF_UNDYING);
             }
+            case "vanilla" -> {
+                // Vanilla PvP / VPvP — full arsenal minus enchanted apples + elytra.
+                // Nether fallback (anchors + glowstone) lives in storage since the hotbar is full.
+                kit[0] = new ItemStack(Material.NETHERITE_SWORD);
+                kit[1] = new ItemStack(Material.MACE);
+                ItemStack crystals = new ItemStack(Material.END_CRYSTAL);
+                crystals.setAmount(16);
+                kit[2] = crystals;
+                ItemStack obsidian = new ItemStack(Material.OBSIDIAN);
+                obsidian.setAmount(32);
+                kit[3] = obsidian;
+                ItemStack wc = new ItemStack(Material.WIND_CHARGE);
+                wc.setAmount(16);
+                kit[4] = wc;
+                ItemStack pearls = new ItemStack(Material.ENDER_PEARL);
+                pearls.setAmount(16);
+                kit[5] = pearls;
+                ItemStack gaps = new ItemStack(Material.GOLDEN_APPLE);
+                gaps.setAmount(8);
+                kit[6] = gaps;
+                ItemStack webs = new ItemStack(Material.COBWEB);
+                webs.setAmount(8);
+                kit[7] = webs;
+                kit[8] = new ItemStack(Material.TOTEM_OF_UNDYING);
+                ItemStack anchors = new ItemStack(Material.RESPAWN_ANCHOR);
+                anchors.setAmount(16);
+                kit[9] = anchors;
+                ItemStack glow = new ItemStack(Material.GLOWSTONE);
+                glow.setAmount(16);
+                kit[10] = glow;
+                kit[36] = new ItemStack(Material.NETHERITE_BOOTS);
+                kit[37] = new ItemStack(Material.NETHERITE_LEGGINGS);
+                kit[38] = new ItemStack(Material.NETHERITE_CHESTPLATE);
+                kit[39] = new ItemStack(Material.NETHERITE_HELMET);
+                kit[40] = new ItemStack(Material.SHIELD);
+            }
+            case "axe" -> {
+                // Axe PvP — axe disables shields; sword as secondary for follow-ups.
+                kit[0] = new ItemStack(Material.NETHERITE_AXE);
+                kit[1] = new ItemStack(Material.NETHERITE_SWORD);
+                ItemStack gaps = new ItemStack(Material.GOLDEN_APPLE);
+                gaps.setAmount(4);
+                kit[2] = gaps;
+                kit[36] = new ItemStack(Material.NETHERITE_BOOTS);
+                kit[37] = new ItemStack(Material.NETHERITE_LEGGINGS);
+                kit[38] = new ItemStack(Material.NETHERITE_CHESTPLATE);
+                kit[39] = new ItemStack(Material.NETHERITE_HELMET);
+                kit[40] = new ItemStack(Material.SHIELD);
+            }
+            case "smp" -> {
+                // SMP / Netherite PvP — sword primary, axe fallback. No mace/crystals/anchors (explosive-banned).
+                kit[0] = new ItemStack(Material.NETHERITE_SWORD);
+                kit[1] = new ItemStack(Material.NETHERITE_AXE);
+                ItemStack gaps = new ItemStack(Material.GOLDEN_APPLE);
+                gaps.setAmount(4);
+                kit[2] = gaps;
+                kit[36] = new ItemStack(Material.NETHERITE_BOOTS);
+                kit[37] = new ItemStack(Material.NETHERITE_LEGGINGS);
+                kit[38] = new ItemStack(Material.NETHERITE_CHESTPLATE);
+                kit[39] = new ItemStack(Material.NETHERITE_HELMET);
+                kit[40] = new ItemStack(Material.SHIELD);
+            }
+            case "pot" -> {
+                // Pot PvP — splash healing self-heals are the core mechanic. No shield per spec;
+                // pearls added per user for practical bot combat (reposition / gap-close).
+                // Splash potions are non-stackable, so each gets its own slot.
+                kit[0] = new ItemStack(Material.NETHERITE_SWORD);
+                kit[1] = makePotion(Material.SPLASH_POTION, PotionType.STRONG_HEALING);
+                kit[2] = makePotion(Material.SPLASH_POTION, PotionType.STRONG_HEALING);
+                kit[3] = makePotion(Material.SPLASH_POTION, PotionType.STRONG_HEALING);
+                kit[4] = makePotion(Material.SPLASH_POTION, PotionType.STRONG_HEALING);
+                ItemStack pearls = new ItemStack(Material.ENDER_PEARL);
+                pearls.setAmount(4);
+                kit[5] = pearls;
+                ItemStack gaps = new ItemStack(Material.GOLDEN_APPLE);
+                gaps.setAmount(4);
+                kit[6] = gaps;
+                kit[36] = new ItemStack(Material.NETHERITE_BOOTS);
+                kit[37] = new ItemStack(Material.NETHERITE_LEGGINGS);
+                kit[38] = new ItemStack(Material.NETHERITE_CHESTPLATE);
+                kit[39] = new ItemStack(Material.NETHERITE_HELMET);
+                // No offhand per spec.
+            }
+            case "spear" -> {
+                // Spear PvP — trident only. Note: "spear" is community slang for a trident
+                // used as a melee weapon in vanilla; there's no separate spear item.
+                // Explicitly excludes mace / wind charges / elytra / fireworks per spec.
+                kit[0] = new ItemStack(Material.TRIDENT);
+                ItemStack gaps = new ItemStack(Material.GOLDEN_APPLE);
+                gaps.setAmount(4);
+                kit[1] = gaps;
+                kit[36] = new ItemStack(Material.NETHERITE_BOOTS);
+                kit[37] = new ItemStack(Material.NETHERITE_LEGGINGS);
+                kit[38] = new ItemStack(Material.NETHERITE_CHESTPLATE);
+                kit[39] = new ItemStack(Material.NETHERITE_HELMET);
+                kit[40] = new ItemStack(Material.SHIELD);
+            }
             case "clear" -> {
                 // Empty array → everything clears.
             }
@@ -1013,6 +1115,19 @@ public class BotCommand extends CommandInstance {
             }
         }
         return kit;
+    }
+
+    /**
+     * Build a potion item (regular / splash / lingering) with the given base {@link PotionType}.
+     * Used by kits that need specific potion effects baked in (fire-res, strong healing, etc).
+     */
+    private static ItemStack makePotion(Material container, PotionType type) {
+        ItemStack it = new ItemStack(container);
+        if (it.getItemMeta() instanceof PotionMeta pm) {
+            pm.setBasePotionType(type);
+            it.setItemMeta(pm);
+        }
+        return it;
     }
 
     private static void applyLoadoutSlot(Bot bot, int slot, ItemStack item) {

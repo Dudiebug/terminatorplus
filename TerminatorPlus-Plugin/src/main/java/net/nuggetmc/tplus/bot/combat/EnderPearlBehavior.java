@@ -6,20 +6,23 @@ import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.entity.EnderPearl;
 import org.bukkit.entity.LivingEntity;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.util.Vector;
 
 /**
- * Gap-closer: when the target is too far for trident/melee but close enough
- * to land a pearl, throw one. Vanilla pearl landing teleports the bot.
+ * Long-range movement: when the target is far enough that walking would waste time
+ * (>= {@link #MIN_DISTANCE} blocks), throw a pearl in their direction. Vanilla pearl
+ * landing teleports the bot. Pearls are part of the bot's automatic movement kit
+ * (refilled in {@link net.nuggetmc.tplus.bot.loadout.BotInventory#ensureMovementKit()}),
+ * so this fires whenever the cooldown is ready and the target is in range.
  */
 public final class EnderPearlBehavior implements WeaponBehavior {
 
     public static final String COOLDOWN_KEY = "pearl";
-    private static final int COOLDOWN = 80;
-    private static final double MIN_DISTANCE = 14.0;
-    private static final double MAX_DISTANCE = 35.0;
+    private static final int COOLDOWN = 60;
+    /** Match the user-facing "use pearls beyond 28 blocks" rule. Inside this radius, walk/trident. */
+    private static final double MIN_DISTANCE = 28.0;
+    /** Vanilla pearls have ~30-block reach before falling out of the air; cap so we don't waste throws. */
+    private static final double MAX_DISTANCE = 64.0;
     private static final double SPEED = 1.8;
 
     @Override
@@ -51,17 +54,8 @@ public final class EnderPearlBehavior implements WeaponBehavior {
 
         spawn.getWorld().playSound(spawn, Sound.ENTITY_ENDER_PEARL_THROW, 1f, 1f);
 
-        // Consume one pearl so the stack shrinks like a real player's.
-        PlayerInventory inv = bot.getBotInventory().raw();
-        ItemStack held = inv.getItem(slot);
-        if (held != null) {
-            int amt = held.getAmount();
-            if (amt <= 1) inv.setItem(slot, new ItemStack(Material.AIR));
-            else {
-                held.setAmount(amt - 1);
-                inv.setItem(slot, held);
-            }
-        }
+        // Bot's movement kit is auto-refilled — don't decrement the stack here.
+        // The cooldown alone paces throws.
 
         bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, bot.getAliveTicks());
         return COOLDOWN;
