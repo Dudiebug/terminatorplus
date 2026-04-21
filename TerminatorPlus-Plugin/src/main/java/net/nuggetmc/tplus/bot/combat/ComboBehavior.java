@@ -16,21 +16,17 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Two-step wind-charge + ender-pearl combos. The wind charge detonation
- * stacks its velocity onto the pearl thrown immediately after, producing a
- * launch the target cannot follow:
+ * Two-step wind-charge + ender-pearl engage combo. The wind charge
+ * detonation stacks its velocity onto the pearl thrown immediately after,
+ * halving travel time and closing a 20+ block gap in one launch.
  *
- * <ul>
- *   <li><b>WIND_PEARL_ENGAGE</b> — wind charge behind the bot, pearl forward.
- *       The explosion pushes the bot AND the pearl toward the target, halving
- *       travel time and closing a 20+ block gap in a single combo.</li>
- *   <li><b>WIND_PEARL_ESCAPE</b> — wind charge between bot and target, pearl
- *       backwards over the shoulder. The explosion shoves the bot away and
- *       the pearl lands far behind, resulting in a long-range disengage.</li>
- * </ul>
+ * <p>Bots don't disengage. A previous version had a mirror "escape"
+ * combo; it was removed because bots were running from fights and
+ * never re-engaging. Only the gap-closer remains.
  *
- * <p>A single instance is shared across all bots. Per-bot state lives in the
- * {@link #active} map and is cleaned up after the scheduled pearl fires.
+ * <p>A single instance is shared across all bots. Per-bot state lives
+ * in the {@link #active} map and is cleaned up after the scheduled
+ * pearl fires.
  */
 public final class ComboBehavior {
 
@@ -40,8 +36,7 @@ public final class ComboBehavior {
     private static final int PEARL_DELAY_TICKS = 2;
 
     public enum ComboType {
-        WIND_PEARL_ENGAGE,
-        WIND_PEARL_ESCAPE
+        WIND_PEARL_ENGAGE
     }
 
     private final Plugin plugin;
@@ -83,7 +78,6 @@ public final class ComboBehavior {
 
         return switch (type) {
             case WIND_PEARL_ENGAGE -> launchEngage(bot, target);
-            case WIND_PEARL_ESCAPE -> launchEscape(bot, target);
         };
     }
 
@@ -109,33 +103,6 @@ public final class ComboBehavior {
             spawn.getWorld().spawn(spawn, EnderPearl.class, p -> {
                 p.setShooter(bot.getBukkitEntity());
                 p.setVelocity(aim.multiply(2.2));
-            });
-            spawn.getWorld().playSound(spawn, Sound.ENTITY_ENDER_PEARL_THROW, 1f, 1f);
-        }, PEARL_DELAY_TICKS);
-        return true;
-    }
-
-    private boolean launchEscape(Bot bot, LivingEntity target) {
-        Location botLoc = bot.getLocation();
-        Vector toTarget = horizontalTo(botLoc, target.getLocation());
-        if (toTarget == null) return false;
-
-        // Step 1: wind charge between bot and target. Explosion shoves bot away.
-        Location front = botLoc.clone().add(toTarget.clone().multiply(0.8)).add(0, 0.4, 0);
-        spawnWindCharge(bot, front, toTarget.clone().multiply(0.3).setY(0.1));
-
-        // Step 2 (2 ticks later): throw pearl BEHIND to land far from target.
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (!bot.isBotAlive()) return;
-            int slot = bot.getBotInventory().findHotbar(Material.ENDER_PEARL);
-            if (slot >= 0) bot.selectHotbarSlot(slot);
-            Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
-            Vector away = toTarget.clone().multiply(-1);
-            away.setY(0.45).normalize();
-            bot.punch();
-            spawn.getWorld().spawn(spawn, EnderPearl.class, p -> {
-                p.setShooter(bot.getBukkitEntity());
-                p.setVelocity(away.multiply(1.9));
             });
             spawn.getWorld().playSound(spawn, Sound.ENTITY_ENDER_PEARL_THROW, 1f, 1f);
         }, PEARL_DELAY_TICKS);
