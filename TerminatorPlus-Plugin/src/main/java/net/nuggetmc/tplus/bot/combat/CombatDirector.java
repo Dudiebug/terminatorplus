@@ -89,10 +89,19 @@ public final class CombatDirector {
             }
         }
         if (bot.getCombatState().getPhase() == CombatState.Phase.CHARGING && inv.hasTrident()) {
-            CombatDebugger.weaponPick(bot, "TRIDENT(charging)", distance, true);
-            selectType(inv, Material.TRIDENT);
-            trident.ticksFor(bot, target, distance);
-            return true;
+            // Trident throw range is ~5–28 blocks. If the target closed inside
+            // MIN_DISTANCE while we were charging, TridentBehavior.ticksFor()
+            // silently returns without releasing and leaves us pinned in
+            // CHARGING forever. Reset so the short-range melee branch below
+            // can swing the trident as a melee stick.
+            if (distance < 5.0 || distance > 28.0) {
+                bot.getCombatState().reset();
+            } else {
+                CombatDebugger.weaponPick(bot, "TRIDENT(charging)", distance, true);
+                selectType(inv, Material.TRIDENT);
+                trident.ticksFor(bot, target, distance);
+                return true;
+            }
         }
 
         // Read the battlefield once, reuse across the scanner and the pipeline.
@@ -167,10 +176,22 @@ public final class CombatDirector {
             }
 
             int slot = sword >= 0 ? sword : axe;
+            String pickLabel = sword >= 0 ? "SWORD" : axe >= 0 ? "AXE" : null;
+            // Spear kits carry a trident and no sword/axe; use the trident as a
+            // melee stick at point-blank. CombatDirector's trident-throw branch
+            // only fires at 5+ blocks, so without this the bot stands there
+            // empty-handed within attack range.
+            if (slot < 0) {
+                int trident = inv.findHotbar(Material.TRIDENT);
+                if (trident >= 0) {
+                    slot = trident;
+                    pickLabel = "TRIDENT(melee)";
+                }
+            }
             if (slot >= 0) {
                 int hotbar = inv.bringToHotbar(slot);
                 if (hotbar >= 0) bot.selectHotbarSlot(hotbar);
-                CombatDebugger.weaponPick(bot, sword >= 0 ? "SWORD" : "AXE", distance, true);
+                CombatDebugger.weaponPick(bot, pickLabel, distance, true);
             } else {
                 CombatDebugger.weaponPick(bot, "MELEE(empty)", distance, true);
             }
