@@ -35,7 +35,10 @@ public class LegacyBlockCheck {
         if (loc.getBlock().getType() != Material.COBBLESTONE) {
             for (Player all : Bukkit.getOnlinePlayers())
                 all.playSound(loc, Sound.BLOCK_STONE_PLACE, SoundCategory.BLOCKS, 1, 1);
-            bot.setItem(new ItemStack(Material.COBBLESTONE));
+            // Was: bot.setItem(new ItemStack(COBBLESTONE)) — cosmetic, wiped
+            // the selected hotbar slot (mace / sword / whatever) every time
+            // the bot clutched a cobblestone. setType below still places the
+            // block regardless of what the bot is holding.
             loc.getBlock().setType(Material.COBBLESTONE);
 
             Block under = loc.clone().add(0, -1, 0).getBlock();
@@ -221,7 +224,10 @@ public class LegacyBlockCheck {
             bot.punch();
             for (Player all : Bukkit.getOnlinePlayers())
                 all.playSound(loc, Sound.BLOCK_STONE_PLACE, SoundCategory.BLOCKS, 1, 1);
-            bot.setItem(new ItemStack(Material.COBBLESTONE));
+            // Was: bot.setItem(new ItemStack(COBBLESTONE)) — cosmetic, wiped
+            // the selected hotbar slot (mace / sword / whatever) every time
+            // the bot clutched a cobblestone. setType below still places the
+            // block regardless of what the bot is holding.
             loc.getBlock().setType(Material.COBBLESTONE);
     	}
     	
@@ -279,7 +285,7 @@ public class LegacyBlockCheck {
                 bot.sneak();
                 for (Player all : Bukkit.getOnlinePlayers())
                     all.playSound(loc, Sound.BLOCK_STONE_PLACE, SoundCategory.BLOCKS, 1, 1);
-                bot.setItem(new ItemStack(Material.COBBLESTONE));
+                // Was: bot.setItem(new ItemStack(COBBLESTONE)) — see earlier notes.
                 loc.getBlock().setType(Material.COBBLESTONE);
             }
         }
