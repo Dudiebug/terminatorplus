@@ -682,19 +682,22 @@ public final class OpportunityScanner {
 
     /**
      * Wind-launched mace smash. Single-tick sequence:
-     *   1) select the wind-charge slot,
-     *   2) spawn a wind charge at the bot's feet pointing straight down so
-     *      the explosion reflects off the ground and launches the bot up ~5
-     *      blocks (matches the wiki Mace-PvP "build up, wind+jump" altitude
-     *      gain that lets the smash crit land for full fall damage),
-     *   3) apply an explicit upward velocity as a safety net in case the
-     *      wind-charge physics race gets eaten by tick ordering,
-     *   4) hotkey to the mace and mark state AIRBORNE so MaceBehavior's
-     *      dive / impact path takes over on subsequent ticks — that path
-     *      already faces the target, tracks mid-fall, and fires
-     *      bot.attack() on ground contact with the mace held. The
-     *      MaceBehavior cooldown starts now, so even if the smash whiffs
-     *      the bot doesn't immediately re-attempt.
+     *   1) consume a wind charge (the bot "uses" its charge — the physical
+     *      entity was unreliable, see note below),
+     *   2) directly assign the bot's upward velocity,
+     *   3) hotkey to the mace so the mace cooldown ticks during the ascent,
+     *   4) set CombatState.AIRBORNE so MaceBehavior's dive/impact path
+     *      takes over on subsequent ticks.
+     *
+     * <p>Earlier revisions spawned a WindCharge entity at the bot's feet
+     * with downward velocity, hoping its explosion would lift the bot.
+     * That produced zero lift: the vanilla knockback formula is
+     * {@code (target - explosion).normalize() * strength}, and with the
+     * charge detonating at feet-level the target vector is ~zero. Worse,
+     * {@code bot.jump(vel)} was used as a "safety net" but it gates on
+     * {@code groundTicks > 1}, so if the play fired on the same tick the
+     * bot landed (groundTicks = 1) the launch was silently dropped.
+     * Direct {@link Bot#setVelocity} is unconditional.
      */
     private boolean executeWindMaceSmash(Bot bot, LivingEntity target) {
         int windSlot = bot.getBotInventory().findHotbar(Material.WIND_CHARGE);
@@ -703,24 +706,22 @@ public final class OpportunityScanner {
         if (hotbarWind < 0) return false;
         bot.selectHotbarSlot(hotbarWind);
 
-        Location feet = bot.getLocation();
         bot.faceLocation(target.getLocation());
         bot.punch();
-
-        // Spawn ~0.3 blocks below the feet with straight-down velocity. The
-        // wind charge detonates on ground impact and its knockback launches
-        // the bot straight up.
-        Location spawn = feet.clone().add(0, 0.3, 0);
-        spawn.getWorld().spawn(spawn, WindCharge.class, w -> {
-            w.setVelocity(new Vector(0, -1.2, 0));
-            w.setShooter(bot.getBukkitEntity());
-        });
-        spawn.getWorld().playSound(feet, Sound.ENTITY_WIND_CHARGE_THROW, 1f, 1.1f);
+        bot.getLocation().getWorld().playSound(bot.getLocation(),
+                Sound.ENTITY_WIND_CHARGE_THROW, 1f, 1.1f);
         consumeOne(bot, Material.WIND_CHARGE);
 
-        // Safety-net upward impulse in case the wind-charge blast is late.
-        Vector current = bot.getVelocity();
-        bot.jump(new Vector(current.getX() * 0.4, 1.35, current.getZ() * 0.4));
+        // Bias the horizontal component toward the target so the bot lands
+        // on them, not just straight up-and-down.
+        Vector toTarget = target.getLocation().toVector()
+                .subtract(bot.getLocation().toVector()).setY(0);
+        if (toTarget.lengthSquared() > 1.0e-6) {
+            toTarget.normalize().multiply(0.25);
+        } else {
+            toTarget.setX(0).setZ(0);
+        }
+        bot.setVelocity(new Vector(toTarget.getX(), 1.45, toTarget.getZ()));
 
         // Swap to mace same tick. MaceBehavior takes over from here via the
         // AIRBORNE commitment branch in CombatDirector.
