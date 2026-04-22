@@ -6,22 +6,33 @@ import com.google.gson.JsonParser;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class MojangAPI {
 
-    private static final boolean CACHE_ENABLED = false;
-
-    private static final Map<String, String[]> CACHE = new HashMap<>();
+    // Cache positive Mojang API lookups so repeated /bot create <name> / loadouts
+    // don't re-hit the network every time. The previous cache was disabled
+    // (CACHE_ENABLED=false) because it also cached nulls from transient API
+    // failures, turning a momentary hiccup into a permanent "no skin" result;
+    // this rewrite only caches successful pulls.
+    //
+    // TODO(B-13): pullFromAPI is still blocking and is called from the main thread
+    // via Bot.createBot(String)/BotManagerImpl.createBots — a Mojang API latency
+    // spike still freezes the server for the first lookup. The full fix is an
+    // async CompletableFuture API and hopping back to main for the caller; that's
+    // a signature change through every caller so it lands in a separate commit.
+    private static final Map<String, String[]> CACHE = new ConcurrentHashMap<>();
 
     public static String[] getSkin(String name) {
-        if (CACHE_ENABLED && CACHE.containsKey(name)) {
-            return CACHE.get(name);
-        }
+        if (name == null) return null;
+        String[] cached = CACHE.get(name);
+        if (cached != null) return cached;
 
         String[] values = pullFromAPI(name);
-        CACHE.put(name, values);
+        if (values != null) {
+            CACHE.put(name, values);
+        }
         return values;
     }
 

@@ -1,5 +1,6 @@
 package net.nuggetmc.tplus.bot.combat;
 
+import net.nuggetmc.tplus.TerminatorPlus;
 import net.nuggetmc.tplus.bot.Bot;
 import net.nuggetmc.tplus.bot.loadout.BotInventory;
 import org.bukkit.Bukkit;
@@ -56,8 +57,10 @@ import org.bukkit.util.Vector;
  *   botOnFire             bot.getRemainingFireTicks() > 0
  *   targetThrowingPearl   nearby EnderPearl entity with target as shooter
  * </pre>
- * If a field is missing, the corresponding opportunity is skipped cleanly
- * via reflection-based field lookup with a safe default.
+ * Every field is populated unconditionally by {@link CombatSnapshot#update}
+ * every tick — the scanner reads them directly. (Earlier versions reflected
+ * into CombatSnapshot so newly-added optional fields wouldn't break the
+ * scanner's build; that indirection was dropped once the snapshot stabilized.)
  *
  * <p><b>Stateless.</b> Per-bot state lives on Bot (CombatState, Cooldowns).
  * The scanner instance can be shared across all bots.
@@ -170,11 +173,21 @@ public final class OpportunityScanner {
     private final Plugin plugin;
 
     public OpportunityScanner(Plugin plugin) {
+        if (plugin == null) {
+            throw new IllegalArgumentException(
+                "OpportunityScanner requires a non-null Plugin — its schedulers would NPE otherwise.");
+        }
         this.plugin = plugin;
     }
 
+    /**
+     * Use the {@link TerminatorPlus#getInstance()} singleton rather than looking
+     * the plugin up by name — {@code Bukkit.getPluginManager().getPlugin("TerminatorPlus")}
+     * returned {@code null} if the plugin was renamed or shaded under a different
+     * key, which later NPE'd inside {@code runTaskLater}.
+     */
     public OpportunityScanner() {
-        this(Bukkit.getPluginManager().getPlugin("TerminatorPlus"));
+        this(TerminatorPlus.getInstance());
     }
 
     /**
@@ -307,7 +320,7 @@ public final class OpportunityScanner {
         // 8. FACE_PLACE -- target threw pearl at us, crystal-shield in their path.
         //    Wiki "Face Placing": "to counter pearl flashing as crystals
         //    can catch your opponent's incoming pearl"
-        if (getBoolField(snap, "targetThrowingPearl", false)
+        if (snap.targetThrowingPearl
                 && inv.hasCrystalKit() && snap.botOnGround
                 && bot.getBotCooldowns().ready(FACE_PLACE_CD, alive)) {
             if (executeFacePlace(bot, target)) {
@@ -343,7 +356,7 @@ public final class OpportunityScanner {
         }
 
         // 11. FOOT_PIN -- target sprinting away + cobweb at feet.
-        if (getBoolField(snap, "targetSprintingAway", false) && snap.distance <= 5.0
+        if (snap.targetSprintingAway && snap.distance <= 5.0
                 && inv.hasCobweb()
                 && bot.getBotCooldowns().ready(FOOT_PIN_CD, alive)) {
             if (executeFootPin(bot, target)) {
@@ -368,7 +381,7 @@ public final class OpportunityScanner {
         // 13. WEB_DRAIN -- target stuck in cobweb + lava to deny their water.
         //    Wiki "Draining": "spamming lava ... If they use water to escape,
         //    the water will be destroyed and they will be trapped"
-        if (getBoolField(snap, "targetInCobweb", false) && snap.distance <= 5.0
+        if (snap.targetInCobweb && snap.distance <= 5.0
                 && hasItem(inv, Material.LAVA_BUCKET)
                 && bot.getBotCooldowns().ready(WEB_DRAIN_CD, alive)) {
             if (executeWebDrain(bot, target)) {
@@ -411,13 +424,13 @@ public final class OpportunityScanner {
         }
 
         // 21. INTERRUPT_BOW -- target drawing a bow at us.
-        if (getBoolField(snap, "targetDrawingBow", false) && snap.distance <= 24.0
+        if (snap.targetDrawingBow && snap.distance <= 24.0
                 && bot.getBotCooldowns().ready(INTERRUPT_BOW_CD, alive)) {
             if (tryInterrupt(bot, target, inv, INTERRUPT_BOW_CD, alive, 25)) return true;
         }
 
         // 22. INTERRUPT_POTION -- target drinking a potion.
-        if (getBoolField(snap, "targetDrinkingPotion", false) && snap.distance <= 14.0
+        if (snap.targetDrinkingPotion && snap.distance <= 14.0
                 && bot.getBotCooldowns().ready(INTERRUPT_POTION_CD, alive)) {
             if (tryInterrupt(bot, target, inv, INTERRUPT_POTION_CD, alive, 30)) return true;
         }
@@ -467,7 +480,7 @@ public final class OpportunityScanner {
         }
 
         // 27. SPLASH_SLOWNESS -- pursuing fleeing target.
-        if (getBoolField(snap, "targetSprintingAway", false) && snap.distance <= 6.0
+        if (snap.targetSprintingAway && snap.distance <= 6.0
                 && !targetHasEffect(target, PotionEffectType.SLOWNESS)
                 && hasSplashOf(inv, PotionType.SLOWNESS)
                 && bot.getBotCooldowns().ready(SPLASH_SLOW_CD, alive)) {
@@ -501,7 +514,7 @@ public final class OpportunityScanner {
         }
 
         // 30. FIRE_RES_BUFF -- standing in/near lava, drink Fire Resistance.
-        if ((getBoolField(snap, "botInLavaArea", false) || getBoolField(snap, "botOnFire", false))
+        if ((snap.botInLavaArea || snap.botOnFire)
                 && !botHasEffect(bot, PotionEffectType.FIRE_RESISTANCE)
                 && hasDrinkable(inv, PotionType.FIRE_RESISTANCE)
                 && bot.getBotCooldowns().ready(FIRE_RES_CD, alive)) {
@@ -531,7 +544,7 @@ public final class OpportunityScanner {
         //    you pick it back up but still ignite them"
         if (snap.distance <= MELEE_RANGE && snap.botOnGround
                 && hasItem(inv, Material.LAVA_BUCKET)
-                && !getBoolField(snap, "targetInWater", false)
+                && !snap.targetInWater
                 && bot.getBotCooldowns().ready(LAVA_PIN_CD, alive)) {
             if (executeLavaPin(bot, target)) {
                 bot.getBotCooldowns().set(LAVA_PIN_CD, 80, alive);
@@ -542,7 +555,7 @@ public final class OpportunityScanner {
         // 33. FIRE_ZONE -- area denial with flint+steel/fire charge.
         if (snap.distance <= 4.5 && snap.botOnGround
                 && (hasItem(inv, Material.FLINT_AND_STEEL) || hasItem(inv, Material.FIRE_CHARGE))
-                && !getBoolField(snap, "targetInWater", false)
+                && !snap.targetInWater
                 && bot.getBotCooldowns().ready(FIRE_ZONE_CD, alive)) {
             if (executeFireZone(bot, target, inv)) {
                 bot.getBotCooldowns().set(FIRE_ZONE_CD, 60, alive);
@@ -551,7 +564,7 @@ public final class OpportunityScanner {
         }
 
         // 34. WATER_DOUSE_SELF -- bot on fire + water bucket.
-        if (getBoolField(snap, "botOnFire", false) && hasItem(inv, Material.WATER_BUCKET)
+        if (snap.botOnFire && hasItem(inv, Material.WATER_BUCKET)
                 && bot.getBotCooldowns().ready(WATER_DOUSE_CD, alive)) {
             if (executeWaterDouse(bot)) {
                 bot.getBotCooldowns().set(WATER_DOUSE_CD, 40, alive);
@@ -560,7 +573,7 @@ public final class OpportunityScanner {
         }
 
         // 35. TNT_TRAP -- target stuck in cobweb + TNT + ignition source.
-        if (getBoolField(snap, "targetInCobweb", false) && snap.distance <= 5.0
+        if (snap.targetInCobweb && snap.distance <= 5.0
                 && hasItem(inv, Material.TNT)
                 && (hasItem(inv, Material.FLINT_AND_STEEL) || hasItem(inv, Material.FIRE_CHARGE))
                 && bot.getBotCooldowns().ready(TNT_TRAP_CD, alive)) {
@@ -1306,7 +1319,7 @@ public final class OpportunityScanner {
         // Wiki: "Slow falling makes it very difficult and slow for your opponent to crit"
         if (hasSlowFall && snap.targetAirborne) return PotionType.SLOW_FALLING;
         // Wiki: "Slowness ... if you are to give chase"
-        if (hasSlowness && getBoolField(snap, "targetSprintingAway", false)) return PotionType.SLOWNESS;
+        if (hasSlowness && snap.targetSprintingAway) return PotionType.SLOWNESS;
         // Wiki: "weakness is great for extended trades"
         if (hasWeakness && snap.distance <= 8.0) return PotionType.WEAKNESS;
         // Wiki: "deal light chip damage"
@@ -1449,20 +1462,6 @@ public final class OpportunityScanner {
     // ==================================================================
     // MISC HELPERS
     // ==================================================================
-
-    /**
-     * Read a boolean snapshot field by name with a fallback default.
-     * Lets the scanner reference fields that may be added to CombatSnapshot
-     * in a future patch without a hard compile dependency.
-     */
-    private static boolean getBoolField(CombatSnapshot snap, String fieldName, boolean fallback) {
-        try {
-            java.lang.reflect.Field f = CombatSnapshot.class.getField(fieldName);
-            return f.getBoolean(snap);
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            return fallback;
-        }
-    }
 
     private static boolean armorNeedsRepair(Bot bot) {
         PlayerInventory inv = bot.getBukkitEntity().getInventory();

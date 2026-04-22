@@ -1,5 +1,6 @@
 package net.nuggetmc.tplus.bot.combat;
 
+import net.nuggetmc.tplus.TerminatorPlus;
 import net.nuggetmc.tplus.bot.Bot;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -43,11 +44,23 @@ public final class ComboBehavior {
     private final Map<UUID, Integer> active = new HashMap<>();
 
     public ComboBehavior(Plugin plugin) {
+        if (plugin == null) {
+            throw new IllegalArgumentException(
+                "ComboBehavior requires a non-null Plugin — runTaskLater on a null plugin NPEs.");
+        }
         this.plugin = plugin;
     }
 
+    /**
+     * Convenience constructor that grabs the TerminatorPlus singleton directly
+     * rather than going through {@code Bukkit.getPluginManager().getPlugin("TerminatorPlus")}.
+     * The previous by-name lookup returned {@code null} if the plugin was renamed /
+     * shaded under a different key, which later NPE'd inside {@code runTaskLater};
+     * {@link TerminatorPlus#getInstance()} is always correct once {@code onEnable}
+     * has run (which is well before any bot exists to combo).
+     */
     public ComboBehavior() {
-        this(Bukkit.getPluginManager().getPlugin("TerminatorPlus"));
+        this(TerminatorPlus.getInstance());
     }
 
     public boolean inProgress(Bot bot) {

@@ -84,14 +84,26 @@ public final class BotInventoryGUI implements InventoryHolder {
     public void syncToBot() {
         // Write hotbar + storage directly to the NMS Inventory, bypassing the Bukkit
         // container-transaction system (which Paper 26.x would roll back for a MockConnection).
+        //
+        // Important: skip the write when the incoming stack is content-equal to the
+        // existing one. NMS setItem unconditionally replaces the slot's stack reference,
+        // and vanilla Player.tick's item-change detection (getMainHandItem() !=
+        // lastItemInMainHand) fires on reference inequality and calls
+        // resetAttackStrengthTicker — which pins the bot's attack charge near zero
+        // forever so canSwing's 0.95 gate never passes.
         net.minecraft.world.entity.player.Inventory nmsInv = bot.getInventory();
+        boolean changed = false;
         for (int i = 0; i < 36; i++) {
             ItemStack it = inventory.getItem(i);
-            nmsInv.setItem(i, (it == null || it.getType() == Material.AIR)
+            net.minecraft.world.item.ItemStack incoming = (it == null || it.getType() == Material.AIR)
                     ? net.minecraft.world.item.ItemStack.EMPTY
-                    : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(it));
+                    : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(it);
+            net.minecraft.world.item.ItemStack existing = nmsInv.getItem(i);
+            if (net.minecraft.world.item.ItemStack.matches(existing, incoming)) continue;
+            nmsInv.setItem(i, incoming);
+            changed = true;
         }
-        nmsInv.setChanged();
+        if (changed) nmsInv.setChanged();
 
         // Armor + offhand go through bot.setItem() so ClientboundSetEquipmentPacket is sent.
         bot.setItem(safe(inventory.getItem(36)), org.bukkit.inventory.EquipmentSlot.HEAD);
@@ -102,6 +114,10 @@ public final class BotInventoryGUI implements InventoryHolder {
 
         // Auto-organise: move items into the best slots and select the primary weapon.
         bot.getBotInventory().autoEquip();
+        // A GUI save is a deliberate authoritative edit — lock out the 40-tick
+        // movement-kit refill so the user's "I removed the pearls on purpose"
+        // decision survives the next ensureMovementKit tick.
+        bot.getBotInventory().markLoadoutApplied();
     }
 
     /** Slots in the GUI that are decorative/locked. */

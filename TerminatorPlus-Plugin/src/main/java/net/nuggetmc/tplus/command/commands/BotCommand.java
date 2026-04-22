@@ -8,6 +8,7 @@ import net.nuggetmc.tplus.api.utils.ChatUtils;
 import net.nuggetmc.tplus.bot.Bot;
 import net.nuggetmc.tplus.bot.BotManagerImpl;
 import net.nuggetmc.tplus.bot.gui.BotInventoryGUI;
+import net.nuggetmc.tplus.bot.loadout.BotInventory;
 import net.nuggetmc.tplus.bot.preset.BotPreset;
 import net.nuggetmc.tplus.bot.preset.PresetManager;
 import net.nuggetmc.tplus.command.CommandHandler;
@@ -896,6 +897,10 @@ public class BotCommand extends CommandInstance {
             return;
         }
 
+        // `clear` releases the loadout lock so baseline movement-kit refills resume;
+        // every other preset is a deliberate authoritative kit.
+        boolean respectAfterApply = !"clear".equals(key);
+
         if (botName != null && !botName.isEmpty()) {
             Location viewer = sender instanceof Player p ? p.getLocation() : null;
             Bot bot = findBot(botName, viewer);
@@ -903,7 +908,7 @@ public class BotCommand extends CommandInstance {
                 sender.sendMessage(ChatColor.RED + "Bot not found: " + ChatColor.YELLOW + botName);
                 return;
             }
-            applyLoadoutToBot(bot, kit);
+            applyLoadoutToBot(bot, kit, respectAfterApply);
             sender.sendMessage("Applied loadout " + ChatColor.YELLOW + key + ChatColor.RESET + " to " + ChatColor.GREEN + bot.getBotName() + ChatColor.RESET + ".");
             return;
         }
@@ -911,20 +916,27 @@ public class BotCommand extends CommandInstance {
         int count = 0;
         for (Terminator t : manager.fetch()) {
             if (!(t instanceof Bot bot)) continue;
-            applyLoadoutToBot(bot, kit);
+            applyLoadoutToBot(bot, kit, respectAfterApply);
             count++;
         }
         sender.sendMessage("Applied loadout " + ChatColor.YELLOW + key + ChatColor.RESET + " to " + ChatColor.BLUE + count + ChatColor.RESET + " bot(s).");
     }
 
-    private static void applyLoadoutToBot(Bot bot, ItemStack[] kit) {
+    private static void applyLoadoutToBot(Bot bot, ItemStack[] kit, boolean respectAfterApply) {
         // Clear via NMS too — Bukkit's PlayerInventory.clear hits the same
         // container-transaction path that gets rolled back for bots.
+        // Skip writes when the slot is already empty to avoid resetting the
+        // attack-strength ticker on the mainhand slot (see the same guard in
+        // BotInventoryGUI.syncToBot and BotInventory.setSelectedHotbarSlot).
         net.minecraft.world.entity.player.Inventory nmsInv = bot.getInventory();
+        boolean changed = false;
         for (int i = 0; i < 36; i++) {
-            nmsInv.setItem(i, net.minecraft.world.item.ItemStack.EMPTY);
+            if (!nmsInv.getItem(i).isEmpty()) {
+                nmsInv.setItem(i, net.minecraft.world.item.ItemStack.EMPTY);
+                changed = true;
+            }
         }
-        nmsInv.setChanged();
+        if (changed) nmsInv.setChanged();
         bot.setItem(new ItemStack(Material.AIR), EquipmentSlot.HEAD);
         bot.setItem(new ItemStack(Material.AIR), EquipmentSlot.CHEST);
         bot.setItem(new ItemStack(Material.AIR), EquipmentSlot.LEGS);
@@ -938,7 +950,16 @@ public class BotCommand extends CommandInstance {
         bot.selectHotbarSlot(0);
         // Run autoEquip so any "wind charges in offhand when mace in hand"
         // rule (see BotInventory.autoEquip) takes effect.
-        bot.getBotInventory().autoEquip();
+        BotInventory inv = bot.getBotInventory();
+        inv.autoEquip();
+        // Flip the loadout lock so the 40-tick ensureMovementKit refill respects
+        // what the preset actually chose (including deliberate omission of pearls /
+        // wind charges). The `clear` preset passes false to restore the default refill.
+        if (respectAfterApply) {
+            inv.markLoadoutApplied();
+        } else {
+            inv.markLoadoutCleared();
+        }
     }
 
     @Autofill

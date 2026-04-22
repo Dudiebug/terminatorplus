@@ -399,11 +399,47 @@ public class Bot extends ServerPlayer implements Terminator {
         for (int i = chunkPosition().x() - 1; i <= chunkPosition().x() + 1; i++) {
             for (int j = chunkPosition().z() - 1; j <= chunkPosition().z() + 1; j++) {
                 LevelChunk chunk = world.getChunk(i, j);
-
-                if (!chunk.loaded) {
-                    chunk.loaded = true;
-                }
+                markChunkLoaded(chunk);
             }
+        }
+    }
+
+    /**
+     * Flip {@code LevelChunk.loaded} true without a direct field read/write.
+     *
+     * <p>In Paper 26.1.x the field is package-private and reading it from this
+     * plugin package throws {@code IllegalAccessError} as soon as the JIT
+     * touches it, so we reflect. The field has been named {@code loaded} since
+     * at least 1.17; if a future Paper rename lands, the startup log below
+     * surfaces the failure immediately rather than at first-tick.
+     */
+    private static final java.lang.reflect.Field CHUNK_LOADED_FIELD;
+
+    static {
+        java.lang.reflect.Field found = null;
+        try {
+            found = LevelChunk.class.getDeclaredField("loaded");
+            found.setAccessible(true);
+        } catch (NoSuchFieldException e) {
+            try {
+                // Defensive: some mappings expose the same flag as `isClientLightReady`-adjacent.
+                found = LevelChunk.class.getSuperclass().getDeclaredField("loaded");
+                found.setAccessible(true);
+            } catch (NoSuchFieldException ignored) {
+                // Intentionally null — loadChunks() will no-op below.
+            }
+        }
+        CHUNK_LOADED_FIELD = found;
+    }
+
+    private static void markChunkLoaded(LevelChunk chunk) {
+        if (CHUNK_LOADED_FIELD == null) return;
+        try {
+            if (!CHUNK_LOADED_FIELD.getBoolean(chunk)) {
+                CHUNK_LOADED_FIELD.setBoolean(chunk, true);
+            }
+        } catch (IllegalAccessException ignored) {
+            // Can't happen — field was setAccessible(true) at class init.
         }
     }
 
@@ -933,8 +969,35 @@ public class Bot extends ServerPlayer implements Terminator {
 
         org.bukkit.inventory.PlayerInventory inv = getBukkitEntity().getInventory();
         if (slot == EquipmentSlot.MAINHAND) {
+            // CRITICAL: vanilla Player.tick detects main-hand item changes by REFERENCE
+            // (getMainHandItem() != lastItemInMainHand) and calls resetAttackStrengthTicker()
+            // on any mismatch. Our callers (fallDamageCheck, attemptBlockPlace, autoEquip,
+            // selectHotbarSlot, clutch tools) routinely pass a brand-new ItemStack that is
+            // content-equal to what's already in the hand; without a content-equality skip
+            // here, every one of those calls pins the bot's attack charge near zero so
+            // canSwing's 0.95 gate never passes and the bot never crits. The log at
+            // t=272..292 shows this exact pattern — a successful 1.00-charge hit followed by
+            // charge resets to 0.00 every few ticks as fallDamageCheck writes WATER_BUCKET
+            // (and similar paths write cobblestone / bucket / clutch items) on each tick.
+            //
+            // We compare via the NMS net.minecraft.world.item.ItemStack.matches on the
+            // asNMSCopy of both the incoming stack and the current hand. Same content ->
+            // skip the setItemInMainHand call AND skip the ClientboundSetEquipmentPacket
+            // (clients already believe the slot holds this item, because they got the
+            // packet for the first write).
+            org.bukkit.inventory.ItemStack existing = inv.getItemInMainHand();
+            net.minecraft.world.item.ItemStack incomingNms = CraftItemStack.asNMSCopy(item);
+            net.minecraft.world.item.ItemStack existingNms = CraftItemStack.asNMSCopy(existing);
+            if (net.minecraft.world.item.ItemStack.matches(existingNms, incomingNms)) {
+                return;
+            }
             inv.setItemInMainHand(item);
-        } else if (slot == EquipmentSlot.OFFHAND) {
+            sendPacket(new ClientboundSetEquipmentPacket(getId(), new ArrayList<>(Collections.singletonList(
+                    new Pair<>(slot, incomingNms)
+            ))));
+            return;
+        }
+        if (slot == EquipmentSlot.OFFHAND) {
             inv.setItemInOffHand(item);
         } else if (slot == EquipmentSlot.HEAD) {
             inv.setHelmet(item);

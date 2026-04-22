@@ -57,9 +57,23 @@ public final class BotCombatTiming {
         return bot.getAttackStrengthScale(0.0f) >= READY_CHARGE;
     }
 
-    /** More permissive gate for mace dive-impacts where the smash density bonus dominates. */
+    /**
+     * More permissive gate for mace dive-impacts where the smash density bonus dominates.
+     * Uses strict {@code >} to match vanilla's {@code attackStrengthScale > 0.848F} crit/sweep
+     * gate in {@code Player.attack} — {@code >=} would fire one tick early at the boundary.
+     */
     public static boolean smashChargeReady(Bot bot) {
-        return bot.getAttackStrengthScale(0.0f) >= SMASH_READY_CHARGE;
+        return bot.getAttackStrengthScale(0.0f) > SMASH_READY_CHARGE;
+    }
+
+    /**
+     * Like {@link #canSwing(Bot, LivingEntity)} but bypasses the i-frame block.
+     * Mace smashes scale damage with fall distance, so the landed {@code amount}
+     * trivially exceeds any prior {@code lastHurt} and the {@code amount - lastHurt}
+     * residual is still a meaningful hit inside the i-frame window.
+     */
+    public static boolean canSwingMaceSmash(Bot bot) {
+        return bot.getAttackStrengthScale(0.0f) > SMASH_READY_CHARGE;
     }
 
     /** True if hitting the target now would be wasted on its i-frame window. */

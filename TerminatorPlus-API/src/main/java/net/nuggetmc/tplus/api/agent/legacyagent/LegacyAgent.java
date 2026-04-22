@@ -351,19 +351,33 @@ public class LegacyAgent extends Agent {
     }
 
     private void fallDamageCheck(Terminator bot) {
-        if (bot.isFalling()) {
-            bot.look(BlockFace.DOWN);
+        if (!bot.isFalling()) return;
 
-            Material itemType;
+        Material itemType = bot.getDimension() == World.Environment.NETHER
+                ? Material.TWISTING_VINES
+                : Material.WATER_BUCKET;
 
-            if (bot.getDimension() == World.Environment.NETHER) {
-                itemType = Material.TWISTING_VINES;
-            } else {
-                itemType = Material.WATER_BUCKET;
+        LivingEntity le = bot.getBukkitEntity();
+        if (le instanceof org.bukkit.entity.Player p) {
+            ItemStack held = p.getInventory().getItemInMainHand();
+            if (held != null) {
+                Material heldType = held.getType();
+                // Don't swap the weapon out for a water bucket during a mace-smash dive.
+                // Vanilla mace fall-damage scaling means the smash ITSELF negates the fall
+                // damage on a successful hit, and writing a water bucket to mainhand mid-
+                // dive wipes the mace + resets attackStrengthTicker, so the crushing smash
+                // downgrades to a 0-damage air swing.
+                if (heldType == Material.MACE) return;
+                // Already holding the clutch item — no write needed. Just keep looking down.
+                if (heldType == itemType) {
+                    bot.look(BlockFace.DOWN);
+                    return;
+                }
             }
-
-            bot.setItem(new ItemStack(itemType));
         }
+
+        bot.look(BlockFace.DOWN);
+        bot.setItem(new ItemStack(itemType));
     }
 
     @Override

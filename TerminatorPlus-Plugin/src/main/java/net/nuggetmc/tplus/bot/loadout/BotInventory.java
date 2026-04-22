@@ -46,10 +46,47 @@ public final class BotInventory {
 
     private final Bot bot;
     private int selectedHotbarSlot;
+    /**
+     * When true, {@link #ensureMovementKit()} is a no-op — the bot's loadout
+     * is considered authoritative, including the deliberate absence of pearls /
+     * wind charges. Flipped on by {@link #markLoadoutApplied()} after
+     * {@code /bot loadout <name>} or a GUI save, flipped off by
+     * {@link #markLoadoutCleared()} (the {@code clear} preset or a manual reset).
+     *
+     * <p>Without this flag a user who drags pearls out of the GUI sees them
+     * re-appear two seconds later, silently overwriting their intent.
+     */
+    private boolean respectLoadout;
 
     public BotInventory(Bot bot) {
         this.bot = bot;
         this.selectedHotbarSlot = 0;
+        this.respectLoadout = false;
+    }
+
+    /**
+     * Mark the current inventory as a deliberate loadout application — subsequent
+     * {@link #ensureMovementKit()} calls will not re-stock pearls / wind charges
+     * that the loadout chose to omit.
+     */
+    public void markLoadoutApplied() {
+        this.respectLoadout = true;
+    }
+
+    /**
+     * Release the loadout lock so the baseline movement kit refill resumes.
+     * Called by the {@code clear} preset and by any future {@code /bot inv reset} path.
+     */
+    public void markLoadoutCleared() {
+        this.respectLoadout = false;
+    }
+
+    /**
+     * @return whether {@link #ensureMovementKit()} will skip on the next tick
+     *         because a loadout is considered authoritative.
+     */
+    public boolean isRespectingLoadout() {
+        return respectLoadout;
     }
 
     public Bot getBot() {
@@ -648,10 +685,13 @@ public final class BotInventory {
      * with the stack topped up to {@link #MOVEMENT_KIT_STACK}. If there are no free hotbar
      * slots, packs them into storage instead so they can be auto-equipped on the next pass.
      *
-     * <p>Bots get these unconditionally — they're treated as part of every bot's baseline kit
-     * rather than something a preset must opt into.
+     * <p>Bots get these as part of their baseline kit — but if a loadout has been applied
+     * (see {@link #markLoadoutApplied()}) we honor its intent and skip the refill entirely.
+     * Otherwise a user who drags pearls out of the GUI would see them re-appear every 40
+     * ticks, silently overwriting the edit.
      */
     public void ensureMovementKit() {
+        if (respectLoadout) return;
         ensureStocked(Material.ENDER_PEARL, MOVEMENT_KIT_STACK);
         ensureStocked(Material.WIND_CHARGE, MOVEMENT_KIT_STACK);
     }

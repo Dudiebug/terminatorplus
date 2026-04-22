@@ -154,22 +154,27 @@ public final class CombatDirector {
 
         boolean grounded = bot.isBotOnGround();
 
-        // Short-range ground engagement. Sword / axe take priority: a normal
-        // mace swing is 0.6 attack-speed / 3.6 DPS, worse than any sword.
-        // The mace is only correct here when the bot has no real melee weapon
-        // and can commit to a jump-smash (density + fall damage dominate).
-        // An opportunistic aerial smash from altitude is still handled by the
-        // aerial-dive branch above; this block governs ground combat only.
+        // Short-range ground engagement. A mace SMASH (airborne crit) does massive
+        // damage — density bonus + fall-damage scaling — and is the whole reason the
+        // mace kit exists. A normal mace SWING is only 3.6 DPS (worse than a sword),
+        // so when the smash is on cooldown we deliberately switch to the sword/axe.
+        //
+        // Historical bug: a previous version here also gated the smash on
+        // !hasRealMelee, which blocked the smash forever whenever the mace kit's
+        // secondary iron sword was present. The mace kit always ships with a sword
+        // (see buildLoadout("mace")), so the smash never actually fired in a real
+        // fight — the bot idled the mace for its entire life and melee'd with the
+        // sword only. The gate below restores the 5.0.0 priority: if mace cooldown
+        // is ready, commit to the smash; otherwise fall through to sword/axe.
         if (distance <= 3.5) {
             int sword = inv.findSword();
             int axe = inv.findAxe();
-            boolean hasRealMelee = sword >= 0 || axe >= 0;
 
-            boolean maceSmashReady = inv.hasMace() && grounded && !hasRealMelee
+            boolean maceSmashReady = inv.hasMace() && grounded
                     && bot.getBotCooldowns().ready(MaceBehavior.COOLDOWN_KEY, bot.getAliveTicks());
 
             if (maceSmashReady) {
-                CombatDebugger.weaponPick(bot, "MACE(smash-fallback)", distance, true);
+                CombatDebugger.weaponPick(bot, "MACE(smash)", distance, true);
                 selectType(inv, Material.MACE);
                 mace.ticksFor(bot, target, distance);
                 return true;

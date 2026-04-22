@@ -23,7 +23,6 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.permissions.ServerOperator;
 import org.bukkit.util.Vector;
 
-import java.beans.Statement;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.*;
@@ -34,18 +33,35 @@ public class Debugger {
     private final CommandSender sender;
     public static final Set<String> AUTOFILL_METHODS = new HashSet<>();
 
+    /**
+     * Whitelist of invocable debug methods keyed by name. Populated at class init
+     * from {@link Debugger}'s own declared methods, excluding internal plumbing
+     * ({@code print}, {@code execute}, {@code buildObjects}) and synthetic
+     * {@code lambda$} / {@code access$} helpers. Replaces the previous
+     * {@link java.beans.Statement}-based dispatch — Statement resolves by name
+     * against the whole class hierarchy, which could in principle invoke any
+     * public {@code Object} method (or any method a future refactor exposes),
+     * while this map is restricted to Debugger-defined commands only.
+     */
+    private static final Map<String, List<Method>> ALLOWED_METHODS = new HashMap<>();
+    private static final Set<String> RESERVED_NAMES = Set.of("print", "execute", "buildObjects");
+
     static {
         for (Method method : Debugger.class.getDeclaredMethods()) {
-            if (!method.getName().equals("print") && !method.getName().equals("execute") && !method.getName().equals("buildObjects")
-                    && !method.getName().startsWith("lambda$")) {
-                String autofill = method.getName() + "(";
-                for (Parameter par : method.getParameters()) {
-                    autofill += par.getType().getSimpleName() + ",";
-                }
-                autofill = method.getParameters().length > 0 ? autofill.substring(0, autofill.length() - 1) : autofill;
-                autofill += ")";
-                AUTOFILL_METHODS.add(autofill);
+            String mname = method.getName();
+            if (RESERVED_NAMES.contains(mname)) continue;
+            if (mname.startsWith("lambda$") || mname.startsWith("access$")) continue;
+            if (method.isSynthetic() || method.isBridge()) continue;
+
+            ALLOWED_METHODS.computeIfAbsent(mname, k -> new ArrayList<>()).add(method);
+
+            String autofill = mname + "(";
+            for (Parameter par : method.getParameters()) {
+                autofill += par.getType().getSimpleName() + ",";
             }
+            autofill = method.getParameters().length > 0 ? autofill.substring(0, autofill.length() - 1) : autofill;
+            autofill += ")";
+            AUTOFILL_METHODS.add(autofill);
         }
     }
 
@@ -66,15 +82,76 @@ public class Debugger {
             String name = cmd.substring(0, pts[0]);
             String content = cmd.substring(pts[0] + 1, pts[1]);
 
-            Object[] args = content.isEmpty() ? null : buildObjects(content);
+            Object[] args = content.isEmpty() ? new Object[0] : buildObjects(content);
 
-            Statement statement = new Statement(this, name, args);
+            List<Method> candidates = ALLOWED_METHODS.get(name);
+            if (candidates == null || candidates.isEmpty()) {
+                print("Error: \"" + ChatColor.AQUA + name + ChatColor.RESET + "\" is not a recognized debug method.");
+                return;
+            }
+
+            Method chosen = resolveOverload(candidates, args);
+            if (chosen == null) {
+                print("Error: no overload of \"" + ChatColor.AQUA + name + ChatColor.RESET
+                        + "\" matches " + args.length + " argument(s).");
+                return;
+            }
+
             print("Running the expression \"" + ChatColor.AQUA + cmd + ChatColor.RESET + "\"...");
-            statement.execute();
+            Object[] coerced = coerceArgs(chosen, args);
+            chosen.setAccessible(true);
+            chosen.invoke(this, coerced);
         } catch (Exception e) {
             print("Error: the expression \"" + ChatColor.AQUA + cmd + ChatColor.RESET + "\" failed to execute.");
             print(e.toString());
         }
+    }
+
+    /**
+     * Pick the overload of {@code candidates} whose arity matches {@code args}.
+     * We don't try to score by type-fit; the arity check plus the per-argument
+     * coercion in {@link #coerceArgs} is what {@code Statement.execute} used to
+     * do via its {@code java.beans.Expression} machinery.
+     */
+    private static Method resolveOverload(List<Method> candidates, Object[] args) {
+        for (Method m : candidates) {
+            if (m.getParameterCount() == args.length) return m;
+        }
+        return null;
+    }
+
+    /**
+     * Coerce the raw parsed args ({@link Object}: Integer / Double / Boolean / String)
+     * into the concrete parameter types of {@code target}. {@link #buildObjects}
+     * parses the text as Integer first, then Double, then Boolean, then String —
+     * so an {@code int} parameter slot receiving a parsed Double (e.g. "3.0")
+     * must widen back to int here.
+     */
+    private static Object[] coerceArgs(Method target, Object[] args) {
+        Class<?>[] paramTypes = target.getParameterTypes();
+        Object[] out = new Object[args.length];
+        for (int i = 0; i < args.length; i++) {
+            Object v = args[i];
+            Class<?> pt = paramTypes[i];
+            if (v == null) { out[i] = null; continue; }
+            if (pt.isInstance(v)) { out[i] = v; continue; }
+            if ((pt == int.class || pt == Integer.class) && v instanceof Number) {
+                out[i] = ((Number) v).intValue();
+            } else if ((pt == long.class || pt == Long.class) && v instanceof Number) {
+                out[i] = ((Number) v).longValue();
+            } else if ((pt == double.class || pt == Double.class) && v instanceof Number) {
+                out[i] = ((Number) v).doubleValue();
+            } else if ((pt == float.class || pt == Float.class) && v instanceof Number) {
+                out[i] = ((Number) v).floatValue();
+            } else if ((pt == boolean.class || pt == Boolean.class) && v instanceof Boolean) {
+                out[i] = v;
+            } else if (pt == String.class) {
+                out[i] = String.valueOf(v);
+            } else {
+                out[i] = v; // let invoke() fail loudly if truly incompatible
+            }
+        }
+        return out;
     }
 
     public Object[] buildObjects(String content) {
