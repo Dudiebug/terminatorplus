@@ -1490,6 +1490,13 @@ public final class OpportunityScanner {
                 return;
             }
         }
+        // Offhand fallback — wind charges in mace loadouts live there.
+        ItemStack off = raw.getItemInOffHand();
+        if (off != null && off.getType() == type) {
+            int amt = off.getAmount();
+            if (amt <= 1) bot.setItemOffhand(new ItemStack(Material.AIR));
+            else { off.setAmount(amt - 1); bot.setItemOffhand(off); }
+        }
     }
 
     /**
