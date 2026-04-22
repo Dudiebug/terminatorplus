@@ -1080,21 +1080,16 @@ public class LegacyAgent extends Agent {
     }
 
     private void preBreak(Terminator bot, LivingEntity player, Block block, LegacyLevel level) {
-        List<Material> materials = List.of(LegacyItems.PICKAXE, LegacyItems.AXE, LegacyItems.SHOVEL);
-        ItemStack optimal = new ItemStack(Material.AIR);
-        float optimalSpeed = 1;
-
-        for (Material mat : materials) {
-            ItemStack tool = new ItemStack(mat);
-            float destroySpeed = block.getDestroySpeed(tool);
-
-            if (destroySpeed > optimalSpeed) {
-                optimal = tool;
-                optimalSpeed = destroySpeed;
-            }
-        }
-
-        bot.setItem(optimal);
+        // Previously this method picked an "optimal" pickaxe/axe/shovel for
+        // the block and wrote it into the bot's mainhand via bot.setItem(tool).
+        // That routed through setItemInMainHand which writes into the SELECTED
+        // hotbar slot (almost always slot 0 = the bot's primary weapon), so
+        // every mining action silently overwrote the mace / sword / mace-kit
+        // loadout. block.breakNaturally() (the actual break call further in
+        // this class) doesn't care what the bot is holding, so the tool-swap
+        // was purely cosmetic while corrupting the inventory. Removed — the
+        // bot now mines with whatever it's currently holding and the block
+        // still breaks correctly.
 
         if (level.isSideDown() || level.isSideDown2()) {
             bot.setBotPitch(69);
@@ -1424,9 +1419,11 @@ public class LegacyAgent extends Agent {
             }
         }
 
-        if (boatCooldown.contains(npc)) return;
-
-        npc.setItem(null);
+        // Previously: npc.setItem(null) — intended to clear the mining tool
+        // back to empty hand, but the mining tool was never actually being
+        // placed (see preBreak), and setItem(null) writes AIR/defaultItem
+        // into the selected slot, wiping whatever weapon was there.
+        // CombatDirector re-selects the correct weapon each tick anyway.
     }
 
     private boolean onBoat(LivingEntity player) {
