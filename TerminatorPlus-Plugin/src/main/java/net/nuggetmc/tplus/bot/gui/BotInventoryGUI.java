@@ -100,8 +100,10 @@ public final class BotInventoryGUI implements InventoryHolder {
         bot.setItem(safe(inventory.getItem(39)), org.bukkit.inventory.EquipmentSlot.FEET);
         bot.setItem(safe(inventory.getItem(40)), org.bukkit.inventory.EquipmentSlot.OFF_HAND);
 
-        // Auto-organise: move items into the best slots and select the primary weapon.
-        bot.getBotInventory().autoEquip();
+        // Do NOT autoEquip here — that would reshuffle every item back into the
+        // default priority layout and wipe any manual arrangement the user made
+        // in the GUI. CombatDirector now scans all 36 slots via findHotbar and
+        // swaps weapons into the hotbar on demand, so freeform layouts work.
     }
 
     /** Slots in the GUI that are decorative/locked. */
