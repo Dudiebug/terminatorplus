@@ -79,6 +79,17 @@ public final class BotInventory {
      */
     public void setSelectedHotbarSlot(int slot) {
         if (slot < 0 || slot >= HOTBAR_SIZE) return;
+        // No-op early return: CombatDirector / OpportunityScanner call this
+        // every tick with the slot the bot is already holding. Without this
+        // guard, the setItem(item.clone(), HAND) call below writes a brand
+        // new ItemStack reference into the mainhand every tick. Vanilla
+        // Player.tick's item-change detection (getMainHandItem() !=
+        // lastItemInMainHand) fires on reference inequality and calls
+        // resetAttackStrengthTicker() — pinning the attack charge at ~0.08
+        // forever so canSwing's 0.95 gate never passes and the bot never
+        // swings or crits. With the guard, same-slot calls are no-ops, the
+        // ticker climbs unmolested, and the bot attacks at vanilla cadence.
+        if (this.selectedHotbarSlot == slot) return;
         this.selectedHotbarSlot = slot;
         // Sync NMS (Bukkit API route, since the NMS field is private in
         // Paper 26.1.2). setItemInMainHand below writes into whichever
