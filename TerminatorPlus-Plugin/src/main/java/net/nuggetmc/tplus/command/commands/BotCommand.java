@@ -918,12 +918,27 @@ public class BotCommand extends CommandInstance {
     }
 
     private static void applyLoadoutToBot(Bot bot, ItemStack[] kit) {
-        bot.getBukkitEntity().getInventory().clear();
+        // Clear via NMS too — Bukkit's PlayerInventory.clear hits the same
+        // container-transaction path that gets rolled back for bots.
+        net.minecraft.world.entity.player.Inventory nmsInv = bot.getInventory();
+        for (int i = 0; i < 36; i++) {
+            nmsInv.setItem(i, net.minecraft.world.item.ItemStack.EMPTY);
+        }
+        nmsInv.setChanged();
+        bot.setItem(new ItemStack(Material.AIR), EquipmentSlot.HEAD);
+        bot.setItem(new ItemStack(Material.AIR), EquipmentSlot.CHEST);
+        bot.setItem(new ItemStack(Material.AIR), EquipmentSlot.LEGS);
+        bot.setItem(new ItemStack(Material.AIR), EquipmentSlot.FEET);
+        bot.setItemOffhand(new ItemStack(Material.AIR));
+
         for (int i = 0; i < kit.length && i < 41; i++) {
             if (kit[i] == null) continue;
             applyLoadoutSlot(bot, i, kit[i].clone());
         }
         bot.selectHotbarSlot(0);
+        // Run autoEquip so any "wind charges in offhand when mace in hand"
+        // rule (see BotInventory.autoEquip) takes effect.
+        bot.getBotInventory().autoEquip();
     }
 
     @Autofill
@@ -959,6 +974,9 @@ public class BotCommand extends CommandInstance {
             case "mace" -> {
                 kit[0] = new ItemStack(Material.MACE);
                 kit[1] = new ItemStack(Material.IRON_SWORD);
+                ItemStack windCharges = new ItemStack(Material.WIND_CHARGE);
+                windCharges.setAmount(16);
+                kit[40] = windCharges; // offhand — wiki Mace-PvP pairing
                 kit[36] = new ItemStack(Material.NETHERITE_BOOTS);
                 kit[37] = new ItemStack(Material.NETHERITE_LEGGINGS);
                 kit[38] = new ItemStack(Material.NETHERITE_CHESTPLATE);
@@ -1207,7 +1225,18 @@ public class BotCommand extends CommandInstance {
 
     private static void applyLoadoutSlot(Bot bot, int slot, ItemStack item) {
         if (slot < 36) {
-            bot.getBukkitEntity().getInventory().setItem(slot, item);
+            // Bypass Bukkit's container-transaction system. Paper 26.x rolls
+            // back PlayerInventory.setItem on the next tick when MockConnection
+            // never ACKs the slot packet, which is why the mace (always placed
+            // at the selected slot 0 in mace-containing kits) was vanishing
+            // shortly after /bot loadout. Write straight into the NMS inventory
+            // and mark it dirty.
+            net.minecraft.world.entity.player.Inventory nmsInv = bot.getInventory();
+            net.minecraft.world.item.ItemStack nms = (item == null || item.getType() == Material.AIR)
+                    ? net.minecraft.world.item.ItemStack.EMPTY
+                    : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(item);
+            nmsInv.setItem(slot, nms);
+            nmsInv.setChanged();
         } else if (slot == 36) {
             bot.setItem(item, EquipmentSlot.FEET);
         } else if (slot == 37) {
