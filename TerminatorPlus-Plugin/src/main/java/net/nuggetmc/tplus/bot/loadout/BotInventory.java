@@ -182,7 +182,12 @@ public final class BotInventory {
     }
 
     public boolean hasWindCharge() {
-        return hasHotbar(Material.WIND_CHARGE);
+        if (hasHotbar(Material.WIND_CHARGE)) return true;
+        // Mace loadouts stash wind charges in the offhand (see autoEquip
+        // offhand priority), so the gates of WIND_MACE_SMASH, interrupt
+        // plays, etc. would otherwise think the bot has none.
+        ItemStack off = raw().getItemInOffHand();
+        return off != null && off.getType() == Material.WIND_CHARGE;
     }
 
     public boolean hasFirework() {
