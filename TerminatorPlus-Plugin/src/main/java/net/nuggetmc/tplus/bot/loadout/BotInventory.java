@@ -65,12 +65,25 @@ public final class BotInventory {
     }
 
     /**
-     * Change the selected hotbar slot. Syncs the mainhand item to
-     * whatever is at that slot so other players see the swap.
+     * Change the selected hotbar slot and send the mainhand-equipment
+     * packet so viewers see the swap.
+     *
+     * <p>Must sync the NMS {@code Inventory.selected} field too. Our
+     * own {@link #selectedHotbarSlot} tracker is a Bukkit-side mirror;
+     * {@code bot.setItem(item, HAND)} underneath calls
+     * {@code setItemInMainHand} which writes into whichever slot the
+     * NMS inventory thinks is selected. Without the NMS sync that was
+     * always slot 0 (the default), so every weapon swap silently
+     * overwrote slot 0 with the newly-selected item — the mace-
+     * disappearing bug.
      */
     public void setSelectedHotbarSlot(int slot) {
         if (slot < 0 || slot >= HOTBAR_SIZE) return;
         this.selectedHotbarSlot = slot;
+        // Sync NMS (Bukkit API route, since the NMS field is private in
+        // Paper 26.1.2). setItemInMainHand below writes into whichever
+        // slot this tracker says is selected.
+        raw().setHeldItemSlot(slot);
         ItemStack item = raw().getItem(slot);
         bot.setItem(item == null ? new ItemStack(Material.AIR) : item.clone(), EquipmentSlot.HAND);
     }
