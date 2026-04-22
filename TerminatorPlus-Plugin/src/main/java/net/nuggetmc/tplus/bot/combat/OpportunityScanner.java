@@ -681,39 +681,41 @@ public final class OpportunityScanner {
     }
 
     /**
-     * Wind-launched mace smash. Single-tick sequence:
-     *   1) consume a wind charge (the bot "uses" its charge — the physical
-     *      entity was unreliable, see note below),
-     *   2) directly assign the bot's upward velocity,
-     *   3) hotkey to the mace so the mace cooldown ticks during the ascent,
-     *   4) set CombatState.AIRBORNE so MaceBehavior's dive/impact path
-     *      takes over on subsequent ticks.
-     *
-     * <p>Earlier revisions spawned a WindCharge entity at the bot's feet
-     * with downward velocity, hoping its explosion would lift the bot.
-     * That produced zero lift: the vanilla knockback formula is
-     * {@code (target - explosion).normalize() * strength}, and with the
-     * charge detonating at feet-level the target vector is ~zero. Worse,
-     * {@code bot.jump(vel)} was used as a "safety net" but it gates on
-     * {@code groundTicks > 1}, so if the play fired on the same tick the
-     * bot landed (groundTicks = 1) the launch was silently dropped.
-     * Direct {@link Bot#setVelocity} is unconditional.
+     * Wind-launched mace smash — Scenario A: mace stays in main hand the
+     * whole time, so the 33.3-tick mace attack-strength recharge is the
+     * ONLY cooldown clock running. Single-tick sequence:
+     *   1) Put the mace in hand FIRST. This is the one-and-only item
+     *      switch in the play; vanilla Player resets attackStrengthTicker
+     *      on every item switch, so any later swap would restart the crit
+     *      recharge and the smash would land as a normal 6-dmg swing.
+     *   2) Consume one wind charge from anywhere in the inventory and
+     *      play the throw sound (no WindCharge entity is spawned — the
+     *      physical charge can't produce upward knockback from feet-level
+     *      origin because vanilla's (target-origin).normalize() factor is
+     *      zero at the bot's own position).
+     *   3) Directly bot.setVelocity to launch (~1.5 Y). Air time under
+     *      vanilla gravity gives ~36 ticks which clears the 33-tick mace
+     *      recharge window — the smash on impact is crit-eligible.
+     *   4) CombatState.AIRBORNE so MaceBehavior's dive path takes over
+     *      (track + steer + fire impact while still airborne so
+     *      fallDistance > 0).
      */
     private boolean executeWindMaceSmash(Bot bot, LivingEntity target) {
-        int windSlot = bot.getBotInventory().findHotbar(Material.WIND_CHARGE);
-        if (windSlot < 0) return false;
-        int hotbarWind = bot.getBotInventory().bringToHotbar(windSlot);
-        if (hotbarWind < 0) return false;
-        bot.selectHotbarSlot(hotbarWind);
+        // Step 1: mace in hand, one switch only.
+        int maceSlot = bot.getBotInventory().findHotbar(Material.MACE);
+        if (maceSlot < 0) return false;
+        int hotbarMace = bot.getBotInventory().bringToHotbar(maceSlot);
+        if (hotbarMace < 0) return false;
+        bot.selectHotbarSlot(hotbarMace);
 
+        // Step 2: pay the wind-charge cost, no entity spawn, no slot swap.
         bot.faceLocation(target.getLocation());
         bot.punch();
         bot.getLocation().getWorld().playSound(bot.getLocation(),
                 Sound.ENTITY_WIND_CHARGE_THROW, 1f, 1.1f);
         consumeOne(bot, Material.WIND_CHARGE);
 
-        // Bias the horizontal component toward the target so the bot lands
-        // on them, not just straight up-and-down.
+        // Step 3: direct launch, horizontal bias toward the target.
         Vector toTarget = target.getLocation().toVector()
                 .subtract(bot.getLocation().toVector()).setY(0);
         if (toTarget.lengthSquared() > 1.0e-6) {
@@ -721,19 +723,10 @@ public final class OpportunityScanner {
         } else {
             toTarget.setX(0).setZ(0);
         }
-        bot.setVelocity(new Vector(toTarget.getX(), 1.45, toTarget.getZ()));
+        bot.setVelocity(new Vector(toTarget.getX(), 1.5, toTarget.getZ()));
 
-        // Swap to mace same tick. MaceBehavior takes over from here via the
-        // AIRBORNE commitment branch in CombatDirector.
-        int maceSlot = bot.getBotInventory().findHotbar(Material.MACE);
-        if (maceSlot >= 0) {
-            int hotbarMace = bot.getBotInventory().bringToHotbar(maceSlot);
-            if (hotbarMace >= 0) bot.selectHotbarSlot(hotbarMace);
-        }
+        // Step 4: let MaceBehavior's AIRBORNE path finish the play.
         bot.getCombatState().setPhase(CombatState.Phase.AIRBORNE);
-
-        // Start the mace cooldown now — keeps the bot from immediately retrying
-        // if the smash whiffs and preserves the wiki-correct ~2.5s cadence.
         bot.getBotCooldowns().set(MaceBehavior.COOLDOWN_KEY, 55, bot.getAliveTicks());
         return true;
     }
