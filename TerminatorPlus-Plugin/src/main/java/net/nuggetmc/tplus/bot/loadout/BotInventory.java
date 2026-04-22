@@ -468,10 +468,32 @@ public final class BotInventory {
         pickAndEquip(pool, EquipmentSlot.LEGS,  "_LEGGINGS");
         pickAndEquip(pool, EquipmentSlot.FEET,  "_BOOTS");
 
-        // Offhand: totem > shield.
-        for (Material m : new Material[]{Material.TOTEM_OF_UNDYING, Material.SHIELD}) {
-            ItemStack found = removeFirst(pool, m);
-            if (found != null) { bot.setItemOffhand(found); break; }
+        // Offhand priority:
+        //  1. Wind charges, IF the bot has a mace too — wiki Mace-PvP kit
+        //     pairs the two so the bot can throw a wind charge from offhand
+        //     for a launch without swapping main-hand off the mace (which
+        //     would reset the attack-strength ticker and downgrade the
+        //     smash from a crit to a normal swing).
+        //  2. Totem of undying (clutch hit savior).
+        //  3. Shield.
+        boolean hasMaceInPool = false;
+        for (ItemStack p : pool) {
+            if (p != null && p.getType() == Material.MACE) { hasMaceInPool = true; break; }
+        }
+        boolean offhandSet = false;
+        if (hasMaceInPool) {
+            ItemStack wind = removeFirst(pool, Material.WIND_CHARGE);
+            if (wind != null) {
+                if (wind.getAmount() < 16) wind.setAmount(16);
+                bot.setItemOffhand(wind);
+                offhandSet = true;
+            }
+        }
+        if (!offhandSet) {
+            for (Material m : new Material[]{Material.TOTEM_OF_UNDYING, Material.SHIELD}) {
+                ItemStack found = removeFirst(pool, m);
+                if (found != null) { bot.setItemOffhand(found); break; }
+            }
         }
 
         // Hotbar: fill by priority order.
@@ -622,6 +644,17 @@ public final class BotInventory {
 
     private void ensureStocked(Material type, int target) {
         PlayerInventory inv = raw();
+        // Check offhand first — wind charges paired with a mace live there
+        // (see autoEquip's offhand priority). If we skipped it we'd duplicate
+        // the stack onto the hotbar every 40 ticks.
+        ItemStack off = inv.getItemInOffHand();
+        if (off != null && off.getType() == type) {
+            if (off.getAmount() < target) {
+                off.setAmount(target);
+                bot.setItemOffhand(off);
+            }
+            return;
+        }
         int slot = findHotbar(type);
         if (slot >= 0) {
             ItemStack held = inv.getItem(slot);
