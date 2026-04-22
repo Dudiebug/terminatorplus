@@ -718,6 +718,27 @@ public class BotCommand extends CommandInstance {
     }
 
     @Command(
+            name = "gather",
+            desc = "Teleport every living bot to your current location.",
+            aliases = {"tpall"}
+    )
+    public void gather(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(ChatColor.RED + "This command can only be run by a player.");
+            return;
+        }
+        Location dest = player.getLocation();
+        int moved = 0;
+        for (net.nuggetmc.tplus.api.Terminator t : manager.fetch()) {
+            if (!t.isBotAlive()) continue;
+            t.getBukkitEntity().teleport(dest);
+            moved++;
+        }
+        sender.sendMessage(ChatColor.YELLOW.toString() + moved + ChatColor.RESET
+                + " bot(s) gathered to you.");
+    }
+
+    @Command(
             name = "inventory",
             desc = "Opens the inventory editor GUI for a bot.",
             aliases = {"inv"},
