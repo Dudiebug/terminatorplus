@@ -18,25 +18,28 @@ public final class TridentBehavior implements WeaponBehavior {
 
     public static final String COOLDOWN_KEY = "trident";
     private static final int MAX_CHARGE_TICKS = 18;
+    private static final int MIN_RELEASE_TICKS = 6;
     private static final int RELEASE_COOLDOWN = 45;
-    private static final double MIN_DISTANCE = 5.0;
-    private static final double MAX_DISTANCE = 30.0;
+    public static final double MIN_DISTANCE = 5.0;
+    public static final double MAX_DISTANCE = 30.0;
+    public static final double MELEE_FALLBACK_DISTANCE = 5.0;
     private static final double THROW_BASE_SPEED = 2.5;
     private static final double THROW_MOMENTUM_BONUS = 1.4;
 
     @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
         int alive = bot.getAliveTicks();
+        CombatState state = bot.getCombatState();
+        boolean charging = state.getPhase() == CombatState.Phase.CHARGING;
         if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, alive)) {
             CombatDebugger.log(bot, "trident-skip", "reason=cooldown left=" + bot.getBotCooldowns().remaining(COOLDOWN_KEY, alive));
             return 0;
         }
-        if (distance < MIN_DISTANCE || distance > MAX_DISTANCE) {
+        if (!charging && (distance < MIN_DISTANCE || distance > MAX_DISTANCE)) {
             CombatDebugger.log(bot, "trident-skip", "reason=range dist=" + String.format("%.2f", distance));
             return 0;
         }
 
-        CombatState state = bot.getCombatState();
         Location targetLoc = target.getLocation();
         Location botLoc = bot.getLocation();
         Vector toTarget = targetLoc.toVector().subtract(botLoc.toVector());
@@ -62,9 +65,10 @@ public final class TridentBehavior implements WeaponBehavior {
             bot.walk(dir.clone().multiply(0.38));
         }
 
-        boolean out = distance < MIN_DISTANCE + 1.0 || distance > MAX_DISTANCE - 2.0;
-        CombatDebugger.log(bot, "trident-charge", "ticks=" + charge + " out=" + out + " dist=" + String.format("%.2f", distance));
-        if (charge >= MAX_CHARGE_TICKS || out) {
+        boolean out = distance < MIN_DISTANCE || distance > MAX_DISTANCE;
+        boolean aimReady = charge >= MIN_RELEASE_TICKS;
+        CombatDebugger.log(bot, "trident-charge", "ticks=" + charge + " out=" + out + " aimReady=" + aimReady + " dist=" + String.format("%.2f", distance));
+        if (charge >= MAX_CHARGE_TICKS || (aimReady && out) || (aimReady && hasClearThrow(bot, target))) {
             release(bot, target, dir);
             state.reset();
             bot.getBotCooldowns().set(COOLDOWN_KEY, RELEASE_COOLDOWN, alive);
@@ -72,6 +76,11 @@ public final class TridentBehavior implements WeaponBehavior {
         }
 
         return 0;
+    }
+
+    private boolean hasClearThrow(Bot bot, LivingEntity target) {
+        Location eye = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.2, 0);
+        return eye.getWorld() == target.getWorld();
     }
 
     private void release(Bot bot, LivingEntity target, Vector runDir) {

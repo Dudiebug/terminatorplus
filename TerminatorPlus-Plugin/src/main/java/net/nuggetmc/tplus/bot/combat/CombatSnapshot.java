@@ -138,13 +138,7 @@ public final class CombatSnapshot {
         Material t = hand.getType();
         return t == Material.GOLDEN_APPLE
                 || t == Material.ENCHANTED_GOLDEN_APPLE
-                || t == Material.COOKED_BEEF
-                || t == Material.COOKED_PORKCHOP
-                || t == Material.BREAD
-                || t == Material.COOKED_CHICKEN
-                || t == Material.COOKED_MUTTON
-                || t == Material.COOKED_SALMON
-                || t == Material.COOKED_COD;
+                || t.isEdible();
     }
 
     private static boolean isUsingItem(LivingEntity target, Material expected) {

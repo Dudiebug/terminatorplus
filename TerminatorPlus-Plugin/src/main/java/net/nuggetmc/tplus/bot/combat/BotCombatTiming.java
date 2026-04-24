@@ -3,6 +3,7 @@ package net.nuggetmc.tplus.bot.combat;
 import net.nuggetmc.tplus.bot.Bot;
 import org.bukkit.craftbukkit.entity.CraftLivingEntity;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.util.Vector;
 
 /**
  * Zero-allocation helpers that gate bot swings against:
@@ -31,6 +32,7 @@ public final class BotCombatTiming {
     public static final float READY_CHARGE = 0.95f;
     public static final float SMASH_READY_CHARGE = 0.848f;
     public static final int IFRAME_BLOCK_THRESHOLD = 10;
+    private static final double CRIT_DESCENT_VELOCITY = -0.06;
 
     private BotCombatTiming() {}
 
@@ -58,6 +60,34 @@ public final class BotCombatTiming {
         }
         CombatDebugger.swingGate(bot, charge, minCharge, iframes, true, "ready");
         return true;
+    }
+
+    public static boolean shouldWaitForCritWindow(Bot bot, LivingEntity target, double distance) {
+        if (bot.hasNeuralNetwork()) return false;
+        if (!bot.getBotInventory().isSelectedMeleeWeapon()) return false;
+        if (targetHasIFrames(target)) return false;
+        if (!chargeReady(bot)) return false;
+        if (distance > MeleeBehavior.ATTACK_RANGE) return false;
+
+        Vector velocity = bot.getVelocity();
+        if (isCritWindow(bot)) return false;
+        if (!bot.isBotOnGround() && velocity.getY() > CRIT_DESCENT_VELOCITY) {
+            CombatDebugger.log(bot, "melee-wait", "reason=crit-window vy=" + String.format("%.2f", velocity.getY()));
+            return true;
+        }
+        if (bot.isBotOnGround() && distance <= 3.2 && !bot.isSprinting()) {
+            bot.jump();
+            CombatDebugger.log(bot, "melee-wait", "reason=crit-jump");
+            return true;
+        }
+        return false;
+    }
+
+    public static boolean isCritWindow(Bot bot) {
+        return !bot.isBotOnGround()
+                && bot.getVelocity().getY() < CRIT_DESCENT_VELOCITY
+                && bot.fallDistance > 0.0f
+                && !bot.isSprinting();
     }
 
     /** Attack-strength charge scaled to [0, 1]; 1.0 means fully recharged. */
