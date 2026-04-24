@@ -35,9 +35,13 @@ public final class CombatDirector {
         double distance = bot.getLocation().distance(target.getLocation());
         BotInventory inv = bot.getBotInventory();
         int alive = bot.getAliveTicks();
+        // Tracked for dir-noop telemetry so post-fight log inspection
+        // can tell *which* branch almost matched before we fell through.
+        String lastBranch = "none";
 
         CombatDebugger.dirEntry(bot, distance, bot.getCombatState().getPhase(),
                 bot.isBotOnGround(), bot.getVelocity().getY());
+        CombatDebugger.inventorySnapshot(bot);
         if (CombatDebugger.isOn(bot)) {
             CombatDebugger.log(bot, "dir-ready",
                     "kit[mace=" + inv.hasMace()
@@ -67,6 +71,7 @@ public final class CombatDirector {
             return true;
         }
 
+        lastBranch = "airborne-mace";
         if (bot.getCombatState().getPhase() == CombatState.Phase.AIRBORNE && inv.hasMace()) {
             CombatDebugger.weaponPick(bot, "MACE(airborne-commit)", distance, true);
             selectType(inv, Material.MACE);
@@ -74,6 +79,7 @@ public final class CombatDirector {
             return true;
         }
 
+        lastBranch = "aerial-dive";
         if (bot.getCombatState().getPhase() == CombatState.Phase.IDLE
                 && !bot.isBotOnGround() && bot.getVelocity().getY() < -0.3
                 && inv.hasMace()) {
@@ -91,6 +97,7 @@ public final class CombatDirector {
             }
         }
 
+        lastBranch = "charging-trident";
         if (bot.getCombatState().getPhase() == CombatState.Phase.CHARGING && inv.hasTrident()) {
             CombatDebugger.weaponPick(bot, "TRIDENT(charging)", distance, true);
             selectType(inv, Material.TRIDENT);
@@ -114,6 +121,7 @@ public final class CombatDirector {
                             + " botOnFire=" + snapshot.botOnFire);
         }
 
+        lastBranch = "scanner";
         if (scanner.scan(bot, target, snapshot, combo)) {
             CombatDebugger.log(bot, "scanner-hit");
             return true;
@@ -128,6 +136,7 @@ public final class CombatDirector {
         }
 
         World.Environment env = bot.getDimension();
+        lastBranch = "crystal";
         if (env != World.Environment.NETHER && inv.hasCrystalKit()
                 && distance >= CrystalBehavior.MIN_DISTANCE && distance <= CrystalBehavior.MAX_DISTANCE
                 && bot.getBotCooldowns().ready(CrystalBehavior.COOLDOWN_KEY, alive)) {
@@ -137,6 +146,7 @@ public final class CombatDirector {
             return true;
         }
 
+        lastBranch = "anchor";
         if (env != World.Environment.NETHER && inv.hasAnchorKit()
                 && distance >= AnchorBombBehavior.MIN_DISTANCE && distance <= AnchorBombBehavior.MAX_DISTANCE
                 && bot.getBotCooldowns().ready(AnchorBombBehavior.COOLDOWN_KEY, alive)) {
@@ -153,6 +163,7 @@ public final class CombatDirector {
         boolean onlyTridentMelee = sword < 0 && axe < 0 && tridentMelee >= 0
                 && distance <= TridentBehavior.MELEE_FALLBACK_DISTANCE;
 
+        lastBranch = "melee";
         if (distance <= 3.5 || onlyTridentMelee) {
             boolean maceSmashReady = inv.hasMace() && grounded
                     && bot.getBotCooldowns().ready(MaceBehavior.COOLDOWN_KEY, alive);
@@ -180,6 +191,7 @@ public final class CombatDirector {
             return true;
         }
 
+        lastBranch = "trident";
         if (distance >= TridentBehavior.MIN_DISTANCE && distance <= TridentBehavior.MAX_DISTANCE && inv.hasTrident()
                 && bot.getBotCooldowns().ready(TridentBehavior.COOLDOWN_KEY, alive)) {
             CombatDebugger.weaponPick(bot, "TRIDENT", distance, true);
@@ -188,6 +200,7 @@ public final class CombatDirector {
             return true;
         }
 
+        lastBranch = "pearl";
         if (distance >= 28.0 && distance <= 64.0 && inv.hasEnderPearl()
                 && bot.getBotCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, alive)) {
             CombatDebugger.weaponPick(bot, "ENDER_PEARL", distance, true);
@@ -195,6 +208,7 @@ public final class CombatDirector {
             return true;
         }
 
+        lastBranch = "cobweb";
         if (inv.hasCobweb() && distance <= 4.5
                 && bot.getBotCooldowns().ready(UtilityBehavior.COOLDOWN_KEY, alive)) {
             if (utility.ticksFor(bot, target, distance) > 0) {
@@ -203,7 +217,7 @@ public final class CombatDirector {
             }
         }
 
-        CombatDebugger.dirNoop(bot, distance, "no-branch-matched");
+        CombatDebugger.dirNoop(bot, distance, "no-branch-matched", lastBranch);
         return false;
     }
 

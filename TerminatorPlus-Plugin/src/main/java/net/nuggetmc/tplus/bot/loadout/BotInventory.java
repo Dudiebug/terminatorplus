@@ -851,6 +851,29 @@ public final class BotInventory {
         if (respectLoadout) return;
         ensureStocked(Material.ENDER_PEARL, MOVEMENT_KIT_STACK);
         ensureStocked(Material.WIND_CHARGE, MOVEMENT_KIT_STACK);
+        ensurePrimaryWeaponOnHotbar();
+    }
+
+    /**
+     * Safety net — if the hotbar has no primary weapon (sword / axe / mace /
+     * trident) but storage still holds one, promote it onto the hotbar so
+     * the director isn't stuck firing {@code MELEE(empty)} for the rest of
+     * the fight. The selected slot is only overwritten if it was empty, so
+     * this does not reset the attack-strength ticker on a live weapon.
+     */
+    private void ensurePrimaryWeaponOnHotbar() {
+        PlayerInventory inv = raw();
+        for (int i = 0; i < HOTBAR_SIZE; i++) {
+            ItemStack it = inv.getItem(i);
+            if (it != null && isMeleeWeapon(it)) return;
+        }
+        for (int slot = HOTBAR_SIZE; slot < 36; slot++) {
+            ItemStack it = inv.getItem(slot);
+            if (it != null && isMeleeWeapon(it)) {
+                promoteToHotbar(slot);
+                return;
+            }
+        }
     }
 
     public static final int MOVEMENT_KIT_STACK = 16;
