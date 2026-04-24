@@ -5,10 +5,12 @@ import net.minecraft.network.Connection;
 import net.minecraft.network.PacketListener;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
+import org.bukkit.Bukkit;
 import org.jetbrains.annotations.NotNull;
 
 import java.lang.reflect.Field;
-import java.net.SocketAddress;
+import java.net.InetSocketAddress;
+import java.util.logging.Level;
 
 @SuppressWarnings("JavaReflectionMemberAccess")
 public class MockConnection extends Connection {
@@ -16,9 +18,51 @@ public class MockConnection extends Connection {
     private static final Field DISCONNECT_LISTENER_FIELD;
 
     static {
-        // Resolve by type + declaration order so this works across both Mojang-mapped
-        // (26.x, unobfuscated) and Spigot-reobf'd (1.21.x) runtimes, where field names
-        // are different (`packetListener`/`disconnectListener` vs obf letters).
+        // Resolve by Mojang-mapped name first (26.x and any runtime that runs
+        // Paper's unmapped internals — Paper stopped shipping reobf mappings,
+        // so every modern server is effectively Mojang-mapped at runtime).
+        // Fall back to type + declaration order if a future Paper bump renames
+        // either field; this keeps the plugin booting rather than NPE'ing on
+        // the first bot spawn, and the startup log makes the drift diagnosable.
+        Field packetListenerField = findFieldByName("packetListener");
+        Field disconnectListenerField = findFieldByName("disconnectListener");
+        if (packetListenerField == null || disconnectListenerField == null) {
+            Field[] fallback = resolveByTypeOrder();
+            if (disconnectListenerField == null) disconnectListenerField = fallback[0];
+            if (packetListenerField == null) packetListenerField = fallback[1];
+        }
+        if (disconnectListenerField == null || packetListenerField == null) {
+            throw new RuntimeException(
+                "MockConnection could not locate PacketListener fields on net.minecraft.network.Connection"
+                + " — this is almost certainly a Paper field rename; check Connection.class.getDeclaredFields()."
+            );
+        }
+        disconnectListenerField.setAccessible(true);
+        packetListenerField.setAccessible(true);
+        DISCONNECT_LISTENER_FIELD = disconnectListenerField;
+        PACKET_LISTENER_FIELD = packetListenerField;
+
+        // Loud, one-line diagnostic at classload so every Paper build bump leaves
+        // a breadcrumb in the log: "did the field names change?" becomes a grep.
+        try {
+            Bukkit.getLogger().log(Level.INFO,
+                "[TerminatorPlus] MockConnection resolved: packetListener=" + PACKET_LISTENER_FIELD.getName()
+                + ", disconnectListener=" + DISCONNECT_LISTENER_FIELD.getName()
+                + " on " + Connection.class.getName());
+        } catch (Throwable ignored) {
+            // Bukkit.getLogger() may not exist in a unit-test classpath; ignore.
+        }
+    }
+
+    private static Field findFieldByName(String name) {
+        try {
+            return Connection.class.getDeclaredField(name);
+        } catch (NoSuchFieldException e) {
+            return null;
+        }
+    }
+
+    private static Field[] resolveByTypeOrder() {
         Field disconnectListenerField = null;
         Field packetListenerField = null;
         for (Field field : Connection.class.getDeclaredFields()) {
@@ -30,20 +74,16 @@ public class MockConnection extends Connection {
                 break;
             }
         }
-        if (disconnectListenerField == null || packetListenerField == null) {
-            throw new RuntimeException("Could not locate PacketListener fields on Connection");
-        }
-        disconnectListenerField.setAccessible(true);
-        packetListenerField.setAccessible(true);
-        DISCONNECT_LISTENER_FIELD = disconnectListenerField;
-        PACKET_LISTENER_FIELD = packetListenerField;
+        return new Field[]{disconnectListenerField, packetListenerField};
     }
 
     public MockConnection() {
         super(PacketFlow.SERVERBOUND);
         this.channel = new MockChannel(null);
-        this.address = new SocketAddress() {
-        };
+        // Paper 26.1 hardened null-checks on address during login-phase packet emit.
+        // A sentinel loopback InetSocketAddress is cheap and satisfies every path
+        // that reflects on `this.address.getAddress()` / `getHostString()`.
+        this.address = new InetSocketAddress("127.0.0.1", 0);
     }
 
     @Override

@@ -16,17 +16,17 @@ import org.bukkit.inventory.PlayerInventory;
  *
  * <p>Slot layout (54 slots / 6 rows):
  * <pre>
- *  0–8    → hotbar (bot slots 0–8)
- *  9–17   → storage row 1 (bot slots 9–17)
- *  18–26  → storage row 2 (bot slots 18–26)
- *  27–35  → storage row 3 (bot slots 27–35)
- *  36     → head         (bot helmet)
- *  37     → chest        (bot chestplate / elytra)
- *  38     → legs         (bot leggings)
- *  39     → feet         (bot boots)
- *  40     → offhand      (bot offhand)
- *  41–44  → filler (barrier glass)
- *  45–53  → filler (barrier glass)
+ *  0-8    -> hotbar (bot slots 0-8)
+ *  9-17   -> storage row 1 (bot slots 9-17)
+ *  18-26  -> storage row 2 (bot slots 18-26)
+ *  27-35  -> storage row 3 (bot slots 27-35)
+ *  36     -> head         (bot helmet)
+ *  37     -> chest        (bot chestplate / elytra)
+ *  38     -> legs         (bot leggings)
+ *  39     -> feet         (bot boots)
+ *  40     -> offhand      (bot offhand)
+ *  41-44  -> filler (barrier glass)
+ *  45-53  -> filler (barrier glass)
  * </pre>
  */
 public final class BotInventoryGUI implements InventoryHolder {
@@ -82,16 +82,12 @@ public final class BotInventoryGUI implements InventoryHolder {
 
     /** Push GUI state back onto the bot (call when closing). */
     public void syncToBot() {
-        // Write hotbar + storage directly to the NMS Inventory, bypassing the Bukkit
-        // container-transaction system (which Paper 26.x would roll back for a MockConnection).
-        net.minecraft.world.entity.player.Inventory nmsInv = bot.getInventory();
+        ItemStack[] mainSnapshot = new ItemStack[36];
         for (int i = 0; i < 36; i++) {
             ItemStack it = inventory.getItem(i);
-            nmsInv.setItem(i, (it == null || it.getType() == Material.AIR)
-                    ? net.minecraft.world.item.ItemStack.EMPTY
-                    : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(it));
+            mainSnapshot[i] = it == null ? null : it.clone();
         }
-        nmsInv.setChanged();
+        bot.getBotInventory().applyMainInventorySnapshot(mainSnapshot);
 
         // Armor + offhand go through bot.setItem() so ClientboundSetEquipmentPacket is sent.
         bot.setItem(safe(inventory.getItem(36)), org.bukkit.inventory.EquipmentSlot.HEAD);
@@ -102,6 +98,10 @@ public final class BotInventoryGUI implements InventoryHolder {
 
         // Auto-organise: move items into the best slots and select the primary weapon.
         bot.getBotInventory().autoEquip();
+        // A GUI save is a deliberate authoritative edit - lock out the 40-tick
+        // movement-kit refill so the user's "I removed the pearls on purpose"
+        // decision survives the next ensureMovementKit tick.
+        bot.getBotInventory().markLoadoutApplied();
     }
 
     /** Slots in the GUI that are decorative/locked. */

@@ -4,8 +4,6 @@ import net.nuggetmc.tplus.bot.Bot;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.LivingEntity;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.util.Vector;
 
 /**
@@ -21,21 +19,44 @@ public final class UtilityBehavior implements WeaponBehavior {
 
     @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
-        if (distance > MAX_DISTANCE) return 0;
-        if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) return 0;
-        if (!bot.getBotInventory().hasCobweb()) return 0;
+        int alive = bot.getAliveTicks();
+        if (distance > MAX_DISTANCE) {
+            CombatDebugger.log(bot, "cobweb-skip", "reason=range dist=" + String.format("%.2f", distance));
+            return 0;
+        }
+        if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, alive)) {
+            CombatDebugger.log(bot, "cobweb-skip", "reason=cooldown left=" + bot.getBotCooldowns().remaining(COOLDOWN_KEY, alive));
+            return 0;
+        }
+        if (!bot.getBotInventory().hasCobweb()) {
+            CombatDebugger.log(bot, "cobweb-skip", "reason=no-cobweb");
+            return 0;
+        }
 
         // Only drop a cobweb if the target is fleeing *away* from us.
         Vector toTarget = target.getLocation().toVector().subtract(bot.getLocation().toVector()).setY(0);
-        if (toTarget.lengthSquared() < 1.0e-6) return 0;
+        if (toTarget.lengthSquared() < 1.0e-6) {
+            CombatDebugger.log(bot, "cobweb-skip", "reason=zero-vector");
+            return 0;
+        }
         toTarget.normalize();
         Vector vel = target.getVelocity().clone().setY(0);
         double fleeDot = vel.dot(toTarget);
-        if (fleeDot < FLEE_VELOCITY) return 0;
+        if (fleeDot < FLEE_VELOCITY) {
+            CombatDebugger.log(bot, "cobweb-skip", "reason=target-not-fleeing dot=" + String.format("%.2f", fleeDot));
+            return 0;
+        }
 
         int slot = bot.getBotInventory().findHotbar(Material.COBWEB);
-        if (slot < 0) return 0;
-        bot.selectHotbarSlot(slot);
+        if (slot < 0) {
+            CombatDebugger.log(bot, "cobweb-skip", "reason=no-hotbar-slot");
+            return 0;
+        }
+        slot = bot.getBotInventory().selectMainInventorySlot(slot);
+        if (slot < 0) {
+            CombatDebugger.log(bot, "cobweb-skip", "reason=no-selectable-slot");
+            return 0;
+        }
         bot.faceLocation(target.getLocation());
         bot.punch();
 
@@ -43,21 +64,16 @@ public final class UtilityBehavior implements WeaponBehavior {
         if (!block.getType().isAir()) {
             block = block.getRelative(0, 1, 0);
         }
-        if (!block.getType().isAir()) return 0;
-        block.setType(Material.COBWEB);
-
-        PlayerInventory inv = bot.getBotInventory().raw();
-        ItemStack held = inv.getItem(slot);
-        if (held != null) {
-            int amt = held.getAmount();
-            if (amt <= 1) inv.setItem(slot, new ItemStack(Material.AIR));
-            else {
-                held.setAmount(amt - 1);
-                inv.setItem(slot, held);
-            }
+        if (!block.getType().isAir()) {
+            CombatDebugger.log(bot, "cobweb-skip", "reason=placement-blocked");
+            return 0;
         }
+        block.setType(Material.COBWEB);
+        CombatDebugger.log(bot, "cobweb-place", "slot=" + slot + " dot=" + String.format("%.2f", fleeDot));
 
-        bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, bot.getAliveTicks());
+        bot.getBotInventory().decrementMainInventorySlot(slot, 1);
+
+        bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, alive);
         return COOLDOWN;
     }
 }

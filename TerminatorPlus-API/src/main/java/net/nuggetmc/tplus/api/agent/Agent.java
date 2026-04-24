@@ -79,12 +79,16 @@ public abstract class Agent {
     public void onBotKilledByPlayer(BotKilledByPlayerEvent event) {
         Player player = event.getPlayer();
 
-        scheduler.runTaskAsynchronously(plugin, () -> {
-            Terminator bot = manager.getBot(player);
-
-            if (bot != null) {
-                bot.incrementKills();
-            }
-        });
+        // Runs on the main thread: Bukkit fires BotKilledByPlayerEvent from the bot's
+        // tick path. The previous implementation hopped to async specifically to do the
+        // kill-credit bookkeeping off-thread, but both touches here — manager.getBot()
+        // and Terminator.incrementKills() — mutate state the main thread reads every
+        // tick, so the async hop was a data race without a backing synchronization
+        // primitive. Staying on main is correct, trivially thread-safe, and an order
+        // of a microsecond — not worth an async boundary.
+        Terminator bot = manager.getBot(player);
+        if (bot != null) {
+            bot.incrementKills();
+        }
     }
 }

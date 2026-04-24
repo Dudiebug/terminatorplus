@@ -26,20 +26,31 @@ public final class TridentBehavior implements WeaponBehavior {
 
     @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
-        if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) return 0;
-        if (distance < MIN_DISTANCE || distance > MAX_DISTANCE) return 0;
+        int alive = bot.getAliveTicks();
+        if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, alive)) {
+            CombatDebugger.log(bot, "trident-skip", "reason=cooldown left=" + bot.getBotCooldowns().remaining(COOLDOWN_KEY, alive));
+            return 0;
+        }
+        if (distance < MIN_DISTANCE || distance > MAX_DISTANCE) {
+            CombatDebugger.log(bot, "trident-skip", "reason=range dist=" + String.format("%.2f", distance));
+            return 0;
+        }
 
         CombatState state = bot.getCombatState();
         Location targetLoc = target.getLocation();
         Location botLoc = bot.getLocation();
         Vector toTarget = targetLoc.toVector().subtract(botLoc.toVector());
         toTarget.setY(0);
-        if (toTarget.lengthSquared() < 1.0e-6) return 0;
+        if (toTarget.lengthSquared() < 1.0e-6) {
+            CombatDebugger.log(bot, "trident-skip", "reason=zero-vector");
+            return 0;
+        }
         Vector dir = toTarget.normalize();
 
         bot.faceLocation(targetLoc);
 
         if (state.getPhase() != CombatState.Phase.CHARGING) {
+            CombatDebugger.log(bot, "trident-charge-start", "dist=" + String.format("%.2f", distance));
             state.setPhase(CombatState.Phase.CHARGING);
             state.setChargeDirection(dir);
         }
@@ -52,10 +63,11 @@ public final class TridentBehavior implements WeaponBehavior {
         }
 
         boolean out = distance < MIN_DISTANCE + 1.0 || distance > MAX_DISTANCE - 2.0;
+        CombatDebugger.log(bot, "trident-charge", "ticks=" + charge + " out=" + out + " dist=" + String.format("%.2f", distance));
         if (charge >= MAX_CHARGE_TICKS || out) {
             release(bot, target, dir);
             state.reset();
-            bot.getBotCooldowns().set(COOLDOWN_KEY, RELEASE_COOLDOWN, bot.getAliveTicks());
+            bot.getBotCooldowns().set(COOLDOWN_KEY, RELEASE_COOLDOWN, alive);
             return RELEASE_COOLDOWN;
         }
 
@@ -69,6 +81,8 @@ public final class TridentBehavior implements WeaponBehavior {
         Vector momentum = bot.getVelocity();
         double momentumBoost = Math.min(THROW_MOMENTUM_BONUS, momentum.length() * 1.2);
         Vector velocity = aim.multiply(THROW_BASE_SPEED + momentumBoost);
+        CombatDebugger.log(bot, "trident-release",
+                "speed=" + String.format("%.2f", velocity.length()) + " momentum=" + String.format("%.2f", momentum.length()));
 
         bot.punch();
 

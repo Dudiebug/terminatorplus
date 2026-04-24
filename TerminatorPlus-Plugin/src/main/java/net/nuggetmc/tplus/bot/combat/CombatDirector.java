@@ -43,9 +43,28 @@ public final class CombatDirector {
 
         double distance = bot.getLocation().distance(target.getLocation());
         BotInventory inv = bot.getBotInventory();
+        int alive = bot.getAliveTicks();
 
         CombatDebugger.dirEntry(bot, distance, bot.getCombatState().getPhase(),
                 bot.isBotOnGround(), bot.getVelocity().getY());
+        if (CombatDebugger.isOn(bot)) {
+            CombatDebugger.log(bot, "dir-ready",
+                    "kit[mace=" + inv.hasMace()
+                            + " trident=" + inv.hasTrident()
+                            + " pearl=" + inv.hasEnderPearl()
+                            + " wind=" + inv.hasWindCharge()
+                            + " crystal=" + inv.hasCrystalKit()
+                            + " anchor=" + inv.hasAnchorKit()
+                            + " cobweb=" + inv.hasCobweb()
+                            + "] cd[mace=" + bot.getBotCooldowns().ready(MaceBehavior.COOLDOWN_KEY, alive)
+                            + " trident=" + bot.getBotCooldowns().ready(TridentBehavior.COOLDOWN_KEY, alive)
+                            + " pearl=" + bot.getBotCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, alive)
+                            + " wind=" + bot.getBotCooldowns().ready(WindChargeBehavior.COOLDOWN_KEY, alive)
+                            + " crystal=" + bot.getBotCooldowns().ready(CrystalBehavior.COOLDOWN_KEY, alive)
+                            + " anchor=" + bot.getBotCooldowns().ready(AnchorBombBehavior.COOLDOWN_KEY, alive)
+                            + " cobweb=" + bot.getBotCooldowns().ready(UtilityBehavior.COOLDOWN_KEY, alive)
+                            + "]");
+        }
 
         // Passive behaviors run every tick regardless of weapon choice.
         elytra.tick(bot, target);
@@ -95,6 +114,7 @@ public final class CombatDirector {
             // CHARGING forever. Reset so the short-range melee branch below
             // can swing the trident as a melee stick.
             if (distance < 5.0 || distance > 28.0) {
+                CombatDebugger.log(bot, "trident-reset", "reason=distance-outside-charge-window dist=" + String.format("%.2f", distance));
                 bot.getCombatState().reset();
             } else {
                 CombatDebugger.weaponPick(bot, "TRIDENT(charging)", distance, true);
@@ -106,12 +126,36 @@ public final class CombatDirector {
 
         // Read the battlefield once, reuse across the scanner and the pipeline.
         snapshot.update(bot, target);
+        if (CombatDebugger.isOn(bot)) {
+            CombatDebugger.log(bot, "snapshot",
+                    "botHp=" + String.format("%.2f", snapshot.botHpFraction)
+                            + " tgtHp=" + String.format("%.2f", snapshot.targetHpFraction)
+                            + " targetAir=" + snapshot.targetAirborne
+                            + " targetBlocking=" + snapshot.targetBlocking
+                            + " targetEating=" + snapshot.targetEating
+                            + " openSky=" + snapshot.openSkyAboveBot
+                            + " targetAway=" + snapshot.targetSprintingAway
+                            + " targetBow=" + snapshot.targetDrawingBow
+                            + " targetPotion=" + snapshot.targetDrinkingPotion
+                            + " targetCobweb=" + snapshot.targetInCobweb
+                            + " botOnFire=" + snapshot.botOnFire);
+        }
 
         // Opportunity scanner first: every wiki-tier PvP play (crystals, cobwebs,
         // tipped arrows, interrupts, splash potions, combos) is evaluated here in
         // priority order. If anything fires, we're done this tick.
-        if (scanner.scan(bot, target, snapshot, combo)) {
+        boolean scannerHandled = scanner.scan(bot, target, snapshot, combo);
+        if (scannerHandled) {
+            CombatDebugger.log(bot, "scanner-hit");
             return true;
+        }
+        if (CombatDebugger.isOn(bot)) {
+            CombatDebugger.log(bot, "scanner-miss",
+                    "dist=" + String.format("%.2f", distance)
+                            + " targetAir=" + snapshot.targetAirborne
+                            + " targetBlocking=" + snapshot.targetBlocking
+                            + " targetNearWall=" + snapshot.targetNearWall
+                            + " targetAway=" + snapshot.targetSprintingAway);
         }
 
         // --- Standard priority pipeline (highest first) --------------------
@@ -154,22 +198,27 @@ public final class CombatDirector {
 
         boolean grounded = bot.isBotOnGround();
 
-        // Short-range ground engagement. Sword / axe take priority: a normal
-        // mace swing is 0.6 attack-speed / 3.6 DPS, worse than any sword.
-        // The mace is only correct here when the bot has no real melee weapon
-        // and can commit to a jump-smash (density + fall damage dominate).
-        // An opportunistic aerial smash from altitude is still handled by the
-        // aerial-dive branch above; this block governs ground combat only.
+        // Short-range ground engagement. A mace SMASH (airborne crit) does massive
+        // damage — density bonus + fall-damage scaling — and is the whole reason the
+        // mace kit exists. A normal mace SWING is only 3.6 DPS (worse than a sword),
+        // so when the smash is on cooldown we deliberately switch to the sword/axe.
+        //
+        // Historical bug: a previous version here also gated the smash on
+        // !hasRealMelee, which blocked the smash forever whenever the mace kit's
+        // secondary iron sword was present. The mace kit always ships with a sword
+        // (see buildLoadout("mace")), so the smash never actually fired in a real
+        // fight — the bot idled the mace for its entire life and melee'd with the
+        // sword only. The gate below restores the 5.0.0 priority: if mace cooldown
+        // is ready, commit to the smash; otherwise fall through to sword/axe.
         if (distance <= 3.5) {
             int sword = inv.findSword();
             int axe = inv.findAxe();
-            boolean hasRealMelee = sword >= 0 || axe >= 0;
 
-            boolean maceSmashReady = inv.hasMace() && grounded && !hasRealMelee
+            boolean maceSmashReady = inv.hasMace() && grounded
                     && bot.getBotCooldowns().ready(MaceBehavior.COOLDOWN_KEY, bot.getAliveTicks());
 
             if (maceSmashReady) {
-                CombatDebugger.weaponPick(bot, "MACE(smash-fallback)", distance, true);
+                CombatDebugger.weaponPick(bot, "MACE(smash)", distance, true);
                 selectType(inv, Material.MACE);
                 mace.ticksFor(bot, target, distance);
                 return true;
@@ -189,8 +238,7 @@ public final class CombatDirector {
                 }
             }
             if (slot >= 0) {
-                int hotbar = inv.bringToHotbar(slot);
-                if (hotbar >= 0) bot.selectHotbarSlot(hotbar);
+                inv.selectMainInventorySlot(slot);
                 CombatDebugger.weaponPick(bot, pickLabel, distance, true);
             } else {
                 CombatDebugger.weaponPick(bot, "MELEE(empty)", distance, true);
@@ -231,9 +279,6 @@ public final class CombatDirector {
     }
 
     private void selectType(BotInventory inv, Material type) {
-        int slot = inv.findHotbar(type);
-        if (slot < 0) return;
-        int hotbar = inv.bringToHotbar(slot);
-        if (hotbar >= 0) inv.getBot().selectHotbarSlot(hotbar);
+        inv.selectMaterial(type);
     }
 }
