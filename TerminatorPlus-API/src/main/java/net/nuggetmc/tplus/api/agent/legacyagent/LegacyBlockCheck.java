@@ -31,6 +31,27 @@ public class LegacyBlockCheck {
         this.agent = agent;
     }
 
+    // Guard for the clutch-path punches below. A bot mid-clutch is placing a
+    // block under its feet, not attacking — but the punch animation still
+    // burns the vanilla attack-strength ticker and shows up in logs as a
+    // wasted swing. Only emit the animation if a real target is in melee
+    // range AND the bot is holding a weapon that could actually damage it.
+    private static boolean isMeleeInHand(Terminator bot) {
+        if (!(bot.getBukkitEntity() instanceof Player player)) return false;
+        ItemStack held = player.getInventory().getItemInMainHand();
+        if (held == null) return false;
+        Material m = held.getType();
+        if (m == Material.AIR) return false;
+        if (m == Material.MACE || m == Material.TRIDENT) return true;
+        String name = m.name();
+        return name.endsWith("_SWORD") || name.endsWith("_AXE");
+    }
+
+    private static boolean targetInPunchRange(Terminator bot, LivingEntity target) {
+        if (target == null || !target.isValid() || target.isDead()) return false;
+        return bot.getLocation().distanceSquared(target.getLocation()) <= 16.0; // 4-block radius
+    }
+
     private void placeFinal(Terminator bot, LivingEntity player, Location loc) {
         if (loc.getBlock().getType() != Material.COBBLESTONE) {
             for (Player all : Bukkit.getOnlinePlayers())
@@ -221,7 +242,9 @@ public class LegacyBlockCheck {
                 bot.faceLocation(faceLoc);
             }, 1);
 
-            bot.punch();
+            if (isMeleeInHand(bot)) {
+                bot.punch();
+            }
             for (Player all : Bukkit.getOnlinePlayers())
                 all.playSound(loc, Sound.BLOCK_STONE_PLACE, SoundCategory.BLOCKS, 1, 1);
             // Was: bot.setItem(new ItemStack(COBBLESTONE)) — cosmetic, wiped
@@ -230,7 +253,7 @@ public class LegacyBlockCheck {
             // block regardless of what the bot is holding.
             loc.getBlock().setType(Material.COBBLESTONE);
     	}
-    	
+
     	return false;
     }
 
@@ -281,7 +304,9 @@ public class LegacyBlockCheck {
                     bot.faceLocation(faceLoc);
                 }, 1);
 
-                bot.punch();
+                if (isMeleeInHand(bot) && targetInPunchRange(bot, target)) {
+                    bot.punch();
+                }
                 bot.sneak();
                 for (Player all : Bukkit.getOnlinePlayers())
                     all.playSound(loc, Sound.BLOCK_STONE_PLACE, SoundCategory.BLOCKS, 1, 1);

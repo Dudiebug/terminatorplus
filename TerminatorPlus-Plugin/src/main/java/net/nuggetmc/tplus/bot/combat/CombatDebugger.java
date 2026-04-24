@@ -3,7 +3,9 @@ package net.nuggetmc.tplus.bot.combat;
 import net.nuggetmc.tplus.TerminatorPlus;
 import net.nuggetmc.tplus.bot.Bot;
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 
 import java.io.IOException;
 import java.util.Map;
@@ -32,6 +34,8 @@ public final class CombatDebugger {
 
     private static final Set<UUID> ENABLED = ConcurrentHashMap.newKeySet();
     private static final Map<UUID, Integer> LAST_PUNCH_TICK = new ConcurrentHashMap<>();
+    private static final Map<UUID, Integer> LAST_INV_DUMP_TICK = new ConcurrentHashMap<>();
+    private static final int INV_DUMP_INTERVAL_TICKS = 20; // ~1 s
     private static final ExecutorService FILE_IO = Executors.newSingleThreadExecutor(r -> {
         Thread thread = new Thread(r, "tplus-debug-writer");
         thread.setDaemon(true);
@@ -50,6 +54,7 @@ public final class CombatDebugger {
     public static void disable(UUID bot) {
         ENABLED.remove(bot);
         LAST_PUNCH_TICK.remove(bot);
+        LAST_INV_DUMP_TICK.remove(bot);
     }
 
     public static void enableAll() {
@@ -60,6 +65,7 @@ public final class CombatDebugger {
         allEnabled = false;
         ENABLED.clear();
         LAST_PUNCH_TICK.clear();
+        LAST_INV_DUMP_TICK.clear();
     }
 
     public static boolean isOn(Bot bot) {
@@ -93,9 +99,11 @@ public final class CombatDebugger {
         emit(bot, "weapon-pick", "w=" + weapon + " dist=" + fmt(distance) + " cdReady=" + cdReady);
     }
 
-    public static void dirNoop(Bot bot, double distance, String reason) {
+    public static void dirNoop(Bot bot, double distance, String reason, String branchAttempted) {
         if (!isOn(bot)) return;
-        emit(bot, "dir-noop", "dist=" + fmt(distance) + " reason=" + reason);
+        emit(bot, "dir-noop",
+                "dist=" + fmt(distance) + " reason=" + reason
+                        + " branch_attempted=" + (branchAttempted == null ? "none" : branchAttempted));
     }
 
     public static void meleeTry(Bot bot, float charge, boolean iframes, double distance) {
@@ -144,9 +152,22 @@ public final class CombatDebugger {
 
     /**
      * Logs every punch animation with cadence (ticks since prior punch), held
-     * item, and a best-effort source method from the current call stack.
+     * item, and a best-effort source from the current call stack. Delegates
+     * to {@link #punch(Bot, String)} with {@code null} so the caller-inference
+     * path still runs.
      */
     public static void punch(Bot bot) {
+        punch(bot, null);
+    }
+
+    /**
+     * Overload that accepts an explicit semantic tag (e.g. {@code "clutch"},
+     * {@code "pre-break"}, {@code "combat-swing"}). When {@code tag} is
+     * non-null the stack-walk in {@link #inferCaller()} is skipped and the
+     * tag is emitted verbatim as {@code src=<tag>}. When null we fall back
+     * to the stack-walk and map a few known frames to short semantic names.
+     */
+    public static void punch(Bot bot, String tag) {
         if (!isOn(bot)) return;
         UUID id = bot.getUUID();
         int now = bot.getAliveTicks();
@@ -155,8 +176,67 @@ public final class CombatDebugger {
         float charge = bot.getAttackStrengthScale(0.0f);
         ItemStack held = bot.getBukkitEntity().getInventory().getItemInMainHand();
         String heldType = (held == null) ? "AIR" : held.getType().name();
+        String src = (tag != null) ? tag : mapCallerToTag(inferCaller());
         emit(bot, "punch",
-                "dt=" + cadence + " held=" + heldType + " charge=" + fmt(charge) + " src=" + inferCaller());
+                "dt=" + cadence + " held=" + heldType + " charge=" + fmt(charge) + " src=" + src);
+    }
+
+    /**
+     * Translate raw {@code ClassName#method} frames into short, stable tags
+     * so post-fight grepping doesn't have to care about lambda suffixes.
+     * Anything not matched falls through to the original label.
+     */
+    private static String mapCallerToTag(String raw) {
+        if (raw == null || raw.isEmpty()) return "unknown";
+        if (raw.startsWith("LegacyBlockCheck#")) return "clutch";
+        if (raw.startsWith("LegacyAgent#lambda$checkUp")) return "pre-break";
+        if (raw.equals("Bot#attack")) return "attack";
+        if (raw.equals("Bot#attemptBlockPlace")) return "block-place";
+        return raw;
+    }
+
+    /**
+     * Periodic inventory snapshot — once per {@link #INV_DUMP_INTERVAL_TICKS}
+     * ticks per bot. Lets a post-fight telemetry pass see whether a
+     * {@code melee-skip} happened because the bot was holding COBBLESTONE,
+     * a gapple, or nothing at all.
+     */
+    public static void inventorySnapshot(Bot bot) {
+        if (!isOn(bot)) return;
+        UUID id = bot.getUUID();
+        int now = bot.getAliveTicks();
+        Integer last = LAST_INV_DUMP_TICK.get(id);
+        if (last != null && now - last < INV_DUMP_INTERVAL_TICKS) return;
+        LAST_INV_DUMP_TICK.put(id, now);
+
+        PlayerInventory inv = bot.getBukkitEntity().getInventory();
+        StringBuilder hot = new StringBuilder();
+        for (int i = 0; i < 9; i++) {
+            if (i > 0) hot.append(',');
+            hot.append(i).append(':').append(shortMat(inv.getItem(i)));
+        }
+        int heldSlot = inv.getHeldItemSlot();
+        ItemStack held = inv.getItem(heldSlot);
+        ItemStack off = inv.getItemInOffHand();
+        ItemStack helm = inv.getHelmet();
+        ItemStack chest = inv.getChestplate();
+        ItemStack legs = inv.getLeggings();
+        ItemStack boots = inv.getBoots();
+        emit(bot, "inventory",
+                "held=" + heldSlot + ":" + shortMat(held)
+                        + " hot=[" + hot + "]"
+                        + " off=" + shortMat(off)
+                        + " H=" + shortMat(helm)
+                        + " C=" + shortMat(chest)
+                        + " L=" + shortMat(legs)
+                        + " B=" + shortMat(boots));
+    }
+
+    private static String shortMat(ItemStack stack) {
+        if (stack == null) return "AIR";
+        Material m = stack.getType();
+        if (m == Material.AIR) return "AIR";
+        return m.name();
     }
 
     private static void emit(Bot bot, String event, String detail) {
