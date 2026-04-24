@@ -6,8 +6,11 @@ import com.google.gson.JsonParser;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
+import java.util.concurrent.CompletableFuture;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MojangAPI {
 
@@ -23,6 +26,12 @@ public class MojangAPI {
     // async CompletableFuture API and hopping back to main for the caller; that's
     // a signature change through every caller so it lands in a separate commit.
     private static final Map<String, String[]> CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, CompletableFuture<String[]>> IN_FLIGHT = new ConcurrentHashMap<>();
+    private static final ExecutorService LOOKUP_EXECUTOR = Executors.newFixedThreadPool(2, runnable -> {
+        Thread thread = new Thread(runnable, "tplus-mojang-skin");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     public static String[] getSkin(String name) {
         if (name == null) return null;
@@ -34,6 +43,23 @@ public class MojangAPI {
             CACHE.put(name, values);
         }
         return values;
+    }
+
+    /**
+     * Non-blocking skin lookup for command paths. Reuses the positive-result cache
+     * and deduplicates concurrent requests for the same name.
+     */
+    public static CompletableFuture<String[]> getSkinAsync(String name) {
+        if (name == null) {
+            return CompletableFuture.completedFuture(null);
+        }
+        String[] cached = CACHE.get(name);
+        if (cached != null) {
+            return CompletableFuture.completedFuture(cached);
+        }
+        return IN_FLIGHT.computeIfAbsent(name, key ->
+                CompletableFuture.supplyAsync(() -> getSkin(key), LOOKUP_EXECUTOR)
+                        .whenComplete((result, error) -> IN_FLIGHT.remove(key)));
     }
 
     // CATCHING NULL ILLEGALSTATEEXCEPTION BAD!!!! eventually fix from the getAsJsonObject thingy

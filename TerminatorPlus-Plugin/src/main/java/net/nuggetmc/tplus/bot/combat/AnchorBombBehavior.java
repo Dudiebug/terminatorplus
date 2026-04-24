@@ -8,8 +8,6 @@ import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.LivingEntity;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
 
 /**
  * Overworld / End respawn-anchor bomb: place a respawn anchor next to the target,
@@ -33,21 +31,37 @@ public final class AnchorBombBehavior implements WeaponBehavior {
     @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
         // Vanilla anchors only explode OUTSIDE the Nether. In the Nether they just set spawn.
-        if (target.getWorld().getEnvironment() == World.Environment.NETHER) return 0;
-        if (distance < MIN_DISTANCE || distance > MAX_DISTANCE) return 0;
-        if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) return 0;
+        int alive = bot.getAliveTicks();
+        if (target.getWorld().getEnvironment() == World.Environment.NETHER) {
+            CombatDebugger.log(bot, "anchor-skip", "reason=nether");
+            return 0;
+        }
+        if (distance < MIN_DISTANCE || distance > MAX_DISTANCE) {
+            CombatDebugger.log(bot, "anchor-skip", "reason=range dist=" + String.format("%.2f", distance));
+            return 0;
+        }
+        if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, alive)) {
+            CombatDebugger.log(bot, "anchor-skip", "reason=cooldown left=" + bot.getBotCooldowns().remaining(COOLDOWN_KEY, alive));
+            return 0;
+        }
 
         BotInventory inv = bot.getBotInventory();
-        if (!inv.hasAnchorKit()) return 0;
+        if (!inv.hasAnchorKit()) {
+            CombatDebugger.log(bot, "anchor-skip", "reason=no-kit");
+            return 0;
+        }
 
         World world = target.getWorld();
         Block placeAt = findPlaceableBlock(target.getLocation());
-        if (placeAt == null) return 0;
+        if (placeAt == null) {
+            CombatDebugger.log(bot, "anchor-skip", "reason=no-placeable");
+            return 0;
+        }
 
         placeAt.setType(Material.RESPAWN_ANCHOR);
-        consumeOne(inv.raw(), Material.RESPAWN_ANCHOR);
+        consumeOne(inv, Material.RESPAWN_ANCHOR);
         // Consume glowstone to represent the "charge" step.
-        consumeOne(inv.raw(), Material.GLOWSTONE);
+        consumeOne(inv, Material.GLOWSTONE);
 
         Location boom = placeAt.getLocation().add(0.5, 0.5, 0.5);
         bot.faceLocation(boom);
@@ -57,8 +71,9 @@ public final class AnchorBombBehavior implements WeaponBehavior {
         placeAt.setType(Material.AIR);
         world.createExplosion(boom, 5.0f, false, true, bot.getBukkitEntity());
         world.playSound(boom, Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 1f, 0.7f);
+        CombatDebugger.log(bot, "anchor-boom", "dist=" + String.format("%.2f", distance));
 
-        bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, bot.getAliveTicks());
+        bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, alive);
         return COOLDOWN;
     }
 
@@ -77,18 +92,7 @@ public final class AnchorBombBehavior implements WeaponBehavior {
         return null;
     }
 
-    private void consumeOne(PlayerInventory inv, Material type) {
-        for (int i = 0; i < 36; i++) {
-            ItemStack it = inv.getItem(i);
-            if (it != null && it.getType() == type) {
-                int amt = it.getAmount();
-                if (amt <= 1) inv.setItem(i, new ItemStack(Material.AIR));
-                else {
-                    it.setAmount(amt - 1);
-                    inv.setItem(i, it);
-                }
-                return;
-            }
-        }
+    private void consumeOne(BotInventory inv, Material type) {
+        inv.decrementMaterial(type);
     }
 }

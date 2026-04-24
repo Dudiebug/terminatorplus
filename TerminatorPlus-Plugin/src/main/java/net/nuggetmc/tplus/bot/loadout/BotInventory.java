@@ -147,18 +147,27 @@ public final class BotInventory {
         return item == null ? new ItemStack(Material.AIR) : item;
     }
 
-    /**
-     * Find a slot anywhere in the main 36 inventory slots (hotbar + storage)
-     * containing {@code type}. Prefers hotbar matches so the common case
-     * (weapon already on the bar) is O(9). Returns -1 if not found.
-     */
-    public int findHotbar(Material type) {
+    /** Find a hotbar slot (0-8) containing {@code type}. */
+    public int findHotbarOnly(Material type) {
         if (type == null) return -1;
         PlayerInventory inv = raw();
         for (int i = 0; i < HOTBAR_SIZE; i++) {
             ItemStack it = inv.getItem(i);
             if (it != null && it.getType() == type) return i;
         }
+        return -1;
+    }
+
+    /**
+     * Find a slot anywhere in the main 36 inventory slots (hotbar + storage)
+     * containing {@code type}. Prefers hotbar matches so the common case
+     * (weapon already on the bar) is O(9). Returns -1 if not found.
+     */
+    public int findMainInventory(Material type) {
+        int hotbar = findHotbarOnly(type);
+        if (hotbar >= 0) return hotbar;
+        if (type == null) return -1;
+        PlayerInventory inv = raw();
         for (int i = HOTBAR_SIZE; i < 36; i++) {
             ItemStack it = inv.getItem(i);
             if (it != null && it.getType() == type) return i;
@@ -166,9 +175,19 @@ public final class BotInventory {
         return -1;
     }
 
-    /** Any slot in hotbar or storage contains a stack of {@code type}. */
+    /** Backwards-compatible alias for the old "hotbar first, then storage" helper. */
+    public int findHotbar(Material type) {
+        return findMainInventory(type);
+    }
+
+    /** Any slot in the main inventory contains a stack of {@code type}. */
+    public boolean hasMainInventory(Material type) {
+        return findMainInventory(type) >= 0;
+    }
+
+    /** Backwards-compatible alias for main-inventory presence. */
     public boolean hasHotbar(Material type) {
-        return findHotbar(type) >= 0;
+        return hasMainInventory(type);
     }
 
     /**
@@ -178,7 +197,7 @@ public final class BotInventory {
      * item. Returns the new hotbar index (0–8), the original slot if already
      * on the hotbar, or -1 if no swap target was available.
      */
-    public int bringToHotbar(int slot) {
+    public int promoteToHotbar(int slot) {
         if (slot < 0 || slot >= 36) return -1;
         if (slot < HOTBAR_SIZE) return slot;
         PlayerInventory inv = raw();
@@ -193,7 +212,7 @@ public final class BotInventory {
                 ItemStack it = inv.getItem(i);
                 if (it == null) continue;
                 String n = it.getType().name();
-                if (n.endsWith("_SWORD") || n.endsWith("_AXE") || it.getType() == Material.MACE) continue;
+                if (isMeleeWeapon(it)) continue;
                 target = i;
                 break;
             }
@@ -208,6 +227,110 @@ public final class BotInventory {
                 : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(evicted));
         nms.setChanged();
         return target;
+    }
+
+    /** Backwards-compatible alias while callers migrate to the clearer name. */
+    public int bringToHotbar(int slot) {
+        return promoteToHotbar(slot);
+    }
+
+    /**
+     * Promote a main-inventory slot to the hotbar if needed and select it.
+     *
+     * @return the selected hotbar slot, or -1 if the item could not be selected
+     */
+    public int selectMainInventorySlot(int slot) {
+        int hotbar = promoteToHotbar(slot);
+        if (hotbar < 0) return -1;
+        setSelectedHotbarSlot(hotbar);
+        return hotbar;
+    }
+
+    /** Find {@code type}, promote it to the hotbar if needed, then select it. */
+    public int selectMaterial(Material type) {
+        return selectMainInventorySlot(findMainInventory(type));
+    }
+
+    /** Consume up to {@code amount} items from one main-inventory slot via NMS. */
+    public boolean decrementMainInventorySlot(int slot, int amount) {
+        if (slot < 0 || slot >= 36 || amount <= 0) return false;
+        ItemStack current = raw().getItem(slot);
+        if (current == null || current.getType() == Material.AIR) return false;
+        int nextAmount = current.getAmount() - amount;
+        ItemStack next = current.clone();
+        if (nextAmount <= 0) {
+            next = new ItemStack(Material.AIR);
+        } else {
+            next.setAmount(nextAmount);
+        }
+        return setMainInventorySlot(slot, next);
+    }
+
+    /** Consume one matching material from main inventory, hotbar first. */
+    public boolean decrementMaterial(Material type) {
+        return decrementMaterial(type, 1);
+    }
+
+    public boolean decrementMaterial(Material type, int amount) {
+        return decrementMainInventorySlot(findMainInventory(type), amount);
+    }
+
+    /** Consume from main inventory first, then offhand. Useful for wind-charge mace kits. */
+    public boolean decrementMaterialOrOffhand(Material type) {
+        if (decrementMaterial(type, 1)) return true;
+        ItemStack off = raw().getItemInOffHand();
+        if (off == null || off.getType() != type) return false;
+        int nextAmount = off.getAmount() - 1;
+        if (nextAmount <= 0) {
+            bot.setItemOffhand(new ItemStack(Material.AIR));
+        } else {
+            ItemStack next = off.clone();
+            next.setAmount(nextAmount);
+            bot.setItemOffhand(next);
+        }
+        return true;
+    }
+
+    /** Restore a prior selected slot if valid, otherwise select the best carried melee weapon. */
+    public void restoreSelectedSlotOrBestWeapon(int previousSlot) {
+        if (isSelectableWeaponSlot(previousSlot)) {
+            setSelectedHotbarSlot(previousSlot);
+            return;
+        }
+        selectBestMeleeWeapon();
+    }
+
+    public int selectBestMeleeWeapon() {
+        int slot = findBestMeleeWeaponSlot();
+        return selectMainInventorySlot(slot);
+    }
+
+    public int findBestMeleeWeaponSlot() {
+        int mace = findMainInventory(Material.MACE);
+        if (mace >= 0) return mace;
+        int sword = findSword();
+        if (sword >= 0) return sword;
+        int axe = findAxe();
+        if (axe >= 0) return axe;
+        return findMainInventory(Material.TRIDENT);
+    }
+
+    public boolean isSelectedMeleeWeapon() {
+        return isMeleeWeapon(getSelected());
+    }
+
+    public boolean isSelectableWeaponSlot(int slot) {
+        if (slot < 0 || slot >= HOTBAR_SIZE) return false;
+        return isMeleeWeapon(getHotbar(slot));
+    }
+
+    public static boolean isMeleeWeapon(ItemStack stack) {
+        if (stack == null) return false;
+        Material m = stack.getType();
+        if (m == Material.AIR) return false;
+        if (m == Material.MACE || m == Material.TRIDENT) return true;
+        String name = m.name();
+        return name.endsWith("_SWORD") || name.endsWith("_AXE");
     }
 
     public boolean hasMace() {
@@ -312,7 +435,7 @@ public final class BotInventory {
         if (slot == 40) {
             inv.setItemInOffHand(chestPrev);
         } else {
-            inv.setItem(slot, chestPrev);
+            setMainInventorySlot(slot, chestPrev);
         }
         return true;
     }
@@ -360,16 +483,15 @@ public final class BotInventory {
     // -------------------------------------------------------------------------
     // Consumable / potion finders
     //
-    // These scan only the hotbar (slots 0-8) so the ConsumableBehavior doesn't
-    // spend cycles on storage. If a kit keeps consumables outside the hotbar,
-    // the bot must auto-equip them first (see autoEquip).
+    // These scan the main inventory, hotbar first. Callers that need to use
+    // the item must pass the returned slot through selectMainInventorySlot().
     // -------------------------------------------------------------------------
 
-    /** First hotbar slot matching {@code type} + (optionally) {@code potionTypes}. Returns -1 if none. */
+    /** First main-inventory slot matching {@code type} + (optionally) {@code potionTypes}. Returns -1 if none. */
     public int findHotbarPotion(Material container, PotionType... potionTypes) {
         if (container == null) return -1;
         PlayerInventory inv = raw();
-        for (int i = 0; i < HOTBAR_SIZE; i++) {
+        for (int i = 0; i < 36; i++) {
             ItemStack it = inv.getItem(i);
             if (it == null || it.getType() != container) continue;
             if (!(it.getItemMeta() instanceof PotionMeta pm)) continue;
@@ -383,27 +505,27 @@ public final class BotInventory {
         return -1;
     }
 
-    /** First hotbar drinkable potion with a healing base. */
+    /** First main-inventory drinkable potion with a healing base. */
     public int findHealingPotion() {
         return findHotbarPotion(Material.POTION, PotionType.HEALING, PotionType.STRONG_HEALING);
     }
 
-    /** First hotbar splash potion of healing (for on-self self-heal). */
+    /** First main-inventory splash potion of healing (for on-self self-heal). */
     public int findSplashHealing() {
         return findHotbarPotion(Material.SPLASH_POTION, PotionType.HEALING, PotionType.STRONG_HEALING);
     }
 
-    /** First hotbar drinkable strength potion (for pre-combat buff-up). */
+    /** First main-inventory drinkable strength potion (for pre-combat buff-up). */
     public int findStrengthPotion() {
         return findHotbarPotion(Material.POTION, PotionType.STRENGTH, PotionType.STRONG_STRENGTH);
     }
 
-    /** First hotbar drinkable fire-resistance potion. */
+    /** First main-inventory drinkable fire-resistance potion. */
     public int findFireResPotion() {
         return findHotbarPotion(Material.POTION, PotionType.FIRE_RESISTANCE, PotionType.LONG_FIRE_RESISTANCE);
     }
 
-    /** First hotbar offensive splash (harming / poison / slowness). Used against enemies. */
+    /** First main-inventory offensive splash (harming / poison / slowness). Used against enemies. */
     public int findSplashHarming() {
         return findHotbarPotion(Material.SPLASH_POTION,
                 PotionType.HARMING, PotionType.STRONG_HARMING,
@@ -411,10 +533,10 @@ public final class BotInventory {
                 PotionType.SLOWNESS, PotionType.STRONG_SLOWNESS, PotionType.LONG_SLOWNESS);
     }
 
-    /** Cheap pre-check: does the bot have ANY consumable (apple / potion / splash) on its hotbar? */
+    /** Cheap pre-check: does the bot have ANY consumable (apple / potion / splash) in main inventory? */
     public boolean hasAnyConsumable() {
         PlayerInventory inv = raw();
-        for (int i = 0; i < HOTBAR_SIZE; i++) {
+        for (int i = 0; i < 36; i++) {
             ItemStack it = inv.getItem(i);
             if (it == null) continue;
             Material m = it.getType();
@@ -454,7 +576,7 @@ public final class BotInventory {
         ItemStack pickup = inv.getItem(source).clone();
         ItemStack previous = off == null ? new ItemStack(Material.AIR) : off.clone();
         bot.setItemOffhand(pickup);
-        inv.setItem(source, previous);
+        setMainInventorySlot(source, previous);
         return true;
     }
 
@@ -579,14 +701,49 @@ public final class BotInventory {
 
     // ---- private helpers ----
 
+    /**
+     * Apply a 36-slot main inventory snapshot (hotbar + storage) through NMS with
+     * content-equality checks to avoid needless stack-reference churn.
+     *
+     * <p>Passing a 41-slot preset snapshot is supported; only indices 0-35 are read.
+     * Missing entries are treated as AIR.
+     */
+    public void applyMainInventorySnapshot(ItemStack[] snapshot) {
+        net.minecraft.world.entity.player.Inventory nmsInv = bot.getInventory();
+        boolean changed = false;
+        for (int i = 0; i < 36; i++) {
+            ItemStack next = (snapshot != null && i < snapshot.length) ? snapshot[i] : null;
+            if (setMainSlotIfChanged(nmsInv, i, next)) {
+                changed = true;
+            }
+        }
+        if (changed) {
+            nmsInv.setChanged();
+        }
+    }
+
+    /**
+     * Write one main-inventory slot via NMS, skipping writes when the incoming
+     * item is content-equal to the current stack.
+     *
+     * @return true if the underlying slot changed
+     */
+    public boolean setMainInventorySlot(int slot, ItemStack item) {
+        if (slot < 0 || slot >= 36) return false;
+        net.minecraft.world.entity.player.Inventory nmsInv = bot.getInventory();
+        boolean changed = setMainSlotIfChanged(nmsInv, slot, item);
+        if (changed) {
+            nmsInv.setChanged();
+        }
+        return changed;
+    }
+
     /** Write directly to the NMS Inventory, bypassing the Bukkit container transaction system. */
     private void nmsSet(int slot, ItemStack bukkit_item) {
         net.minecraft.world.entity.player.Inventory nmsInv = bot.getInventory();
-        net.minecraft.world.item.ItemStack nms = (bukkit_item == null || bukkit_item.getType() == Material.AIR)
-                ? net.minecraft.world.item.ItemStack.EMPTY
-                : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(bukkit_item);
-        nmsInv.setItem(slot, nms);
-        nmsInv.setChanged();
+        if (setMainSlotIfChanged(nmsInv, slot, bukkit_item)) {
+            nmsInv.setChanged();
+        }
     }
 
     /** Clear all 36 main slots via NMS, then clear armor/offhand via bot.setItem (sends packets). */
@@ -711,12 +868,12 @@ public final class BotInventory {
             }
             return;
         }
-        int slot = findHotbar(type);
+        int slot = findMainInventory(type);
         if (slot >= 0) {
             ItemStack held = inv.getItem(slot);
             if (held != null && held.getAmount() < target) {
                 held.setAmount(target);
-                inv.setItem(slot, held);
+                setMainInventorySlot(slot, held);
             }
             return;
         }
@@ -735,7 +892,7 @@ public final class BotInventory {
         }
         if (free < 0) return;
         ItemStack stack = new ItemStack(type, target);
-        inv.setItem(free, stack);
+        setMainInventorySlot(free, stack);
     }
 
     private static ItemStack removeFirst(List<ItemStack> pool, Material type) {
@@ -752,5 +909,17 @@ public final class BotInventory {
 
     private static void addToPool(List<ItemStack> pool, ItemStack it) {
         if (it != null && it.getType() != Material.AIR) pool.add(it.clone());
+    }
+
+    private static boolean setMainSlotIfChanged(net.minecraft.world.entity.player.Inventory nmsInv, int slot, ItemStack bukkitItem) {
+        net.minecraft.world.item.ItemStack incoming = (bukkitItem == null || bukkitItem.getType() == Material.AIR)
+                ? net.minecraft.world.item.ItemStack.EMPTY
+                : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(bukkitItem);
+        net.minecraft.world.item.ItemStack existing = nmsInv.getItem(slot);
+        if (net.minecraft.world.item.ItemStack.matches(existing, incoming)) {
+            return false;
+        }
+        nmsInv.setItem(slot, incoming);
+        return true;
     }
 }

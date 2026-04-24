@@ -377,7 +377,6 @@ public class LegacyAgent extends Agent {
         }
 
         bot.look(BlockFace.DOWN);
-        bot.setItem(new ItemStack(itemType));
     }
 
     @Override
@@ -468,8 +467,6 @@ public class LegacyAgent extends Agent {
             world.playSound(loc, sound, 1, 1);
 
             if (itemType == Material.WATER_BUCKET) {
-                bot.setItem(new ItemStack(Material.BUCKET));
-
                 scheduler.runTaskLater(plugin, () -> {
                     Block block = loc.getBlock();
 
@@ -477,7 +474,6 @@ public class LegacyAgent extends Agent {
                     	&& ((Waterlogged)block.getBlockData()).isWaterlogged();
                     if (block.getType() == Material.WATER || waterloggedNow) {
                         bot.look(BlockFace.DOWN);
-                        bot.setItem(new ItemStack(Material.WATER_BUCKET));
                         world.playSound(loc, Sound.ITEM_BUCKET_FILL, 1, 1);
                         if (waterloggedNow) {
                         	Waterlogged data = (Waterlogged)loc.getBlock().getBlockData();
@@ -877,8 +873,6 @@ public class LegacyAgent extends Agent {
 
             if (LegacyMats.BREAK.contains(m0) && LegacyMats.BREAK.contains(m1) && LegacyMats.BREAK.contains(m2)) {
 
-                npc.setItem(new ItemStack(Material.COBBLESTONE));
-
                 Block place = playerNPC.getLocation().getBlock();
 
                 if (miningAnim.containsKey(playerNPC)) {
@@ -895,7 +889,6 @@ public class LegacyAgent extends Agent {
                 if (m0 != Material.WATER)
 	                scheduler.runTaskLater(plugin, () -> {
 	                    npc.sneak();
-	                    npc.setItem(new ItemStack(Material.COBBLESTONE));
 	                    npc.punch();
 	                    npc.look(BlockFace.DOWN);
 	
@@ -1260,14 +1253,12 @@ public class LegacyAgent extends Agent {
         bot.punch();
         loc.getBlock().setType(Material.WATER);
         world.playSound(loc, Sound.ITEM_BUCKET_EMPTY, 1, 1);
-        bot.setItem(new org.bukkit.inventory.ItemStack(Material.BUCKET));
 
         scheduler.runTaskLater(plugin, () -> {
             Block block = loc.getBlock();
 
             if (block.getType() == Material.WATER) {
                 bot.look(BlockFace.DOWN);
-                bot.setItem(new ItemStack(Material.WATER_BUCKET));
                 world.playSound(loc, Sound.ITEM_BUCKET_FILL, 1, 1);
                 block.setType(Material.AIR);
             }
@@ -1379,7 +1370,6 @@ public class LegacyAgent extends Agent {
 
                 Location place = loc.clone().add(0, -0.1, 0);
 
-                bot.setItem(new ItemStack(Material.OAK_BOAT));
                 bot.look(BlockFace.DOWN);
                 bot.punch();
 

@@ -145,21 +145,21 @@ public final class PresetManager {
 
     /** Apply a preset to an existing bot in-place. */
     public void apply(BotPreset p, Bot bot) {
-        // Clear inventory first so stale stacks don't pollute the result.
-        PlayerInventory inv = bot.getBukkitEntity().getInventory();
-        inv.clear();
+        // Main inventory through NMS-backed writes (0-35) to avoid Paper 26.x
+        // container rollback on MockConnection-backed bots.
+        bot.getBotInventory().applyMainInventorySnapshot(p.slots);
 
-        for (int i = 0; i < 36; i++) {
-            if (p.slots[i] != null) inv.setItem(i, p.slots[i].clone());
-        }
-        if (p.slots[36] != null) bot.setItem(p.slots[36].clone(), EquipmentSlot.FEET);
-        if (p.slots[37] != null) bot.setItem(p.slots[37].clone(), EquipmentSlot.LEGS);
-        if (p.slots[38] != null) bot.setItem(p.slots[38].clone(), EquipmentSlot.CHEST);
-        if (p.slots[39] != null) bot.setItem(p.slots[39].clone(), EquipmentSlot.HEAD);
-        if (p.slots[40] != null) bot.setItem(p.slots[40].clone(), EquipmentSlot.OFF_HAND);
+        // Always write equipment/offhand, including AIR clears, so stale gear
+        // from a previous preset cannot leak through.
+        bot.setItem(cloneOrAir(p.slots[36]), EquipmentSlot.FEET);
+        bot.setItem(cloneOrAir(p.slots[37]), EquipmentSlot.LEGS);
+        bot.setItem(cloneOrAir(p.slots[38]), EquipmentSlot.CHEST);
+        bot.setItem(cloneOrAir(p.slots[39]), EquipmentSlot.HEAD);
+        bot.setItem(cloneOrAir(p.slots[40]), EquipmentSlot.OFF_HAND);
 
         int sel = p.selectedHotbarSlot != null ? p.selectedHotbarSlot : 0;
         bot.selectHotbarSlot(sel);
+        bot.getBotInventory().markLoadoutApplied();
 
         if (p.shield != null) bot.setShield(p.shield);
 
@@ -194,5 +194,11 @@ public final class PresetManager {
 
     private static ItemStack copy(ItemStack it) {
         return (it == null || it.getType() == Material.AIR) ? null : it.clone();
+    }
+
+    private static ItemStack cloneOrAir(ItemStack it) {
+        return (it == null || it.getType() == Material.AIR)
+                ? new ItemStack(Material.AIR)
+                : it.clone();
     }
 }

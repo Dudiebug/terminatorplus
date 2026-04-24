@@ -200,6 +200,10 @@ public final class OpportunityScanner {
     public boolean scan(Bot bot, LivingEntity target, CombatSnapshot snap, ComboBehavior combo) {
         BotInventory inv = bot.getBotInventory();
         int alive = bot.getAliveTicks();
+        CombatDebugger.log(bot, "opp-scan",
+                "dist=" + String.format("%.2f", snap.distance)
+                        + " botHp=" + String.format("%.2f", snap.botHpFraction)
+                        + " targetHp=" + String.format("%.2f", snap.targetHpFraction));
 
         // ===============================================================
         // TIER S -- game-ending plays
@@ -604,6 +608,7 @@ public final class OpportunityScanner {
         }
 
         // No opportunity matched -- fall through to standard pipeline.
+        CombatDebugger.log(bot, "opp-scan", "result=none");
         return false;
     }
 
@@ -612,6 +617,7 @@ public final class OpportunityScanner {
     // ==================================================================
 
     private boolean executeCrystalTrap(Bot bot, LivingEntity target) {
+        CombatDebugger.log(bot, "opp-attempt", "name=CRYSTAL_TRAP");
         World world = target.getWorld();
         Location targetLoc = target.getLocation();
         Block below = world.getBlockAt(targetLoc.getBlockX(),
@@ -638,19 +644,18 @@ public final class OpportunityScanner {
         world.playSound(crystalSpawn, Sound.ENTITY_GENERIC_EXPLODE, 1f, 1f);
 
         consumeOne(bot, Material.END_CRYSTAL);
-        int slot = bot.getBotInventory().findHotbar(Material.END_CRYSTAL);
-        if (slot >= 0) bot.selectHotbarSlot(slot);
+        selectMaterial(bot, Material.END_CRYSTAL);
         return true;
     }
 
     private boolean executeKnockupCrystal(Bot bot, LivingEntity target) {
+        CombatDebugger.log(bot, "opp-attempt", "name=KNOCKUP_CRYSTAL");
         Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
         Vector aim = target.getLocation().toVector()
                 .add(new Vector(0, 0.3, 0))
                 .subtract(spawn.toVector()).normalize();
 
-        int slot = bot.getBotInventory().findHotbar(Material.WIND_CHARGE);
-        if (slot >= 0) bot.selectHotbarSlot(slot);
+        selectMaterial(bot, Material.WIND_CHARGE);
         bot.faceLocation(target.getLocation());
         bot.punch();
 
@@ -669,26 +674,27 @@ public final class OpportunityScanner {
      * them airborne. Two-tick chain handled implicitly by the scanner re-running.
      */
     private boolean executeHitCrystal(Bot bot, LivingEntity target) {
+        CombatDebugger.log(bot, "opp-attempt", "name=HIT_CRYSTAL");
         int kbSwordSlot = findKnockbackSwordSlot(bot.getBotInventory());
         if (kbSwordSlot < 0) return false;
-        bot.selectHotbarSlot(kbSwordSlot);
+        if (selectSlot(bot, kbSwordSlot) < 0) return false;
         bot.faceLocation(target.getLocation());
-        bot.attack(target);
-        return true;
+        return tryMeleeAttack(bot, target);
     }
 
     private boolean executeStunSlam(Bot bot, LivingEntity target) {
+        CombatDebugger.log(bot, "opp-attempt", "name=STUN_SLAM");
         // Step 1: hotkey to axe and disable shield via single hit.
         int axeSlot = findAxeSlot(bot.getBotInventory());
         if (axeSlot < 0) return false;
-        bot.selectHotbarSlot(axeSlot);
+        if (selectSlot(bot, axeSlot) < 0) return false;
         bot.faceLocation(target.getLocation());
-        bot.attack(target);
+        if (!tryMeleeAttack(bot, target)) return false;
 
         // Step 2: hotkey to mace. CombatDirector pipeline picks up mace on
         //         the next tick and fires the standard MaceBehavior dive.
         int maceSlot = bot.getBotInventory().findHotbar(Material.MACE);
-        if (maceSlot >= 0) bot.selectHotbarSlot(maceSlot);
+        if (maceSlot >= 0) selectSlot(bot, maceSlot);
         bot.getCombatState().setPhase(CombatState.Phase.IDLE);
         return true;
     }
@@ -714,12 +720,11 @@ public final class OpportunityScanner {
      *      fallDistance > 0).
      */
     private boolean executeWindMaceSmash(Bot bot, LivingEntity target) {
+        CombatDebugger.log(bot, "opp-attempt", "name=WIND_MACE_SMASH");
         // Step 1: mace in hand, one switch only.
         int maceSlot = bot.getBotInventory().findHotbar(Material.MACE);
         if (maceSlot < 0) return false;
-        int hotbarMace = bot.getBotInventory().bringToHotbar(maceSlot);
-        if (hotbarMace < 0) return false;
-        bot.selectHotbarSlot(hotbarMace);
+        if (selectSlot(bot, maceSlot) < 0) return false;
 
         // Step 2: pay the wind-charge cost, no entity spawn, no slot swap.
         bot.faceLocation(target.getLocation());
@@ -745,6 +750,7 @@ public final class OpportunityScanner {
     }
 
     private boolean executeAerialStrike(Bot bot, LivingEntity target, ComboBehavior combo) {
+        CombatDebugger.log(bot, "opp-attempt", "name=AERIAL_STRIKE");
         Location feet = bot.getLocation();
         Vector toTarget = target.getLocation().toVector().subtract(feet.toVector());
         toTarget.setY(0);
@@ -755,8 +761,7 @@ public final class OpportunityScanner {
         Location spawnLoc = feet.clone().add(spawnOffset);
         Vector chargeVel = toTarget.clone().multiply(-0.8).setY(-1.5);
 
-        int slot = bot.getBotInventory().findHotbar(Material.WIND_CHARGE);
-        if (slot >= 0) bot.selectHotbarSlot(slot);
+        selectMaterial(bot, Material.WIND_CHARGE);
         bot.punch();
 
         spawnLoc.getWorld().spawn(spawnLoc, WindCharge.class, w -> {
@@ -777,9 +782,11 @@ public final class OpportunityScanner {
      * us from the explosion damage.
      */
     private boolean executePearlFlashCrystal(Bot bot, LivingEntity target) {
+        CombatDebugger.log(bot, "opp-attempt", "name=PEARL_FLASH_CRYSTAL");
         int pearlSlot = bot.getBotInventory().findHotbar(Material.ENDER_PEARL);
         if (pearlSlot < 0) return false;
-        bot.selectHotbarSlot(pearlSlot);
+        pearlSlot = selectSlot(bot, pearlSlot);
+        if (pearlSlot < 0) return false;
         bot.faceLocation(target.getLocation());
 
         Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
@@ -801,6 +808,7 @@ public final class OpportunityScanner {
      * touches the crystal, popping them.
      */
     private boolean executeFacePlace(Bot bot, LivingEntity target) {
+        CombatDebugger.log(bot, "opp-attempt", "name=FACE_PLACE");
         Location feet = bot.getLocation();
         Vector forward = target.getLocation().toVector().subtract(feet.toVector());
         forward.setY(0);
@@ -832,6 +840,7 @@ public final class OpportunityScanner {
     // ==================================================================
 
     private boolean executeHeadWeb(Bot bot, LivingEntity target) {
+        CombatDebugger.log(bot, "opp-attempt", "name=HEAD_WEB");
         World world = target.getWorld();
         Location targetLoc = target.getLocation();
         Block headBlock = world.getBlockAt(targetLoc.getBlockX(),
@@ -839,7 +848,7 @@ public final class OpportunityScanner {
         if (!headBlock.getType().isAir()) return false;
 
         int slot = bot.getBotInventory().findHotbar(Material.COBWEB);
-        if (slot >= 0) bot.selectHotbarSlot(slot);
+        if (slot >= 0) selectSlot(bot, slot);
         bot.faceLocation(headBlock.getLocation());
         bot.punch();
 
@@ -849,6 +858,7 @@ public final class OpportunityScanner {
     }
 
     private boolean executeHitWeb(Bot bot, LivingEntity target) {
+        CombatDebugger.log(bot, "opp-attempt", "name=HIT_WEB");
         Vector vel = target.getVelocity();
         Location predicted = target.getLocation().clone().add(vel.clone().multiply(5));
         predicted.setY(target.getLocation().getY() + 1);
@@ -857,20 +867,21 @@ public final class OpportunityScanner {
         if (!place.getType().isAir()) return false;
 
         int slot = bot.getBotInventory().findHotbar(Material.COBWEB);
-        if (slot >= 0) bot.selectHotbarSlot(slot);
+        if (slot >= 0) selectSlot(bot, slot);
         place.setType(Material.COBWEB);
         consumeOne(bot, Material.COBWEB);
         return true;
     }
 
     private boolean executeFootPin(Bot bot, LivingEntity target) {
+        CombatDebugger.log(bot, "opp-attempt", "name=FOOT_PIN");
         Block at = target.getLocation().getBlock();
         if (!at.getType().isAir()) {
             at = at.getRelative(0, 1, 0);
             if (!at.getType().isAir()) return false;
         }
         int slot = bot.getBotInventory().findHotbar(Material.COBWEB);
-        if (slot >= 0) bot.selectHotbarSlot(slot);
+        if (slot >= 0) selectSlot(bot, slot);
         at.setType(Material.COBWEB);
         consumeOne(bot, Material.COBWEB);
         return true;
@@ -881,12 +892,13 @@ public final class OpportunityScanner {
      * Wiki: "place two cobwebs where you're standing."
      */
     private boolean executeWebBubble(Bot bot) {
+        CombatDebugger.log(bot, "opp-attempt", "name=WEB_BUBBLE");
         Block feet = bot.getLocation().getBlock();
         Block head = feet.getRelative(0, 1, 0);
         if (!feet.getType().isAir() && !head.getType().isAir()) return false;
 
         int slot = bot.getBotInventory().findHotbar(Material.COBWEB);
-        if (slot >= 0) bot.selectHotbarSlot(slot);
+        if (slot >= 0) selectSlot(bot, slot);
 
         if (feet.getType().isAir()) {
             feet.setType(Material.COBWEB);
@@ -904,12 +916,13 @@ public final class OpportunityScanner {
      * Per wiki, this destroys their water if they try to escape.
      */
     private boolean executeWebDrain(Bot bot, LivingEntity target) {
+        CombatDebugger.log(bot, "opp-attempt", "name=WEB_DRAIN");
         Block web = target.getLocation().getBlock();
         Block above = web.getRelative(0, 1, 0);
         if (!above.getType().isAir()) return false;
 
         int slot = bot.getBotInventory().findHotbar(Material.LAVA_BUCKET);
-        if (slot >= 0) bot.selectHotbarSlot(slot);
+        if (slot >= 0) selectSlot(bot, slot);
         bot.faceLocation(above.getLocation());
         bot.punch();
 
@@ -919,12 +932,13 @@ public final class OpportunityScanner {
     }
 
     private boolean executeTippedArrow(Bot bot, LivingEntity target, PotionType type) {
+        CombatDebugger.log(bot, "opp-attempt", "name=TIPPED_ARROW type=" + type.name());
         boolean crossbow = bot.getBotInventory().hasCrossbow();
         Material weapon = crossbow ? Material.CROSSBOW : Material.BOW;
         int weaponSlot = bot.getBotInventory().findHotbar(weapon);
         if (weaponSlot < 0) return false;
 
-        bot.selectHotbarSlot(weaponSlot);
+        if (selectSlot(bot, weaponSlot) < 0) return false;
         bot.faceLocation(target.getLocation());
 
         Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
@@ -945,9 +959,10 @@ public final class OpportunityScanner {
     }
 
     private boolean executePiercingCrossbow(Bot bot, LivingEntity target) {
+        CombatDebugger.log(bot, "opp-attempt", "name=CROSSBOW_PIERCE");
         int slot = bot.getBotInventory().findHotbar(Material.CROSSBOW);
         if (slot < 0) return false;
-        bot.selectHotbarSlot(slot);
+        if (selectSlot(bot, slot) < 0) return false;
         bot.faceLocation(target.getLocation());
 
         Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
@@ -961,6 +976,7 @@ public final class OpportunityScanner {
             a.setCritical(true);
         });
         spawn.getWorld().playSound(spawn, Sound.ITEM_CROSSBOW_SHOOT, 1f, 1f);
+        consumeArrow(bot);
         return true;
     }
 
@@ -975,9 +991,11 @@ public final class OpportunityScanner {
      */
     private boolean tryInterrupt(Bot bot, LivingEntity target, BotInventory inv,
                                  String cdKey, int alive, int cdTicks) {
+        CombatDebugger.log(bot, "opp-attempt", "name=INTERRUPT cdKey=" + cdKey);
         if (inv.hasWindCharge()
                 && bot.getBotCooldowns().ready(WindChargeBehavior.COOLDOWN_KEY, alive)) {
             if (executeKnockupCrystal(bot, target)) {
+                CombatDebugger.log(bot, "opp-fire", "name=INTERRUPT via=wind-charge");
                 bot.getBotCooldowns().set(cdKey, cdTicks, alive);
                 bot.getBotCooldowns().set(WindChargeBehavior.COOLDOWN_KEY, 55, alive);
                 return true;
@@ -985,25 +1003,29 @@ public final class OpportunityScanner {
         }
         if ((inv.hasCrossbow() || inv.hasBow()) && hasArrow(inv)) {
             if (executeQuickArrow(bot, target)) {
+                CombatDebugger.log(bot, "opp-fire", "name=INTERRUPT via=quick-arrow");
                 bot.getBotCooldowns().set(cdKey, cdTicks, alive);
                 return true;
             }
         }
         if (hasSplashOf(inv, PotionType.HARMING)) {
             if (executeSplashAtTarget(bot, target, PotionType.HARMING)) {
+                CombatDebugger.log(bot, "opp-fire", "name=INTERRUPT via=splash-harm");
                 bot.getBotCooldowns().set(cdKey, cdTicks, alive);
                 return true;
             }
         }
+        CombatDebugger.log(bot, "opp-skip", "name=INTERRUPT reason=no-executor");
         return false;
     }
 
     private boolean executeQuickArrow(Bot bot, LivingEntity target) {
+        CombatDebugger.log(bot, "opp-attempt", "name=QUICK_ARROW");
         boolean crossbow = bot.getBotInventory().hasCrossbow();
         Material weapon = crossbow ? Material.CROSSBOW : Material.BOW;
         int slot = bot.getBotInventory().findHotbar(weapon);
         if (slot < 0) return false;
-        bot.selectHotbarSlot(slot);
+        if (selectSlot(bot, slot) < 0) return false;
         bot.faceLocation(target.getLocation());
 
         Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
@@ -1015,10 +1037,12 @@ public final class OpportunityScanner {
         });
         spawn.getWorld().playSound(spawn,
                 crossbow ? Sound.ITEM_CROSSBOW_SHOOT : Sound.ENTITY_ARROW_SHOOT, 1f, 1f);
+        consumeArrow(bot);
         return true;
     }
 
     private boolean executeSplashHealSelf(Bot bot) {
+        CombatDebugger.log(bot, "opp-attempt", "name=SPLASH_HEAL_SELF");
         PotionType type = hasSplashOf(bot.getBotInventory(), PotionType.STRONG_HEALING)
                 ? PotionType.STRONG_HEALING : PotionType.HEALING;
         if (!hasSplashOf(bot.getBotInventory(), type)) return false;
@@ -1035,6 +1059,7 @@ public final class OpportunityScanner {
     }
 
     private boolean executeSplashAtTarget(Bot bot, LivingEntity target, PotionType type) {
+        CombatDebugger.log(bot, "opp-attempt", "name=SPLASH_AT_TARGET type=" + type.name());
         if (!hasSplashOf(bot.getBotInventory(), type)) return false;
 
         Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
@@ -1054,6 +1079,7 @@ public final class OpportunityScanner {
     }
 
     private boolean executeDrinkPotion(Bot bot, PotionType type) {
+        CombatDebugger.log(bot, "opp-attempt", "name=DRINK_POTION type=" + type.name());
         if (!hasDrinkable(bot.getBotInventory(), type)) return false;
 
         for (PotionEffect eff : potionEffects(type)) {
@@ -1067,9 +1093,10 @@ public final class OpportunityScanner {
     }
 
     private boolean executeFireworkBlast(Bot bot, LivingEntity target) {
+        CombatDebugger.log(bot, "opp-attempt", "name=FIREWORK_BLAST");
         int slot = bot.getBotInventory().findHotbar(Material.CROSSBOW);
         if (slot < 0) return false;
-        bot.selectHotbarSlot(slot);
+        if (selectSlot(bot, slot) < 0) return false;
         bot.faceLocation(target.getLocation());
 
         Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
@@ -1097,11 +1124,12 @@ public final class OpportunityScanner {
      * but no permanent lava block remains.
      */
     private boolean executeLavaPin(Bot bot, LivingEntity target) {
+        CombatDebugger.log(bot, "opp-attempt", "name=LAVA_PIN");
         Block targetFeet = target.getLocation().getBlock();
         if (!targetFeet.getType().isAir()) return false;
 
         int slot = bot.getBotInventory().findHotbar(Material.LAVA_BUCKET);
-        if (slot >= 0) bot.selectHotbarSlot(slot);
+        if (slot >= 0) selectSlot(bot, slot);
         bot.faceLocation(targetFeet.getLocation());
         bot.punch();
 
@@ -1111,13 +1139,14 @@ public final class OpportunityScanner {
     }
 
     private boolean executeFireZone(Bot bot, LivingEntity target, BotInventory inv) {
+        CombatDebugger.log(bot, "opp-attempt", "name=FIRE_ZONE");
         Block at = target.getLocation().getBlock();
         if (!at.getType().isAir()) return false;
 
         Material igniter = hasItem(inv, Material.FLINT_AND_STEEL)
                 ? Material.FLINT_AND_STEEL : Material.FIRE_CHARGE;
         int slot = inv.findHotbar(igniter);
-        if (slot >= 0) bot.selectHotbarSlot(slot);
+        if (slot >= 0) selectSlot(bot, slot);
 
         bot.faceLocation(at.getLocation());
         bot.punch();
@@ -1131,12 +1160,13 @@ public final class OpportunityScanner {
      * Long enough to extinguish fire damage, short enough to keep the bucket.
      */
     private boolean executeWaterDouse(Bot bot) {
+        CombatDebugger.log(bot, "opp-attempt", "name=WATER_DOUSE_SELF");
         Block feet = bot.getLocation().getBlock();
         // Feet occupied: can't place water here, let the next priority fire.
         if (!feet.getType().isAir()) return false;
 
         int slot = bot.getBotInventory().findHotbar(Material.WATER_BUCKET);
-        if (slot >= 0) bot.selectHotbarSlot(slot);
+        if (slot >= 0) selectSlot(bot, slot);
         bot.punch();
         feet.setType(Material.WATER);
         scheduleBlockClear(feet, Material.AIR, 10L);
@@ -1144,12 +1174,13 @@ public final class OpportunityScanner {
     }
 
     private boolean executeTntTrap(Bot bot, LivingEntity target) {
+        CombatDebugger.log(bot, "opp-attempt", "name=TNT_TRAP");
         World world = target.getWorld();
         Location at = target.getLocation();
         Block place = world.getBlockAt(at.getBlockX(), at.getBlockY(), at.getBlockZ());
 
         int tntSlot = bot.getBotInventory().findHotbar(Material.TNT);
-        if (tntSlot >= 0) bot.selectHotbarSlot(tntSlot);
+        if (tntSlot >= 0) selectSlot(bot, tntSlot);
         bot.faceLocation(place.getLocation());
         bot.punch();
 
@@ -1170,6 +1201,7 @@ public final class OpportunityScanner {
 
     private boolean executeFinisher(Bot bot, LivingEntity target,
                                      CombatSnapshot snap, ComboBehavior combo) {
+        CombatDebugger.log(bot, "opp-attempt", "name=FINISHER");
         BotInventory inv = bot.getBotInventory();
         int alive = bot.getAliveTicks();
 
@@ -1182,7 +1214,7 @@ public final class OpportunityScanner {
         if (snap.distance >= 8.0 && snap.distance <= 28.0 && inv.hasTrident()
                 && bot.getBotCooldowns().ready(TridentBehavior.COOLDOWN_KEY, alive)) {
             int slot = inv.findHotbar(Material.TRIDENT);
-            if (slot >= 0) bot.selectHotbarSlot(slot);
+            if (slot >= 0) selectSlot(bot, slot);
             return false;
         }
 
@@ -1194,8 +1226,9 @@ public final class OpportunityScanner {
     }
 
     private boolean executeArmorRepair(Bot bot) {
+        CombatDebugger.log(bot, "opp-attempt", "name=ARMOR_REPAIR");
         int slot = bot.getBotInventory().findHotbar(Material.EXPERIENCE_BOTTLE);
-        if (slot >= 0) bot.selectHotbarSlot(slot);
+        if (slot >= 0) selectSlot(bot, slot);
 
         Location feet = bot.getLocation();
         feet.getWorld().spawn(feet.clone().add(0, 1.5, 0), ThrownExpBottle.class, e -> {
@@ -1234,6 +1267,17 @@ public final class OpportunityScanner {
         return inv.findHotbar(Material.ARROW) >= 0
                 || inv.findHotbar(Material.TIPPED_ARROW) >= 0
                 || inv.findHotbar(Material.SPECTRAL_ARROW) >= 0;
+    }
+
+    private static void consumeArrow(Bot bot) {
+        BotInventory inv = bot.getBotInventory();
+        for (Material type : new Material[]{Material.ARROW, Material.SPECTRAL_ARROW, Material.TIPPED_ARROW}) {
+            int slot = inv.findMainInventory(type);
+            if (slot >= 0) {
+                inv.decrementMainInventorySlot(slot, 1);
+                return;
+            }
+        }
     }
 
     private static final Material[] AXES = {
@@ -1346,9 +1390,7 @@ public final class OpportunityScanner {
             ItemStack it = raw.getItem(i);
             if (it == null || it.getType() != Material.TIPPED_ARROW) continue;
             if (it.getItemMeta() instanceof PotionMeta pm && pm.getBasePotionType() == type) {
-                int amt = it.getAmount();
-                if (amt <= 1) raw.setItem(i, new ItemStack(Material.AIR));
-                else { it.setAmount(amt - 1); raw.setItem(i, it); }
+                bot.getBotInventory().decrementMainInventorySlot(i, 1);
                 return;
             }
         }
@@ -1382,9 +1424,7 @@ public final class OpportunityScanner {
             ItemStack it = raw.getItem(i);
             if (it == null || it.getType() != Material.SPLASH_POTION) continue;
             if (it.getItemMeta() instanceof PotionMeta pm && pm.getBasePotionType() == type) {
-                int amt = it.getAmount();
-                if (amt <= 1) raw.setItem(i, new ItemStack(Material.AIR));
-                else { it.setAmount(amt - 1); raw.setItem(i, it); }
+                bot.getBotInventory().decrementMainInventorySlot(i, 1);
                 return;
             }
         }
@@ -1412,9 +1452,7 @@ public final class OpportunityScanner {
             ItemStack it = raw.getItem(i);
             if (it == null || it.getType() != Material.POTION) continue;
             if (it.getItemMeta() instanceof PotionMeta pm && pm.getBasePotionType() == type) {
-                int amt = it.getAmount();
-                if (amt <= 1) raw.setItem(i, new ItemStack(Material.AIR));
-                else { it.setAmount(amt - 1); raw.setItem(i, it); }
+                bot.getBotInventory().decrementMainInventorySlot(i, 1);
                 return;
             }
         }
@@ -1463,6 +1501,20 @@ public final class OpportunityScanner {
     // MISC HELPERS
     // ==================================================================
 
+    private static int selectSlot(Bot bot, int slot) {
+        return bot.getBotInventory().selectMainInventorySlot(slot);
+    }
+
+    private static int selectMaterial(Bot bot, Material type) {
+        return bot.getBotInventory().selectMaterial(type);
+    }
+
+    private static boolean tryMeleeAttack(Bot bot, LivingEntity target) {
+        if (!BotCombatTiming.canSwing(bot, target)) return false;
+        bot.attack(target);
+        return true;
+    }
+
     private static boolean armorNeedsRepair(Bot bot) {
         PlayerInventory inv = bot.getBukkitEntity().getInventory();
         ItemStack[] armor = {inv.getHelmet(), inv.getChestplate(),
@@ -1479,23 +1531,7 @@ public final class OpportunityScanner {
     }
 
     private static void consumeOne(Bot bot, Material type) {
-        PlayerInventory raw = bot.getBotInventory().raw();
-        for (int i = 0; i < 36; i++) {
-            ItemStack it = raw.getItem(i);
-            if (it != null && it.getType() == type) {
-                int amt = it.getAmount();
-                if (amt <= 1) raw.setItem(i, new ItemStack(Material.AIR));
-                else { it.setAmount(amt - 1); raw.setItem(i, it); }
-                return;
-            }
-        }
-        // Offhand fallback — wind charges in mace loadouts live there.
-        ItemStack off = raw.getItemInOffHand();
-        if (off != null && off.getType() == type) {
-            int amt = off.getAmount();
-            if (amt <= 1) bot.setItemOffhand(new ItemStack(Material.AIR));
-            else { off.setAmount(amt - 1); bot.setItemOffhand(off); }
-        }
+        bot.getBotInventory().decrementMaterialOrOffhand(type);
     }
 
     /**
@@ -1515,3 +1551,4 @@ public final class OpportunityScanner {
         }, delayTicks);
     }
 }
+

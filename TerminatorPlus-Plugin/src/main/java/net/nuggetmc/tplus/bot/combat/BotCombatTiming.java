@@ -41,14 +41,22 @@ public final class BotCombatTiming {
 
     public static boolean canSwing(Bot bot, LivingEntity target, float minCharge) {
         float charge = bot.getAttackStrengthScale(0.0f);
+        int iframes = ((CraftLivingEntity) target).getHandle().invulnerableTime;
+        if (!bot.getBotInventory().isSelectedMeleeWeapon()) {
+            CombatDebugger.swingGate(bot, charge, minCharge, iframes, false, "held");
+            return false;
+        }
         if (charge < minCharge) {
             CombatDebugger.swingBlock(bot, "charge", charge);
+            CombatDebugger.swingGate(bot, charge, minCharge, iframes, false, "charge");
             return false;
         }
-        if (targetHasIFrames(target)) {
-            CombatDebugger.swingBlock(bot, "iframes", ((CraftLivingEntity) target).getHandle().invulnerableTime);
+        if (iframes > IFRAME_BLOCK_THRESHOLD) {
+            CombatDebugger.swingBlock(bot, "iframes", iframes);
+            CombatDebugger.swingGate(bot, charge, minCharge, iframes, false, "iframes");
             return false;
         }
+        CombatDebugger.swingGate(bot, charge, minCharge, iframes, true, "ready");
         return true;
     }
 

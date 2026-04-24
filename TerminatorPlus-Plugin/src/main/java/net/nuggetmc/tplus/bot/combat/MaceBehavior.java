@@ -8,8 +8,6 @@ import org.bukkit.Sound;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.WindCharge;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.util.Vector;
 
 /**
@@ -104,6 +102,7 @@ public final class MaceBehavior implements WeaponBehavior {
                 return 0;
             }
             case AIRBORNE: {
+                int airborneTicks = state.tickPhase();
                 // Track the target on the way down; accelerate harder during a fast dive.
                 Vector vel = bot.getVelocity();
                 if (vel.getY() < -0.2) {
@@ -124,6 +123,11 @@ public final class MaceBehavior implements WeaponBehavior {
                 if (distance <= ATTACK_RANGE && !bot.isBotOnGround() && vel.getY() < -0.3) {
                     boolean iframes = BotCombatTiming.targetHasIFrames(target);
                     CombatDebugger.maceSmash(bot, vel.getY(), iframes, bot.isBotOnGround());
+                    if (!BotCombatTiming.canSwingMaceSmash(bot)) {
+                        CombatDebugger.log(bot, "mace-smash-wait",
+                                "reason=charge scale=" + String.format("%.2f", bot.getAttackStrengthScale(0.0f)));
+                        return 0;
+                    }
                     if (!iframes) {
                         doAttack(bot, target);
                     }
@@ -137,6 +141,11 @@ public final class MaceBehavior implements WeaponBehavior {
                 // this the bot ticks forever in AIRBORNE swinging with stale
                 // items in hand.
                 if (bot.isBotOnGround()) {
+                    CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.IDLE);
+                    state.reset();
+                }
+                if (airborneTicks > 80) {
+                    CombatDebugger.log(bot, "mace-reset", "reason=airborne-timeout");
                     CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.IDLE);
                     state.reset();
                 }
@@ -197,29 +206,6 @@ public final class MaceBehavior implements WeaponBehavior {
      * so we check offhand first; otherwise scan the hotbar + storage.
      */
     private static void consumeOneWindCharge(BotInventory inv) {
-        PlayerInventory raw = inv.raw();
-        ItemStack off = raw.getItemInOffHand();
-        if (off != null && off.getType() == Material.WIND_CHARGE) {
-            int amt = off.getAmount();
-            if (amt <= 1) {
-                inv.getBot().setItemOffhand(new ItemStack(Material.AIR));
-            } else {
-                off.setAmount(amt - 1);
-                inv.getBot().setItemOffhand(off);
-            }
-            return;
-        }
-        for (int i = 0; i < 36; i++) {
-            ItemStack it = raw.getItem(i);
-            if (it == null || it.getType() != Material.WIND_CHARGE) continue;
-            int amt = it.getAmount();
-            if (amt <= 1) {
-                raw.setItem(i, new ItemStack(Material.AIR));
-            } else {
-                it.setAmount(amt - 1);
-                raw.setItem(i, it);
-            }
-            return;
-        }
+        inv.decrementMaterialOrOffhand(Material.WIND_CHARGE);
     }
 }

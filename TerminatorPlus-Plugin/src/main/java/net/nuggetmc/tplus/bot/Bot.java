@@ -33,6 +33,7 @@ import net.nuggetmc.tplus.api.event.BotFallDamageEvent;
 import net.nuggetmc.tplus.api.event.BotKilledByPlayerEvent;
 import net.nuggetmc.tplus.api.utils.*;
 import net.nuggetmc.tplus.bot.combat.CombatDirector;
+import net.nuggetmc.tplus.bot.combat.CombatDebugger;
 import net.nuggetmc.tplus.bot.combat.CombatState;
 import net.nuggetmc.tplus.bot.combat.WindChargeMovePlan;
 import net.nuggetmc.tplus.bot.loadout.BotInventory;
@@ -348,6 +349,16 @@ public class Bot extends ServerPlayer implements Terminator {
         } else {
             groundTicks = 0;
         }
+        if (CombatDebugger.isOn(this)) {
+            Location loc = getLocation();
+            CombatDebugger.log(this, "move-tick",
+                    "pos=" + fmt(loc.getX()) + "," + fmt(loc.getY()) + "," + fmt(loc.getZ())
+                            + " vel=" + fmtVec(velocity)
+                            + " onGround=" + onTheGround
+                            + " phase=" + combatState.getPhase()
+                            + " jumpTicks=" + jumpTicks
+                            + " groundTicks=" + groundTicks);
+        }
 
         // Vanilla Player.attack() reads this.fallDistance and this.onGround()
         // to decide whether an attack is a crit (1.5× damage + particles). We
@@ -539,6 +550,7 @@ public class Bot extends ServerPlayer implements Terminator {
 
     private void updateLocation() {
         double y;
+        String mode;
 
         MathUtils.clean(velocity); // TODO lag????
 
@@ -546,17 +558,24 @@ public class Bot extends ServerPlayer implements Terminator {
             y = Math.min(velocity.getY() + 0.1, 0.1);
             addFriction(0.8);
             velocity.setY(y);
+            mode = "fluid";
         } else {
             if (groundTicks != 0) {
                 velocity.setY(0);
                 addFriction(0.5);
                 y = 0;
+                mode = "ground";
             } else {
                 y = velocity.getY();
                 if(jumpTicks - 3 <= 0) {
                     velocity.setY(Math.max(y - 0.08, -3.5));
                 }
+                mode = "air";
             }
+        }
+        if (CombatDebugger.isOn(this)) {
+            CombatDebugger.log(this, "move-step",
+                    "mode=" + mode + " vel=" + fmtVec(velocity) + " moveY=" + fmt(y));
         }
 
         this.move(MoverType.SELF, new Vec3(velocity.getX(), y, velocity.getZ()));
@@ -584,13 +603,23 @@ public class Bot extends ServerPlayer implements Terminator {
         if (jumpTicks == 0 && groundTicks > 1) {
             jumpTicks = 4;
             velocity = vel;
+            if (CombatDebugger.isOn(this)) {
+                CombatDebugger.log(this, "move-jump", "accepted vel=" + fmtVec(vel));
+            }
             return;
         }
         // Airborne: jump impulse is rejected but LegacyAgent.move uses this
         // to carry horizontal momentum too. Preserve the XZ component via
         // walk() so the bot doesn't lose all forward motion mid-hop.
         if (vel.getX() != 0 || vel.getZ() != 0) {
+            if (CombatDebugger.isOn(this)) {
+                CombatDebugger.log(this, "move-jump", "redirect-to-walk vel=" + fmtVec(vel));
+            }
             walk(new Vector(vel.getX(), 0, vel.getZ()));
+            return;
+        }
+        if (CombatDebugger.isOn(this)) {
+            CombatDebugger.log(this, "move-jump", "ignored vel=" + fmtVec(vel));
         }
     }
 
@@ -602,22 +631,27 @@ public class Bot extends ServerPlayer implements Terminator {
     @Override
     public void walk(Vector vel) {
         double max = 0.4;
+        Vector before = velocity.clone();
 
         Vector sum = velocity.clone().add(vel);
         if (sum.length() > max) sum.normalize().multiply(max);
 
         velocity = sum;
+        if (CombatDebugger.isOn(this)) {
+            CombatDebugger.log(this, "move-walk",
+                    "input=" + fmtVec(vel) + " before=" + fmtVec(before) + " after=" + fmtVec(sum));
+        }
     }
 
     @Override
     public void attack(org.bukkit.entity.Entity entity) {
         faceLocation(entity.getLocation());
-        punch();
 
         // Neural-network training relies on the deterministic legacy damage table so fitness
         // scores are reproducible run-to-run. For everyone else, use the vanilla Bukkit attack
         // so sweep attacks, mace fall-damage scaling, enchantments and density bonuses apply.
         if (network != null) {
+            punch();
             double damage = ItemUtils.getLegacyAttackDamage(
                     getBukkitEntity().getInventory().getItemInMainHand());
             if (entity instanceof Damageable) {
@@ -627,14 +661,22 @@ public class Bot extends ServerPlayer implements Terminator {
         }
 
         if (entity instanceof org.bukkit.entity.LivingEntity) {
+            if (!botInventory.isSelectedMeleeWeapon()) {
+                CombatDebugger.log(this, "attack-skip",
+                        "reason=non-melee-held held=" + botInventory.getSelected().getType().name());
+                return;
+            }
+            punch();
             getBukkitEntity().attack(entity);
         } else if (entity instanceof Damageable d) {
+            punch();
             d.damage(1.0, getBukkitEntity());
         }
     }
 
     @Override
     public void punch() {
+        CombatDebugger.punch(this);
         swing(InteractionHand.MAIN_HAND);
     }
 
@@ -642,10 +684,17 @@ public class Bot extends ServerPlayer implements Terminator {
         double vy = velocity.getY();
 
         if (vy > 0) {
+            if (CombatDebugger.isOn(this)) {
+                CombatDebugger.log(this, "move-ground", "result=false reason=ascending vy=" + fmt(vy));
+            }
             return false;
         }
 
-        return checkStandingOn();
+        boolean grounded = checkStandingOn();
+        if (CombatDebugger.isOn(this)) {
+            CombatDebugger.log(this, "move-ground", "result=" + grounded + " vy=" + fmt(vy));
+        }
+        return grounded;
     }
 
     public boolean checkStandingOn() {
@@ -904,6 +953,10 @@ public class Bot extends ServerPlayer implements Terminator {
     @Override
     public void faceLocation(Location loc) {
         look(loc.toVector().subtract(getLocation().toVector()), false);
+        if (CombatDebugger.isOn(this)) {
+            CombatDebugger.log(this, "move-face",
+                    "target=" + fmt(loc.getX()) + "," + fmt(loc.getY()) + "," + fmt(loc.getZ()));
+        }
     }
 
     @Override
@@ -936,7 +989,6 @@ public class Bot extends ServerPlayer implements Terminator {
             faceLocation(loc);
         }
 
-        setItem(new org.bukkit.inventory.ItemStack(Material.COBBLESTONE));
         punch();
 
         Block block = loc.getBlock();
@@ -1044,6 +1096,10 @@ public class Bot extends ServerPlayer implements Terminator {
     public void doTick() {
         detectEquipmentUpdates();
         baseTick();
+        if (CombatDebugger.isOn(this)) {
+            CombatDebugger.log(this, "move-attack-charge",
+                    "ticker=" + attackStrengthTicker + " scale=" + fmt(getAttackStrengthScale(0.0f)));
+        }
         // Vanilla Player.aiStep() normally advances this each tick; we skip aiStep
         // to avoid hunger/ability mutations on bots, but BotCombatTiming reads the
         // resulting attack-strength scale as the gate for full-damage/crit swings.
@@ -1059,5 +1115,13 @@ public class Bot extends ServerPlayer implements Terminator {
     @Override
     public World.Environment getDimension() {
         return getBukkitEntity().getWorld().getEnvironment();
+    }
+
+    private static String fmt(double value) {
+        return String.format("%.2f", value);
+    }
+
+    private static String fmtVec(Vector vec) {
+        return fmt(vec.getX()) + "," + fmt(vec.getY()) + "," + fmt(vec.getZ());
     }
 }

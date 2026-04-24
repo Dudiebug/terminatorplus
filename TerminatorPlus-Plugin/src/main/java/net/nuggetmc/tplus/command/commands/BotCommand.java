@@ -33,6 +33,8 @@ import java.util.stream.Collectors;
 
 public class BotCommand extends CommandInstance {
 
+    private static final String ADMIN_PERMISSION = "terminatorplus.admin";
+
     private final TerminatorPlus plugin;
     private final CommandHandler handler;
     private final BotManagerImpl manager;
@@ -94,7 +96,7 @@ public class BotCommand extends CommandInstance {
                 sender.sendMessage("Spawning bot at 0, 0, 0 in world " + location.getWorld().getName() + " because no location was specified.");
             }
         }
-        manager.createBots(sender, name, skin, 1, location);
+        manager.createBotsAsync(sender, name, skin, 1, location);
     }
 
     @Command(
@@ -130,7 +132,7 @@ public class BotCommand extends CommandInstance {
                 sender.sendMessage("Spawning bot at 0, 0, 0 in world " + location.getWorld().getName() + " because no location was specified.");
             }
         }
-        manager.createBots(sender, name, skin, amount, location);
+        manager.createBotsAsync(sender, name, skin, amount, location);
     }
 
     @Command(
@@ -151,7 +153,7 @@ public class BotCommand extends CommandInstance {
         }
         ItemStack item = new ItemStack(type);
 
-        // Single-arg form: legacy behavior — set default item for all bots.
+        // Single-arg form: legacy behavior â€” set default item for all bots.
         if (args.size() == 1) {
             manager.fetch().forEach(bot -> bot.setDefaultItem(item));
             sender.sendMessage("Successfully set the default item to " + ChatColor.YELLOW + item.getType() + ChatColor.RESET + " for all current bots.");
@@ -313,44 +315,41 @@ public class BotCommand extends CommandInstance {
         }
 
         sender.sendMessage("Processing request...");
+        try {
+            Terminator bot = manager.getFirst(name, (sender instanceof Player pl) ? pl.getLocation() : null);
 
-        scheduler.runTaskAsynchronously(plugin, () -> {
-            try {
-                Terminator bot = manager.getFirst(name, (sender instanceof Player pl) ? pl.getLocation() : null);
-
-                if (bot == null) {
-                    sender.sendMessage("Could not find bot " + ChatColor.GREEN + name + ChatColor.RESET + "!");
-                    return;
-                }
-
-                /*
-                 * time created
-                 * current life (how long it has lived for)
-                 * health
-                 * inventory
-                 * current target
-                 * current kills
-                 * skin
-                 * neural network values (network name if loaded, otherwise RANDOM)
-                 */
-
-                String botName = bot.getBotName();
-                String world = ChatColor.YELLOW + bot.getBukkitEntity().getWorld().getName();
-                Location loc = bot.getLocation();
-                String strLoc = ChatColor.YELLOW + formatter.format(loc.getX()) + ", " + formatter.format(loc.getY()) + ", " + formatter.format(loc.getZ());
-                Vector vel = bot.getVelocity();
-                String strVel = ChatColor.AQUA + formatter.format(vel.getX()) + ", " + formatter.format(vel.getY()) + ", " + formatter.format(vel.getZ());
-
-                sender.sendMessage(ChatUtils.LINE);
-                sender.sendMessage(ChatColor.GREEN + botName);
-                sender.sendMessage(ChatUtils.BULLET_FORMATTED + "World: " + world);
-                sender.sendMessage(ChatUtils.BULLET_FORMATTED + "Position: " + strLoc);
-                sender.sendMessage(ChatUtils.BULLET_FORMATTED + "Velocity: " + strVel);
-                sender.sendMessage(ChatUtils.LINE);
-            } catch (Exception e) {
-                sender.sendMessage(ChatUtils.EXCEPTION_MESSAGE);
+            if (bot == null) {
+                sender.sendMessage("Could not find bot " + ChatColor.GREEN + name + ChatColor.RESET + "!");
+                return;
             }
-        });
+
+            /*
+             * time created
+             * current life (how long it has lived for)
+             * health
+             * inventory
+             * current target
+             * current kills
+             * skin
+             * neural network values (network name if loaded, otherwise RANDOM)
+             */
+
+            String botName = bot.getBotName();
+            String world = ChatColor.YELLOW + bot.getBukkitEntity().getWorld().getName();
+            Location loc = bot.getLocation();
+            String strLoc = ChatColor.YELLOW + formatter.format(loc.getX()) + ", " + formatter.format(loc.getY()) + ", " + formatter.format(loc.getZ());
+            Vector vel = bot.getVelocity();
+            String strVel = ChatColor.AQUA + formatter.format(vel.getX()) + ", " + formatter.format(vel.getY()) + ", " + formatter.format(vel.getZ());
+
+            sender.sendMessage(ChatUtils.LINE);
+            sender.sendMessage(ChatColor.GREEN + botName);
+            sender.sendMessage(ChatUtils.BULLET_FORMATTED + "World: " + world);
+            sender.sendMessage(ChatUtils.BULLET_FORMATTED + "Position: " + strLoc);
+            sender.sendMessage(ChatUtils.BULLET_FORMATTED + "Velocity: " + strVel);
+            sender.sendMessage(ChatUtils.LINE);
+        } catch (Exception e) {
+            sender.sendMessage(ChatUtils.EXCEPTION_MESSAGE);
+        }
     }
 
     @Autofill
@@ -382,6 +381,7 @@ public class BotCommand extends CommandInstance {
             name = "reset",
             desc = "Remove all loaded bots."
     )
+    @Require(ADMIN_PERMISSION)
     public void reset(CommandSender sender) {
         sender.sendMessage("Removing every bot...");
         int size = manager.fetch().size();
@@ -446,11 +446,12 @@ public class BotCommand extends CommandInstance {
                 sender.sendMessage("Mob targeting is currently " + (manager.isMobTarget() ? ChatColor.GREEN + "enabled" : ChatColor.RED + "disabled") + ChatColor.RESET + ".");
                 return;
             }
-            if (!arg2.equals("true") && !arg2.equals("false")) {
+            Boolean enabled = parseBooleanValue(arg2);
+            if (enabled == null) {
                 sender.sendMessage(ChatColor.RED + "You must specify true or false!");
                 return;
             }
-            manager.setMobTarget(Boolean.parseBoolean(arg2));
+            manager.setMobTarget(enabled);
             sender.sendMessage("Mob targeting is now " + (manager.isMobTarget() ? ChatColor.GREEN + "enabled" : ChatColor.RED + "disabled") + ChatColor.RESET + ".");
         } else if (arg1.equalsIgnoreCase("playertarget")) {
             if (args.size() < 2) {
@@ -472,11 +473,12 @@ public class BotCommand extends CommandInstance {
                 sender.sendMessage("Adding bots to the player list is currently " + (manager.addToPlayerList() ? ChatColor.GREEN + "enabled" : ChatColor.RED + "disabled") + ChatColor.RESET + ".");
                 return;
             }
-            if (!arg2.equals("true") && !arg2.equals("false")) {
+            Boolean enabled = parseBooleanValue(arg2);
+            if (enabled == null) {
                 sender.sendMessage(ChatColor.RED + "You must specify true or false!");
                 return;
             }
-            manager.setAddToPlayerList(Boolean.parseBoolean(arg2));
+            manager.setAddToPlayerList(enabled);
             sender.sendMessage("Adding bots to the player list is now " + (manager.addToPlayerList() ? ChatColor.GREEN + "enabled" : ChatColor.RED + "disabled") + ChatColor.RESET + ".");
         } else if (arg1.equalsIgnoreCase("region")) {
             if (arg2 == null) {
@@ -598,6 +600,7 @@ public class BotCommand extends CommandInstance {
             visible = false,
             autofill = "debugAutofill"
     )
+    @Require(ADMIN_PERMISSION)
     public void debug(CommandSender sender, @Arg("expression") String expression) {
         new Debugger(sender).execute(expression);
     }
@@ -666,10 +669,11 @@ public class BotCommand extends CommandInstance {
 
     @Command(
             name = "combatdebug",
-            desc = "Toggle verbose combat-decision logging for one bot or all bots.",
-            aliases = {"cdbg"},
+            desc = "Toggle full combat + movement trace logging for one bot or all bots.",
+            aliases = {"cdbg", "comatdebug"},
             autofill = "combatDebugAutofill"
     )
+    @Require(ADMIN_PERMISSION)
     public void combatDebug(CommandSender sender, @Arg("name-or-all") String target, @Arg("on-off") String state) {
         boolean turnOn;
         if (state.equalsIgnoreCase("on") || state.equalsIgnoreCase("true") || state.equalsIgnoreCase("1")) {
@@ -680,11 +684,13 @@ public class BotCommand extends CommandInstance {
             sender.sendMessage(ChatColor.RED + "Usage: /bot combatdebug <botName|all> <on|off>");
             return;
         }
+        String debugDir = new java.io.File(plugin.getDataFolder(), "debug").getAbsolutePath();
 
         if (target.equalsIgnoreCase("all")) {
             if (turnOn) {
                 net.nuggetmc.tplus.bot.combat.CombatDebugger.enableAll();
-                sender.sendMessage(ChatColor.GREEN + "Combat debug enabled for ALL bots. Output goes to server console / server.log.");
+                sender.sendMessage(ChatColor.GREEN + "Full debug enabled for ALL bots.");
+                sender.sendMessage(ChatColor.GRAY + "Logs: " + debugDir + ChatColor.DARK_GRAY + " (combat-all.log + per-bot files)");
             } else {
                 net.nuggetmc.tplus.bot.combat.CombatDebugger.disableAll();
                 sender.sendMessage(ChatColor.YELLOW + "Combat debug disabled for all bots.");
@@ -704,7 +710,10 @@ public class BotCommand extends CommandInstance {
         sender.sendMessage((turnOn ? ChatColor.GREEN + "Enabled" : ChatColor.YELLOW + "Disabled")
                 + ChatColor.RESET + " combat debug for " + matches.size() + " bot(s) named "
                 + ChatColor.YELLOW + target + ChatColor.RESET
-                + (turnOn ? ". Tail server.log or watch the console for [tplus-cbt] lines." : "."));
+                + (turnOn ? "." : "."));
+        if (turnOn) {
+            sender.sendMessage(ChatColor.GRAY + "Logs: " + debugDir + ChatColor.DARK_GRAY + " (combat-all.log + per-bot files)");
+        }
     }
 
     @Autofill
@@ -843,6 +852,11 @@ public class BotCommand extends CommandInstance {
                 }
             }
             case "delete" -> {
+                if (!sender.hasPermission(ADMIN_PERMISSION)) {
+                    sender.sendMessage(ChatColor.RED + "You do not have permission to delete presets.");
+                    sender.sendMessage(ChatColor.RED + "Required: " + ChatColor.YELLOW + ADMIN_PERMISSION);
+                    return;
+                }
                 if (args.size() < 2) {
                     sender.sendMessage(ChatColor.RED + "Usage: /bot preset delete <preset-name>");
                     return;
@@ -923,20 +937,9 @@ public class BotCommand extends CommandInstance {
     }
 
     private static void applyLoadoutToBot(Bot bot, ItemStack[] kit, boolean respectAfterApply) {
-        // Clear via NMS too — Bukkit's PlayerInventory.clear hits the same
-        // container-transaction path that gets rolled back for bots.
-        // Skip writes when the slot is already empty to avoid resetting the
-        // attack-strength ticker on the mainhand slot (see the same guard in
-        // BotInventoryGUI.syncToBot and BotInventory.setSelectedHotbarSlot).
-        net.minecraft.world.entity.player.Inventory nmsInv = bot.getInventory();
-        boolean changed = false;
-        for (int i = 0; i < 36; i++) {
-            if (!nmsInv.getItem(i).isEmpty()) {
-                nmsInv.setItem(i, net.minecraft.world.item.ItemStack.EMPTY);
-                changed = true;
-            }
-        }
-        if (changed) nmsInv.setChanged();
+        BotInventory inv = bot.getBotInventory();
+        // Clear via centralized NMS-backed writes (same path used by presets/GUI).
+        inv.applyMainInventorySnapshot(new ItemStack[36]);
         bot.setItem(new ItemStack(Material.AIR), EquipmentSlot.HEAD);
         bot.setItem(new ItemStack(Material.AIR), EquipmentSlot.CHEST);
         bot.setItem(new ItemStack(Material.AIR), EquipmentSlot.LEGS);
@@ -950,7 +953,6 @@ public class BotCommand extends CommandInstance {
         bot.selectHotbarSlot(0);
         // Run autoEquip so any "wind charges in offhand when mace in hand"
         // rule (see BotInventory.autoEquip) takes effect.
-        BotInventory inv = bot.getBotInventory();
         inv.autoEquip();
         // Flip the loadout lock so the 40-tick ensureMovementKit refill respects
         // what the preset actually chose (including deliberate omission of pearls /
@@ -979,7 +981,7 @@ public class BotCommand extends CommandInstance {
 
     /**
      * Build a 41-slot loadout array for a named preset.
-     * 0–8 hotbar, 9–35 storage, 36 boots, 37 legs, 38 chest, 39 head, 40 offhand.
+     * 0â€“8 hotbar, 9â€“35 storage, 36 boots, 37 legs, 38 chest, 39 head, 40 offhand.
      */
     private static ItemStack[] buildLoadout(String key) {
         ItemStack[] kit = new ItemStack[41];
@@ -997,7 +999,7 @@ public class BotCommand extends CommandInstance {
                 kit[1] = new ItemStack(Material.IRON_SWORD);
                 ItemStack windCharges = new ItemStack(Material.WIND_CHARGE);
                 windCharges.setAmount(16);
-                kit[40] = windCharges; // offhand — wiki Mace-PvP pairing
+                kit[40] = windCharges; // offhand â€” wiki Mace-PvP pairing
                 kit[36] = new ItemStack(Material.NETHERITE_BOOTS);
                 kit[37] = new ItemStack(Material.NETHERITE_LEGGINGS);
                 kit[38] = new ItemStack(Material.NETHERITE_CHESTPLATE);
@@ -1125,7 +1127,7 @@ public class BotCommand extends CommandInstance {
                 kit[40] = new ItemStack(Material.TOTEM_OF_UNDYING);
             }
             case "vanilla" -> {
-                // Vanilla PvP / VPvP — full arsenal minus enchanted apples + elytra.
+                // Vanilla PvP / VPvP â€” full arsenal minus enchanted apples + elytra.
                 // Nether fallback (anchors + glowstone) lives in storage since the hotbar is full.
                 kit[0] = new ItemStack(Material.NETHERITE_SWORD);
                 kit[1] = new ItemStack(Material.MACE);
@@ -1161,7 +1163,7 @@ public class BotCommand extends CommandInstance {
                 kit[40] = new ItemStack(Material.SHIELD);
             }
             case "axe" -> {
-                // Axe PvP — axe disables shields; sword as secondary for follow-ups.
+                // Axe PvP â€” axe disables shields; sword as secondary for follow-ups.
                 kit[0] = new ItemStack(Material.NETHERITE_AXE);
                 kit[1] = new ItemStack(Material.NETHERITE_SWORD);
                 ItemStack gaps = new ItemStack(Material.GOLDEN_APPLE);
@@ -1174,7 +1176,7 @@ public class BotCommand extends CommandInstance {
                 kit[40] = new ItemStack(Material.SHIELD);
             }
             case "smp" -> {
-                // SMP / Netherite PvP — sword primary, axe fallback. No mace/crystals/anchors (explosive-banned).
+                // SMP / Netherite PvP â€” sword primary, axe fallback. No mace/crystals/anchors (explosive-banned).
                 kit[0] = new ItemStack(Material.NETHERITE_SWORD);
                 kit[1] = new ItemStack(Material.NETHERITE_AXE);
                 ItemStack gaps = new ItemStack(Material.GOLDEN_APPLE);
@@ -1187,7 +1189,7 @@ public class BotCommand extends CommandInstance {
                 kit[40] = new ItemStack(Material.SHIELD);
             }
             case "pot" -> {
-                // Pot PvP — splash healing self-heals are the core mechanic. No shield per spec;
+                // Pot PvP â€” splash healing self-heals are the core mechanic. No shield per spec;
                 // pearls added per user for practical bot combat (reposition / gap-close).
                 // Splash potions are non-stackable, so each gets its own slot.
                 kit[0] = new ItemStack(Material.NETHERITE_SWORD);
@@ -1208,7 +1210,7 @@ public class BotCommand extends CommandInstance {
                 // No offhand per spec.
             }
             case "spear" -> {
-                // Spear PvP — trident only. Note: "spear" is community slang for a trident
+                // Spear PvP â€” trident only. Note: "spear" is community slang for a trident
                 // used as a melee weapon in vanilla; there's no separate spear item.
                 // Explicitly excludes mace / wind charges / elytra / fireworks per spec.
                 kit[0] = new ItemStack(Material.TRIDENT);
@@ -1222,7 +1224,7 @@ public class BotCommand extends CommandInstance {
                 kit[40] = new ItemStack(Material.SHIELD);
             }
             case "clear" -> {
-                // Empty array → everything clears.
+                // Empty array â†’ everything clears.
             }
             default -> {
                 return null;
@@ -1246,18 +1248,7 @@ public class BotCommand extends CommandInstance {
 
     private static void applyLoadoutSlot(Bot bot, int slot, ItemStack item) {
         if (slot < 36) {
-            // Bypass Bukkit's container-transaction system. Paper 26.x rolls
-            // back PlayerInventory.setItem on the next tick when MockConnection
-            // never ACKs the slot packet, which is why the mace (always placed
-            // at the selected slot 0 in mace-containing kits) was vanishing
-            // shortly after /bot loadout. Write straight into the NMS inventory
-            // and mark it dirty.
-            net.minecraft.world.entity.player.Inventory nmsInv = bot.getInventory();
-            net.minecraft.world.item.ItemStack nms = (item == null || item.getType() == Material.AIR)
-                    ? net.minecraft.world.item.ItemStack.EMPTY
-                    : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(item);
-            nmsInv.setItem(slot, nms);
-            nmsInv.setChanged();
+            bot.getBotInventory().setMainInventorySlot(slot, item);
         } else if (slot == 36) {
             bot.setItem(item, EquipmentSlot.FEET);
         } else if (slot == 37) {
@@ -1292,4 +1283,12 @@ public class BotCommand extends CommandInstance {
                 return 0;
         }
     }
+
+    private Boolean parseBooleanValue(String value) {
+        if (value == null) return null;
+        if (value.equalsIgnoreCase("true")) return true;
+        if (value.equalsIgnoreCase("false")) return false;
+        return null;
+    }
 }
+

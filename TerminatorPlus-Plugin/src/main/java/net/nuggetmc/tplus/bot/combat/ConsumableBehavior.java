@@ -9,7 +9,6 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.ThrownPotion;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -65,12 +64,17 @@ public final class ConsumableBehavior {
         int aliveTicks = bot.getAliveTicks();
         Player bukkit = (Player) bot.getBukkitEntity();
         float hpRatio = bot.getBotHealth() / Math.max(1.0f, bot.getBotMaxHealth());
+        CombatDebugger.log(bot, "consumable-tick",
+                "hp=" + String.format("%.2f", hpRatio)
+                        + " fireTicks=" + bukkit.getFireTicks()
+                        + " target=" + (target != null));
 
         // 1. Fire response — burning and no fire-res active → drink fire-res.
         if (bukkit.getFireTicks() > FIRE_TICK_TRIGGER
                 && !bukkit.hasPotionEffect(PotionEffectType.FIRE_RESISTANCE)
                 && bot.getBotCooldowns().ready(CD_FIRE_RES, aliveTicks)) {
             if (tryDrinkFireRes(bot, inv, bukkit)) {
+                CombatDebugger.log(bot, "consumable-use", "type=fire-res");
                 bot.getBotCooldowns().set(CD_FIRE_RES, CD_FIRE_RES_TICKS, aliveTicks);
                 return;
             }
@@ -80,6 +84,7 @@ public final class ConsumableBehavior {
         if (hpRatio < CRIT_HP_RATIO) {
             if (bot.getBotCooldowns().ready(CD_APPLE, aliveTicks)
                     && tryEatEnchantedApple(bot, inv, bukkit)) {
+                CombatDebugger.log(bot, "consumable-use", "type=enchanted-gapple");
                 bot.getBotCooldowns().set(CD_APPLE, CD_APPLE_TICKS, aliveTicks);
                 return;
             }
@@ -89,15 +94,18 @@ public final class ConsumableBehavior {
         if (hpRatio < LOW_HP_RATIO) {
             if (bot.getBotCooldowns().ready(CD_APPLE, aliveTicks)
                     && tryEatGoldenApple(bot, inv, bukkit)) {
+                CombatDebugger.log(bot, "consumable-use", "type=gapple");
                 bot.getBotCooldowns().set(CD_APPLE, CD_APPLE_TICKS, aliveTicks);
                 return;
             }
             if (bot.getBotCooldowns().ready(CD_DRINK_HEAL, aliveTicks)) {
                 if (trySplashSelfHeal(bot, inv, bukkit)) {
+                    CombatDebugger.log(bot, "consumable-use", "type=splash-heal");
                     bot.getBotCooldowns().set(CD_DRINK_HEAL, CD_DRINK_HEAL_TICKS, aliveTicks);
                     return;
                 }
                 if (tryDrinkHealing(bot, inv, bukkit)) {
+                    CombatDebugger.log(bot, "consumable-use", "type=drink-heal");
                     bot.getBotCooldowns().set(CD_DRINK_HEAL, CD_DRINK_HEAL_TICKS, aliveTicks);
                     return;
                 }
@@ -109,6 +117,7 @@ public final class ConsumableBehavior {
                 && !bukkit.hasPotionEffect(PotionEffectType.STRENGTH)
                 && bot.getBotCooldowns().ready(CD_STRENGTH, aliveTicks)) {
             if (tryDrinkStrength(bot, inv, bukkit)) {
+                CombatDebugger.log(bot, "consumable-use", "type=strength");
                 bot.getBotCooldowns().set(CD_STRENGTH, CD_STRENGTH_TICKS, aliveTicks);
                 return;
             }
@@ -119,10 +128,13 @@ public final class ConsumableBehavior {
             double dist = bot.getLocation().distance(target.getLocation());
             if (dist >= SPLASH_MIN_RANGE && dist <= SPLASH_MAX_RANGE) {
                 if (tryThrowSplashHarming(bot, inv, target)) {
+                    CombatDebugger.log(bot, "consumable-use", "type=splash-offense");
                     bot.getBotCooldowns().set(CD_SPLASH_HARM, CD_SPLASH_HARM_TICKS, aliveTicks);
+                    return;
                 }
             }
         }
+        CombatDebugger.log(bot, "consumable-noop");
     }
 
     // -------------------------------------------------------------------------
@@ -132,7 +144,9 @@ public final class ConsumableBehavior {
     private boolean tryEatEnchantedApple(Bot bot, BotInventory inv, Player bukkit) {
         int slot = inv.findHotbar(Material.ENCHANTED_GOLDEN_APPLE);
         if (slot < 0) return false;
-        bot.selectHotbarSlot(slot);
+        int previousSlot = inv.getSelectedHotbarSlot();
+        slot = inv.selectMainInventorySlot(slot);
+        if (slot < 0) return false;
         float max = bot.getBotMaxHealth();
         bukkit.setHealth(Math.min(max, bot.getBotHealth() + 4.0f));
         bukkit.addPotionEffect(new PotionEffect(PotionEffectType.ABSORPTION, 2400, 3));
@@ -140,6 +154,7 @@ public final class ConsumableBehavior {
         bukkit.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE, 6000, 0));
         bukkit.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, 6000, 0));
         decrementSlot(inv, slot);
+        inv.restoreSelectedSlotOrBestWeapon(previousSlot);
         bukkit.getWorld().playSound(bukkit.getLocation(), Sound.ENTITY_PLAYER_BURP, 0.5f, 1.0f);
         return true;
     }
@@ -152,12 +167,15 @@ public final class ConsumableBehavior {
             if (slot < 0) return false;
             return tryEatEnchantedApple(bot, inv, bukkit);
         }
-        bot.selectHotbarSlot(slot);
+        int previousSlot = inv.getSelectedHotbarSlot();
+        slot = inv.selectMainInventorySlot(slot);
+        if (slot < 0) return false;
         float max = bot.getBotMaxHealth();
         bukkit.setHealth(Math.min(max, bot.getBotHealth() + 4.0f));
         bukkit.addPotionEffect(new PotionEffect(PotionEffectType.ABSORPTION, 2400, 0));
         bukkit.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, 100, 1));
         decrementSlot(inv, slot);
+        inv.restoreSelectedSlotOrBestWeapon(previousSlot);
         bukkit.getWorld().playSound(bukkit.getLocation(), Sound.ENTITY_PLAYER_BURP, 0.5f, 1.0f);
         return true;
     }
@@ -169,10 +187,13 @@ public final class ConsumableBehavior {
         if (stack == null) return false;
         PotionType pt = (stack.getItemMeta() instanceof PotionMeta pm) ? pm.getBasePotionType() : null;
         float heal = (pt == PotionType.STRONG_HEALING) ? 12.0f : 6.0f;
-        bot.selectHotbarSlot(slot);
+        int previousSlot = inv.getSelectedHotbarSlot();
+        slot = inv.selectMainInventorySlot(slot);
+        if (slot < 0) return false;
         float max = bot.getBotMaxHealth();
         bukkit.setHealth(Math.min(max, bot.getBotHealth() + heal));
         decrementSlot(inv, slot);
+        inv.restoreSelectedSlotOrBestWeapon(previousSlot);
         bukkit.getWorld().playSound(bukkit.getLocation(), Sound.ENTITY_GENERIC_DRINK, 0.8f, 1.0f);
         return true;
     }
@@ -183,7 +204,9 @@ public final class ConsumableBehavior {
         ItemStack stack = inv.raw().getItem(slot);
         if (stack == null) return false;
         // Throw at own feet: tiny downward velocity so it lands immediately.
-        bot.selectHotbarSlot(slot);
+        int previousSlot = inv.getSelectedHotbarSlot();
+        slot = inv.selectMainInventorySlot(slot);
+        if (slot < 0) return false;
         bukkit.swingMainHand();
         Location eye = bukkit.getEyeLocation();
         ItemStack splash = stack.clone();
@@ -201,6 +224,7 @@ public final class ConsumableBehavior {
         float max = bot.getBotMaxHealth();
         bukkit.setHealth(Math.min(max, bot.getBotHealth() + heal));
         decrementSlot(inv, slot);
+        inv.restoreSelectedSlotOrBestWeapon(previousSlot);
         return true;
     }
 
@@ -211,10 +235,13 @@ public final class ConsumableBehavior {
         if (stack == null) return false;
         PotionType pt = (stack.getItemMeta() instanceof PotionMeta pm) ? pm.getBasePotionType() : null;
         int duration = (pt == PotionType.LONG_FIRE_RESISTANCE) ? 9600 : 3600;
-        bot.selectHotbarSlot(slot);
+        int previousSlot = inv.getSelectedHotbarSlot();
+        slot = inv.selectMainInventorySlot(slot);
+        if (slot < 0) return false;
         bukkit.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, duration, 0));
         bukkit.setFireTicks(0);
         decrementSlot(inv, slot);
+        inv.restoreSelectedSlotOrBestWeapon(previousSlot);
         bukkit.getWorld().playSound(bukkit.getLocation(), Sound.ENTITY_GENERIC_DRINK, 0.8f, 1.0f);
         return true;
     }
@@ -234,9 +261,12 @@ public final class ConsumableBehavior {
             duration = 3600;
             amplifier = 0;
         }
-        bot.selectHotbarSlot(slot);
+        int previousSlot = inv.getSelectedHotbarSlot();
+        slot = inv.selectMainInventorySlot(slot);
+        if (slot < 0) return false;
         bukkit.addPotionEffect(new PotionEffect(PotionEffectType.STRENGTH, duration, amplifier));
         decrementSlot(inv, slot);
+        inv.restoreSelectedSlotOrBestWeapon(previousSlot);
         bukkit.getWorld().playSound(bukkit.getLocation(), Sound.ENTITY_GENERIC_DRINK, 0.8f, 1.0f);
         return true;
     }
@@ -247,7 +277,9 @@ public final class ConsumableBehavior {
         ItemStack stack = inv.raw().getItem(slot);
         if (stack == null) return false;
         Player bukkit = (Player) bot.getBukkitEntity();
-        bot.selectHotbarSlot(slot);
+        int previousSlot = inv.getSelectedHotbarSlot();
+        slot = inv.selectMainInventorySlot(slot);
+        if (slot < 0) return false;
         bot.faceLocation(target.getLocation());
         bukkit.swingMainHand();
         Location eye = bukkit.getEyeLocation();
@@ -264,18 +296,11 @@ public final class ConsumableBehavior {
             p.setVelocity(aim);
         });
         decrementSlot(inv, slot);
+        inv.restoreSelectedSlotOrBestWeapon(previousSlot);
         return true;
     }
 
     private static void decrementSlot(BotInventory inv, int slot) {
-        PlayerInventory raw = inv.raw();
-        ItemStack it = raw.getItem(slot);
-        if (it == null) return;
-        int amt = it.getAmount();
-        if (amt <= 1) raw.setItem(slot, new ItemStack(Material.AIR));
-        else {
-            it.setAmount(amt - 1);
-            raw.setItem(slot, it);
-        }
+        inv.decrementMainInventorySlot(slot, 1);
     }
 }

@@ -107,7 +107,13 @@ public final class ComboBehavior {
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (!bot.isBotAlive()) return;
             int slot = bot.getBotInventory().findHotbar(Material.ENDER_PEARL);
-            if (slot >= 0) bot.selectHotbarSlot(slot);
+            if (slot >= 0) {
+                slot = bot.getBotInventory().selectMainInventorySlot(slot);
+            }
+            if (slot < 0) {
+                active.remove(bot.getUUID());
+                return;
+            }
             Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
             Vector aim = target.getEyeLocation().toVector().subtract(spawn.toVector()).normalize();
             aim.setY(aim.getY() + 0.08).normalize();
@@ -118,19 +124,27 @@ public final class ComboBehavior {
                 p.setVelocity(aim.multiply(2.2));
             });
             spawn.getWorld().playSound(spawn, Sound.ENTITY_ENDER_PEARL_THROW, 1f, 1f);
+            bot.getBotInventory().decrementMainInventorySlot(slot, 1);
         }, PEARL_DELAY_TICKS);
         return true;
     }
 
     private static void spawnWindCharge(Bot bot, Location at, Vector velocity) {
         int slot = bot.getBotInventory().findHotbar(Material.WIND_CHARGE);
-        if (slot >= 0) bot.selectHotbarSlot(slot);
+        if (slot >= 0) {
+            slot = bot.getBotInventory().selectMainInventorySlot(slot);
+        }
         bot.punch();
         at.getWorld().spawn(at, WindCharge.class, w -> {
             w.setShooter(bot.getBukkitEntity());
             w.setVelocity(velocity);
         });
         at.getWorld().playSound(at, Sound.ENTITY_WIND_CHARGE_THROW, 1f, 1.0f);
+        if (slot >= 0) {
+            bot.getBotInventory().decrementMainInventorySlot(slot, 1);
+        } else {
+            bot.getBotInventory().decrementMaterialOrOffhand(Material.WIND_CHARGE);
+        }
     }
 
     private static Vector horizontalTo(Location from, Location to) {

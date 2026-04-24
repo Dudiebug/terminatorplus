@@ -43,9 +43,28 @@ public final class CombatDirector {
 
         double distance = bot.getLocation().distance(target.getLocation());
         BotInventory inv = bot.getBotInventory();
+        int alive = bot.getAliveTicks();
 
         CombatDebugger.dirEntry(bot, distance, bot.getCombatState().getPhase(),
                 bot.isBotOnGround(), bot.getVelocity().getY());
+        if (CombatDebugger.isOn(bot)) {
+            CombatDebugger.log(bot, "dir-ready",
+                    "kit[mace=" + inv.hasMace()
+                            + " trident=" + inv.hasTrident()
+                            + " pearl=" + inv.hasEnderPearl()
+                            + " wind=" + inv.hasWindCharge()
+                            + " crystal=" + inv.hasCrystalKit()
+                            + " anchor=" + inv.hasAnchorKit()
+                            + " cobweb=" + inv.hasCobweb()
+                            + "] cd[mace=" + bot.getBotCooldowns().ready(MaceBehavior.COOLDOWN_KEY, alive)
+                            + " trident=" + bot.getBotCooldowns().ready(TridentBehavior.COOLDOWN_KEY, alive)
+                            + " pearl=" + bot.getBotCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, alive)
+                            + " wind=" + bot.getBotCooldowns().ready(WindChargeBehavior.COOLDOWN_KEY, alive)
+                            + " crystal=" + bot.getBotCooldowns().ready(CrystalBehavior.COOLDOWN_KEY, alive)
+                            + " anchor=" + bot.getBotCooldowns().ready(AnchorBombBehavior.COOLDOWN_KEY, alive)
+                            + " cobweb=" + bot.getBotCooldowns().ready(UtilityBehavior.COOLDOWN_KEY, alive)
+                            + "]");
+        }
 
         // Passive behaviors run every tick regardless of weapon choice.
         elytra.tick(bot, target);
@@ -95,6 +114,7 @@ public final class CombatDirector {
             // CHARGING forever. Reset so the short-range melee branch below
             // can swing the trident as a melee stick.
             if (distance < 5.0 || distance > 28.0) {
+                CombatDebugger.log(bot, "trident-reset", "reason=distance-outside-charge-window dist=" + String.format("%.2f", distance));
                 bot.getCombatState().reset();
             } else {
                 CombatDebugger.weaponPick(bot, "TRIDENT(charging)", distance, true);
@@ -106,12 +126,36 @@ public final class CombatDirector {
 
         // Read the battlefield once, reuse across the scanner and the pipeline.
         snapshot.update(bot, target);
+        if (CombatDebugger.isOn(bot)) {
+            CombatDebugger.log(bot, "snapshot",
+                    "botHp=" + String.format("%.2f", snapshot.botHpFraction)
+                            + " tgtHp=" + String.format("%.2f", snapshot.targetHpFraction)
+                            + " targetAir=" + snapshot.targetAirborne
+                            + " targetBlocking=" + snapshot.targetBlocking
+                            + " targetEating=" + snapshot.targetEating
+                            + " openSky=" + snapshot.openSkyAboveBot
+                            + " targetAway=" + snapshot.targetSprintingAway
+                            + " targetBow=" + snapshot.targetDrawingBow
+                            + " targetPotion=" + snapshot.targetDrinkingPotion
+                            + " targetCobweb=" + snapshot.targetInCobweb
+                            + " botOnFire=" + snapshot.botOnFire);
+        }
 
         // Opportunity scanner first: every wiki-tier PvP play (crystals, cobwebs,
         // tipped arrows, interrupts, splash potions, combos) is evaluated here in
         // priority order. If anything fires, we're done this tick.
-        if (scanner.scan(bot, target, snapshot, combo)) {
+        boolean scannerHandled = scanner.scan(bot, target, snapshot, combo);
+        if (scannerHandled) {
+            CombatDebugger.log(bot, "scanner-hit");
             return true;
+        }
+        if (CombatDebugger.isOn(bot)) {
+            CombatDebugger.log(bot, "scanner-miss",
+                    "dist=" + String.format("%.2f", distance)
+                            + " targetAir=" + snapshot.targetAirborne
+                            + " targetBlocking=" + snapshot.targetBlocking
+                            + " targetNearWall=" + snapshot.targetNearWall
+                            + " targetAway=" + snapshot.targetSprintingAway);
         }
 
         // --- Standard priority pipeline (highest first) --------------------
@@ -194,8 +238,7 @@ public final class CombatDirector {
                 }
             }
             if (slot >= 0) {
-                int hotbar = inv.bringToHotbar(slot);
-                if (hotbar >= 0) bot.selectHotbarSlot(hotbar);
+                inv.selectMainInventorySlot(slot);
                 CombatDebugger.weaponPick(bot, pickLabel, distance, true);
             } else {
                 CombatDebugger.weaponPick(bot, "MELEE(empty)", distance, true);
@@ -236,9 +279,6 @@ public final class CombatDirector {
     }
 
     private void selectType(BotInventory inv, Material type) {
-        int slot = inv.findHotbar(type);
-        if (slot < 0) return;
-        int hotbar = inv.bringToHotbar(slot);
-        if (hotbar >= 0) inv.getBot().selectHotbarSlot(hotbar);
+        inv.selectMaterial(type);
     }
 }

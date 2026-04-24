@@ -27,13 +27,27 @@ public final class EnderPearlBehavior implements WeaponBehavior {
 
     @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
-        if (distance < MIN_DISTANCE || distance > MAX_DISTANCE) return 0;
-        if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) return 0;
+        int alive = bot.getAliveTicks();
+        if (distance < MIN_DISTANCE || distance > MAX_DISTANCE) {
+            CombatDebugger.log(bot, "pearl-skip", "reason=range dist=" + String.format("%.2f", distance));
+            return 0;
+        }
+        if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, alive)) {
+            CombatDebugger.log(bot, "pearl-skip", "reason=cooldown left=" + bot.getBotCooldowns().remaining(COOLDOWN_KEY, alive));
+            return 0;
+        }
 
         int slot = bot.getBotInventory().findHotbar(Material.ENDER_PEARL);
-        if (slot < 0) return 0;
+        if (slot < 0) {
+            CombatDebugger.log(bot, "pearl-skip", "reason=no-pearl");
+            return 0;
+        }
 
-        bot.selectHotbarSlot(slot);
+        slot = bot.getBotInventory().selectMainInventorySlot(slot);
+        if (slot < 0) {
+            CombatDebugger.log(bot, "pearl-skip", "reason=no-selectable-slot");
+            return 0;
+        }
         bot.faceLocation(target.getLocation());
         bot.punch();
 
@@ -53,11 +67,9 @@ public final class EnderPearlBehavior implements WeaponBehavior {
         });
 
         spawn.getWorld().playSound(spawn, Sound.ENTITY_ENDER_PEARL_THROW, 1f, 1f);
-
-        // Bot's movement kit is auto-refilled — don't decrement the stack here.
-        // The cooldown alone paces throws.
-
-        bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, bot.getAliveTicks());
+        CombatDebugger.log(bot, "pearl-throw", "dist=" + String.format("%.2f", distance) + " slot=" + slot);
+        bot.getBotInventory().decrementMainInventorySlot(slot, 1);
+        bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, alive);
         return COOLDOWN;
     }
 }
