@@ -21,7 +21,7 @@ import org.bukkit.inventory.ItemStack;
  */
 public final class MeleeBehavior implements WeaponBehavior {
 
-    private static final double ATTACK_RANGE = 4.0;
+    public static final double ATTACK_RANGE = 5.0;
 
     @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
@@ -37,6 +37,9 @@ public final class MeleeBehavior implements WeaponBehavior {
         float charge = bot.getAttackStrengthScale(0.0f);
         boolean iframes = BotCombatTiming.targetHasIFrames(target);
         CombatDebugger.meleeTry(bot, charge, iframes, distance);
+        if (BotCombatTiming.shouldWaitForCritWindow(bot, target, distance)) {
+            return 0;
+        }
         if (!BotCombatTiming.canSwing(bot, target)) {
             return 0;
         }

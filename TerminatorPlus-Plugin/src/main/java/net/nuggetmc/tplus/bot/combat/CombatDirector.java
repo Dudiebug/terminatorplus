@@ -8,12 +8,8 @@ import org.bukkit.World;
 import org.bukkit.entity.LivingEntity;
 
 /**
- * Per-tick combat decision maker. Given a bot and its current target,
- * picks the best hotbar weapon and delegates the actual move to the
- * matching {@link WeaponBehavior}. Also runs passive behaviors
- * ({@link ElytraBehavior}, {@link TotemBehavior}) every tick.
- *
- * <p>One instance is shared across all bots; behaviors are stateless.
+ * Per-tick combat decision maker. Given a bot and its current target, picks the
+ * best weapon and delegates the actual move to the matching behavior.
  */
 public final class CombatDirector {
 
@@ -32,13 +28,8 @@ public final class CombatDirector {
     private final OpportunityScanner scanner = new OpportunityScanner();
     private final CombatSnapshot snapshot = new CombatSnapshot();
 
-    /**
-     * @return true if the director handled combat this tick and the
-     *         caller should NOT fall back to its default attack code.
-     */
     public boolean tick(Bot bot, LivingEntity target) {
         if (target == null || !target.isValid()) return false;
-        // Bots used for AI training rely on the legacy deterministic damage table; skip.
         if (bot.hasNeuralNetwork()) return false;
 
         double distance = bot.getLocation().distance(target.getLocation());
@@ -66,35 +57,27 @@ public final class CombatDirector {
                             + "]");
         }
 
-        // Passive behaviors run every tick regardless of weapon choice.
         elytra.tick(bot, target);
         totem.tick(bot, target);
-        // Reactive consumable use (eat apples, drink potions, throw splash).
-        // Totem clutch-swap runs first so a fatal hit's failsafe is never preempted.
         consumable.tick(bot, target);
-        // Wind-charge self-propulsion: only fires in the 12–28 block approach zone,
-        // not during combat, with a 4-tick windup and a 6s cooldown. Most calls no-op.
         windCharge.tickMovementBoost(bot, target, distance);
 
-        // If a combo (wind+pearl) is mid-flight, let it finish — the scheduled
-        // pearl task handles the second step; don't dispatch other weapons.
         if (combo.inProgress(bot)) {
             CombatDebugger.log(bot, "combo-in-progress");
             return true;
         }
 
-        // Mid-attack commitment: stay on the chosen weapon.
         if (bot.getCombatState().getPhase() == CombatState.Phase.AIRBORNE && inv.hasMace()) {
             CombatDebugger.weaponPick(bot, "MACE(airborne-commit)", distance, true);
             selectType(inv, Material.MACE);
             mace.ticksFor(bot, target, distance);
             return true;
         }
-        // Aerial dive: if falling freely with a mace, steer toward any target nearby below.
+
         if (bot.getCombatState().getPhase() == CombatState.Phase.IDLE
                 && !bot.isBotOnGround() && bot.getVelocity().getY() < -0.3
                 && inv.hasMace()) {
-            Location botLoc    = bot.getLocation();
+            Location botLoc = bot.getLocation();
             Location targetLoc = target.getLocation();
             double dx = targetLoc.getX() - botLoc.getX();
             double dz = targetLoc.getZ() - botLoc.getZ();
@@ -107,24 +90,14 @@ public final class CombatDirector {
                 return true;
             }
         }
+
         if (bot.getCombatState().getPhase() == CombatState.Phase.CHARGING && inv.hasTrident()) {
-            // Trident throw range is ~5–28 blocks. If the target closed inside
-            // MIN_DISTANCE while we were charging, TridentBehavior.ticksFor()
-            // silently returns without releasing and leaves us pinned in
-            // CHARGING forever. Reset so the short-range melee branch below
-            // can swing the trident as a melee stick.
-            if (distance < 5.0 || distance > 28.0) {
-                CombatDebugger.log(bot, "trident-reset", "reason=distance-outside-charge-window dist=" + String.format("%.2f", distance));
-                bot.getCombatState().reset();
-            } else {
-                CombatDebugger.weaponPick(bot, "TRIDENT(charging)", distance, true);
-                selectType(inv, Material.TRIDENT);
-                trident.ticksFor(bot, target, distance);
-                return true;
-            }
+            CombatDebugger.weaponPick(bot, "TRIDENT(charging)", distance, true);
+            selectType(inv, Material.TRIDENT);
+            trident.ticksFor(bot, target, distance);
+            return true;
         }
 
-        // Read the battlefield once, reuse across the scanner and the pipeline.
         snapshot.update(bot, target);
         if (CombatDebugger.isOn(bot)) {
             CombatDebugger.log(bot, "snapshot",
@@ -141,11 +114,7 @@ public final class CombatDirector {
                             + " botOnFire=" + snapshot.botOnFire);
         }
 
-        // Opportunity scanner first: every wiki-tier PvP play (crystals, cobwebs,
-        // tipped arrows, interrupts, splash potions, combos) is evaluated here in
-        // priority order. If anything fires, we're done this tick.
-        boolean scannerHandled = scanner.scan(bot, target, snapshot, combo);
-        if (scannerHandled) {
+        if (scanner.scan(bot, target, snapshot, combo)) {
             CombatDebugger.log(bot, "scanner-hit");
             return true;
         }
@@ -158,38 +127,19 @@ public final class CombatDirector {
                             + " targetAway=" + snapshot.targetSprintingAway);
         }
 
-        // --- Standard priority pipeline (highest first) --------------------
-        //  1. Crystal PvP at short range (huge burst)
-        //  2. Anchor bomb in Nether at short range
-        //  3. Mace smash (ground + mace + CD ready)
-        //  4. Sword melee
-        //  5. Trident momentum throw (mid range)
-        //  6. Ender pearl gap-close (long range)
-        //  7. Cobweb utility (target fleeing)
-        //
-        // Wind charges are intentionally absent from the standalone pipeline —
-        // they are driven exclusively by OpportunityScanner (knockup-crystal,
-        // interrupts, aerial strike) and ComboBehavior (engage/escape launches).
-        // This stops the old "wind charge at any distance >= 4" spam behaviour.
-
         World.Environment env = bot.getDimension();
-
-        // Minimum range 2.0 so the bot isn't caught inside its own crystal
-        // blast — explosion radius is 6 blocks, and wiki "End crystals"
-        // notes the user only survives if at least ~1 block away. 2.0 gives
-        // a margin that still allows knockup-crystal setups.
         if (env != World.Environment.NETHER && inv.hasCrystalKit()
-                && distance >= 2.0 && distance <= 6.0
-                && bot.getBotCooldowns().ready(CrystalBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
+                && distance >= CrystalBehavior.MIN_DISTANCE && distance <= CrystalBehavior.MAX_DISTANCE
+                && bot.getBotCooldowns().ready(CrystalBehavior.COOLDOWN_KEY, alive)) {
             CombatDebugger.weaponPick(bot, "END_CRYSTAL", distance, true);
             selectType(inv, Material.END_CRYSTAL);
             crystal.ticksFor(bot, target, distance);
             return true;
         }
 
-        if (env == World.Environment.NETHER && inv.hasAnchorKit()
-                && distance >= 2.0 && distance <= 5.0
-                && bot.getBotCooldowns().ready(AnchorBombBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
+        if (env != World.Environment.NETHER && inv.hasAnchorKit()
+                && distance >= AnchorBombBehavior.MIN_DISTANCE && distance <= AnchorBombBehavior.MAX_DISTANCE
+                && bot.getBotCooldowns().ready(AnchorBombBehavior.COOLDOWN_KEY, alive)) {
             CombatDebugger.weaponPick(bot, "RESPAWN_ANCHOR", distance, true);
             selectType(inv, Material.RESPAWN_ANCHOR);
             anchor.ticksFor(bot, target, distance);
@@ -197,25 +147,15 @@ public final class CombatDirector {
         }
 
         boolean grounded = bot.isBotOnGround();
+        int sword = inv.findSword();
+        int axe = inv.findAxe();
+        int tridentMelee = inv.findHotbar(Material.TRIDENT);
+        boolean onlyTridentMelee = sword < 0 && axe < 0 && tridentMelee >= 0
+                && distance <= TridentBehavior.MELEE_FALLBACK_DISTANCE;
 
-        // Short-range ground engagement. A mace SMASH (airborne crit) does massive
-        // damage — density bonus + fall-damage scaling — and is the whole reason the
-        // mace kit exists. A normal mace SWING is only 3.6 DPS (worse than a sword),
-        // so when the smash is on cooldown we deliberately switch to the sword/axe.
-        //
-        // Historical bug: a previous version here also gated the smash on
-        // !hasRealMelee, which blocked the smash forever whenever the mace kit's
-        // secondary iron sword was present. The mace kit always ships with a sword
-        // (see buildLoadout("mace")), so the smash never actually fired in a real
-        // fight — the bot idled the mace for its entire life and melee'd with the
-        // sword only. The gate below restores the 5.0.0 priority: if mace cooldown
-        // is ready, commit to the smash; otherwise fall through to sword/axe.
-        if (distance <= 3.5) {
-            int sword = inv.findSword();
-            int axe = inv.findAxe();
-
+        if (distance <= 3.5 || onlyTridentMelee) {
             boolean maceSmashReady = inv.hasMace() && grounded
-                    && bot.getBotCooldowns().ready(MaceBehavior.COOLDOWN_KEY, bot.getAliveTicks());
+                    && bot.getBotCooldowns().ready(MaceBehavior.COOLDOWN_KEY, alive);
 
             if (maceSmashReady) {
                 CombatDebugger.weaponPick(bot, "MACE(smash)", distance, true);
@@ -226,16 +166,9 @@ public final class CombatDirector {
 
             int slot = sword >= 0 ? sword : axe;
             String pickLabel = sword >= 0 ? "SWORD" : axe >= 0 ? "AXE" : null;
-            // Spear kits carry a trident and no sword/axe; use the trident as a
-            // melee stick at point-blank. CombatDirector's trident-throw branch
-            // only fires at 5+ blocks, so without this the bot stands there
-            // empty-handed within attack range.
-            if (slot < 0) {
-                int trident = inv.findHotbar(Material.TRIDENT);
-                if (trident >= 0) {
-                    slot = trident;
-                    pickLabel = "TRIDENT(melee)";
-                }
+            if (slot < 0 && tridentMelee >= 0) {
+                slot = tridentMelee;
+                pickLabel = "TRIDENT(melee)";
             }
             if (slot >= 0) {
                 inv.selectMainInventorySlot(slot);
@@ -247,8 +180,8 @@ public final class CombatDirector {
             return true;
         }
 
-        if (distance >= 5.0 && distance <= 28.0 && inv.hasTrident()
-                && bot.getBotCooldowns().ready(TridentBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
+        if (distance >= TridentBehavior.MIN_DISTANCE && distance <= TridentBehavior.MAX_DISTANCE && inv.hasTrident()
+                && bot.getBotCooldowns().ready(TridentBehavior.COOLDOWN_KEY, alive)) {
             CombatDebugger.weaponPick(bot, "TRIDENT", distance, true);
             selectType(inv, Material.TRIDENT);
             trident.ticksFor(bot, target, distance);
@@ -256,23 +189,19 @@ public final class CombatDirector {
         }
 
         if (distance >= 28.0 && distance <= 64.0 && inv.hasEnderPearl()
-                && bot.getBotCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
+                && bot.getBotCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, alive)) {
             CombatDebugger.weaponPick(bot, "ENDER_PEARL", distance, true);
             pearl.ticksFor(bot, target, distance);
             return true;
         }
 
         if (inv.hasCobweb() && distance <= 4.5
-                && bot.getBotCooldowns().ready(UtilityBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
+                && bot.getBotCooldowns().ready(UtilityBehavior.COOLDOWN_KEY, alive)) {
             if (utility.ticksFor(bot, target, distance) > 0) {
                 CombatDebugger.weaponPick(bot, "COBWEB", distance, true);
                 return true;
             }
         }
-
-        // Healing — subsumed by ConsumableBehavior.tick() which runs every tick
-        // as a passive behavior (see above). Kept as an intentional no-op so the
-        // fall-through to `return false` is obvious.
 
         CombatDebugger.dirNoop(bot, distance, "no-branch-matched");
         return false;
