@@ -123,7 +123,6 @@ public final class ElytraBehavior {
         if (fw != null) {
             fw.setTicksToDetonate(20);
         }
-        // Consume one firework from the hotbar.
         consumeOne(bot, Material.FIREWORK_ROCKET);
         loc.getWorld().playSound(loc, Sound.ENTITY_FIREWORK_ROCKET_LAUNCH, 1f, 1f);
     }
@@ -154,18 +153,6 @@ public final class ElytraBehavior {
     }
 
     private void consumeOne(Bot bot, Material type) {
-        var inv = bot.getBukkitEntity().getInventory();
-        for (int i = 0; i < 36; i++) {
-            ItemStack it = inv.getItem(i);
-            if (it != null && it.getType() == type) {
-                int amt = it.getAmount();
-                if (amt <= 1) inv.setItem(i, new ItemStack(Material.AIR));
-                else {
-                    it.setAmount(amt - 1);
-                    inv.setItem(i, it);
-                }
-                return;
-            }
-        }
+        bot.getBotInventory().decrementMaterial(type);
     }
 }

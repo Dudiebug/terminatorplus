@@ -150,40 +150,38 @@ public class AICommand extends CommandInstance implements AIManager {
     public void info(CommandSender sender, @Arg("bot-name") String name) {
         sender.sendMessage("Processing request...");
 
-        scheduler.runTaskAsynchronously(plugin, () -> {
-            try {
-                Terminator bot = manager.getFirst(name, (sender instanceof Player pl) ? pl.getLocation() : null);
+        try {
+            Terminator bot = manager.getFirst(name, (sender instanceof Player pl) ? pl.getLocation() : null);
 
-                if (bot == null) {
-                    sender.sendMessage("Could not find bot " + ChatColor.GREEN + name + ChatColor.RESET + "!");
-                    return;
-                }
-
-                if (!bot.hasNeuralNetwork()) {
-                    sender.sendMessage("The bot " + ChatColor.GREEN + name + ChatColor.RESET + " does not have a neural network!");
-                    return;
-                }
-
-                NeuralNetwork network = bot.getNeuralNetwork();
-                List<String> strings = new ArrayList<>();
-
-                network.nodes().forEach((nodeType, node) -> {
-                    strings.add("");
-                    strings.add(ChatColor.YELLOW + "\"" + nodeType.name().toLowerCase() + "\"" + ChatColor.RESET + ":");
-                    List<String> values = new ArrayList<>();
-                    node.getValues().forEach((dataType, value) -> values.add(ChatUtils.BULLET_FORMATTED + "node"
-                            + dataType.getShorthand().toUpperCase() + ": " + ChatColor.RED + MathUtils.round2Dec(value)));
-                    strings.addAll(values);
-                });
-
-                sender.sendMessage(ChatUtils.LINE);
-                sender.sendMessage(ChatColor.DARK_GREEN + "NeuralNetwork" + ChatUtils.BULLET_FORMATTED + ChatColor.GRAY + "[" + ChatColor.GREEN + name + ChatColor.GRAY + "]");
-                strings.forEach(sender::sendMessage);
-                sender.sendMessage(ChatUtils.LINE);
-            } catch (Exception e) {
-                sender.sendMessage(ChatUtils.EXCEPTION_MESSAGE);
+            if (bot == null) {
+                sender.sendMessage("Could not find bot " + ChatColor.GREEN + name + ChatColor.RESET + "!");
+                return;
             }
-        });
+
+            if (!bot.hasNeuralNetwork()) {
+                sender.sendMessage("The bot " + ChatColor.GREEN + name + ChatColor.RESET + " does not have a neural network!");
+                return;
+            }
+
+            NeuralNetwork network = bot.getNeuralNetwork();
+            List<String> strings = new ArrayList<>();
+
+            network.nodes().forEach((nodeType, node) -> {
+                strings.add("");
+                strings.add(ChatColor.YELLOW + "\"" + nodeType.name().toLowerCase() + "\"" + ChatColor.RESET + ":");
+                List<String> values = new ArrayList<>();
+                node.getValues().forEach((dataType, value) -> values.add(ChatUtils.BULLET_FORMATTED + "node"
+                        + dataType.getShorthand().toUpperCase() + ": " + ChatColor.RED + MathUtils.round2Dec(value)));
+                strings.addAll(values);
+            });
+
+            sender.sendMessage(ChatUtils.LINE);
+            sender.sendMessage(ChatColor.DARK_GREEN + "NeuralNetwork" + ChatUtils.BULLET_FORMATTED + ChatColor.GRAY + "[" + ChatColor.GREEN + name + ChatColor.GRAY + "]");
+            strings.forEach(sender::sendMessage);
+            sender.sendMessage(ChatUtils.LINE);
+        } catch (Exception e) {
+            sender.sendMessage(ChatUtils.EXCEPTION_MESSAGE);
+        }
     }
 
     @Autofill

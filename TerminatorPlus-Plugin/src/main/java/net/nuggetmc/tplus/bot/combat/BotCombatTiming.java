@@ -41,14 +41,22 @@ public final class BotCombatTiming {
 
     public static boolean canSwing(Bot bot, LivingEntity target, float minCharge) {
         float charge = bot.getAttackStrengthScale(0.0f);
+        int iframes = ((CraftLivingEntity) target).getHandle().invulnerableTime;
+        if (!bot.getBotInventory().isSelectedMeleeWeapon()) {
+            CombatDebugger.swingGate(bot, charge, minCharge, iframes, false, "held");
+            return false;
+        }
         if (charge < minCharge) {
             CombatDebugger.swingBlock(bot, "charge", charge);
+            CombatDebugger.swingGate(bot, charge, minCharge, iframes, false, "charge");
             return false;
         }
-        if (targetHasIFrames(target)) {
-            CombatDebugger.swingBlock(bot, "iframes", ((CraftLivingEntity) target).getHandle().invulnerableTime);
+        if (iframes > IFRAME_BLOCK_THRESHOLD) {
+            CombatDebugger.swingBlock(bot, "iframes", iframes);
+            CombatDebugger.swingGate(bot, charge, minCharge, iframes, false, "iframes");
             return false;
         }
+        CombatDebugger.swingGate(bot, charge, minCharge, iframes, true, "ready");
         return true;
     }
 
@@ -57,9 +65,23 @@ public final class BotCombatTiming {
         return bot.getAttackStrengthScale(0.0f) >= READY_CHARGE;
     }
 
-    /** More permissive gate for mace dive-impacts where the smash density bonus dominates. */
+    /**
+     * More permissive gate for mace dive-impacts where the smash density bonus dominates.
+     * Uses strict {@code >} to match vanilla's {@code attackStrengthScale > 0.848F} crit/sweep
+     * gate in {@code Player.attack} — {@code >=} would fire one tick early at the boundary.
+     */
     public static boolean smashChargeReady(Bot bot) {
-        return bot.getAttackStrengthScale(0.0f) >= SMASH_READY_CHARGE;
+        return bot.getAttackStrengthScale(0.0f) > SMASH_READY_CHARGE;
+    }
+
+    /**
+     * Like {@link #canSwing(Bot, LivingEntity)} but bypasses the i-frame block.
+     * Mace smashes scale damage with fall distance, so the landed {@code amount}
+     * trivially exceeds any prior {@code lastHurt} and the {@code amount - lastHurt}
+     * residual is still a meaningful hit inside the i-frame window.
+     */
+    public static boolean canSwingMaceSmash(Bot bot) {
+        return bot.getAttackStrengthScale(0.0f) > SMASH_READY_CHARGE;
     }
 
     /** True if hitting the target now would be wasted on its i-frame window. */

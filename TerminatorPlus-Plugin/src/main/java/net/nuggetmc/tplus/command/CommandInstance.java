@@ -92,6 +92,12 @@ public abstract class CommandInstance extends BukkitCommand {
             sender.sendMessage(ChatColor.RED + "There is no root command present for the " + ChatColor.YELLOW + getName() + ChatColor.RED + " command.");
             return true;
         }
+        String requiredPermission = method.getPermission();
+        if (requiredPermission != null && !requiredPermission.isEmpty() && !sender.hasPermission(requiredPermission)) {
+            sender.sendMessage(ChatColor.RED + "You do not have permission to use this subcommand.");
+            sender.sendMessage(ChatColor.RED + "Required: " + ChatColor.YELLOW + requiredPermission);
+            return true;
+        }
 
         List<String> arguments = new ArrayList<>(Arrays.asList(args));
 

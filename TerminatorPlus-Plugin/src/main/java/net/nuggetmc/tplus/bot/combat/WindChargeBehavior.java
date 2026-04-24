@@ -1,6 +1,7 @@
 package net.nuggetmc.tplus.bot.combat;
 
 import net.nuggetmc.tplus.bot.Bot;
+import org.bukkit.Material;
 import org.bukkit.Location;
 import org.bukkit.Sound;
 import org.bukkit.entity.LivingEntity;
@@ -44,8 +45,25 @@ public final class WindChargeBehavior implements WeaponBehavior {
 
     @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
-        if (distance < MIN_DISTANCE || distance > MAX_DISTANCE) return 0;
-        if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) return 0;
+        int alive = bot.getAliveTicks();
+        if (distance < MIN_DISTANCE || distance > MAX_DISTANCE) {
+            CombatDebugger.log(bot, "wind-skip", "reason=range dist=" + String.format("%.2f", distance));
+            return 0;
+        }
+        if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, alive)) {
+            CombatDebugger.log(bot, "wind-skip", "reason=cooldown left=" + bot.getBotCooldowns().remaining(COOLDOWN_KEY, alive));
+            return 0;
+        }
+        int slot = bot.getBotInventory().findMainInventory(Material.WIND_CHARGE);
+        if (slot < 0) {
+            CombatDebugger.log(bot, "wind-skip", "reason=no-wind-charge");
+            return 0;
+        }
+        slot = bot.getBotInventory().selectMainInventorySlot(slot);
+        if (slot < 0) {
+            CombatDebugger.log(bot, "wind-skip", "reason=no-selectable-slot");
+            return 0;
+        }
 
         Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
         Vector aim = target.getEyeLocation().toVector().subtract(spawn.toVector()).normalize();
@@ -59,7 +77,9 @@ public final class WindChargeBehavior implements WeaponBehavior {
         });
 
         spawn.getWorld().playSound(spawn, Sound.ENTITY_WIND_CHARGE_THROW, 1f, 1f);
-        bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, bot.getAliveTicks());
+        CombatDebugger.log(bot, "wind-throw", "mode=combat dist=" + String.format("%.2f", distance));
+        bot.getBotInventory().decrementMainInventorySlot(slot, 1);
+        bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, alive);
         return COOLDOWN;
     }
 
@@ -86,10 +106,12 @@ public final class WindChargeBehavior implements WeaponBehavior {
             boolean stillValid = bot.getCombatState().getPhase() == CombatState.Phase.IDLE
                     && bot.isBotOnGround();
             if (!stillValid) {
+                CombatDebugger.log(bot, "wind-boost-cancel", "reason=state-changed");
                 bot.pendingWindChargePlan = null;
                 return;
             }
             if (bot.getAliveTicks() >= plan.fireAtTick) {
+                CombatDebugger.log(bot, "wind-boost-fire", "mode=" + plan.mode.name());
                 executePlan(bot, plan);
                 bot.pendingWindChargePlan = null;
             }
@@ -140,6 +162,8 @@ public final class WindChargeBehavior implements WeaponBehavior {
                 velocity,
                 mode
         );
+        CombatDebugger.log(bot, "wind-boost-plan",
+                "mode=" + mode.name() + " dist=" + String.format("%.2f", distance) + " dy=" + String.format("%.2f", dy));
 
         // Audible wind-up so players can hear/see the bot is building the throw.
         bot.getLocation().getWorld().playSound(bot.getLocation(),
@@ -150,6 +174,10 @@ public final class WindChargeBehavior implements WeaponBehavior {
     }
 
     private static void executePlan(Bot bot, WindChargeMovePlan plan) {
+        if (!bot.getBotInventory().decrementMaterialOrOffhand(Material.WIND_CHARGE)) {
+            CombatDebugger.log(bot, "wind-boost-cancel", "reason=no-wind-charge");
+            return;
+        }
         Location spawn = bot.getLocation().add(plan.placementOffset);
         Vector velocity = plan.velocity.clone();
         bot.punch();

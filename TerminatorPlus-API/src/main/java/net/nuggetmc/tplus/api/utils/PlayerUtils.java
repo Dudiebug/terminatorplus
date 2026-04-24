@@ -12,23 +12,42 @@ import net.nuggetmc.tplus.api.agent.legacyagent.LegacyMats;
 
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
 public class PlayerUtils {
 
-    private static final Set<String> USERNAME_CACHE = new HashSet<>();
+    // Synchronized set so USERNAME_CACHE.add() from fillUsernameCache() can safely
+    // race with randomName()'s reads on another thread (Debugger and async bot
+    // spawning both call randomName from worker threads).
+    private static final Set<String> USERNAME_CACHE = Collections.synchronizedSet(new HashSet<>());
+    private static volatile boolean usernameCacheLoaded = false;
+    private static final Object USERNAME_CACHE_LOCK = new Object();
 
     public static boolean isInvincible(GameMode mode) {
         return mode != GameMode.SURVIVAL && mode != GameMode.ADVENTURE && mode != null;
     }
 
     public static String randomName() {
-        if (USERNAME_CACHE.isEmpty()) {
-            fillUsernameCache();
-        }
-
+        ensureUsernameCacheLoaded();
         return MathUtils.getRandomSetElement(USERNAME_CACHE);
+    }
+
+    /**
+     * Load the user cache once. Double-checked locking on a volatile flag so
+     * concurrent first-callers from async bot-spawn tasks don't double-parse
+     * the JSON file (before: the old {@code if (USERNAME_CACHE.isEmpty())} check
+     * allowed the second thread to re-enter {@code fillUsernameCache} and
+     * produce duplicated parse work with a stomp on the shared set).
+     */
+    private static void ensureUsernameCacheLoaded() {
+        if (usernameCacheLoaded) return;
+        synchronized (USERNAME_CACHE_LOCK) {
+            if (usernameCacheLoaded) return;
+            fillUsernameCache();
+            usernameCacheLoaded = true;
+        }
     }
 
     public static void fillUsernameCache() {

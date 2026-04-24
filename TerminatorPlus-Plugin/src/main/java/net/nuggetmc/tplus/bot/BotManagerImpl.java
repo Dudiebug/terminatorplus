@@ -113,6 +113,50 @@ public class BotManagerImpl implements BotManager, Listener {
         createBots(sender, name, skinName, n, null, loc);
     }
 
+    /**
+     * Command-facing async skin lookup path. Spawning still happens on the
+     * primary thread; only Mojang API fetch is off-thread.
+     */
+    public void createBotsAsync(CommandSender sender, String name, String skinName, int n, Location location) {
+        long timestamp = System.currentTimeMillis();
+
+        if (n < 1) n = 1;
+        int amount = n;
+
+        if (sender != null) {
+            String message = "Creating " + (amount == 1 ? "new bot" : "<red>" + numberFormat.format(amount) + "<reset>" + " new bots")
+                    + " with name " + "<green>" + name.replace("%", "<light_purple>%" + "<reset>")
+                    + (skinName == null ? "" : "<reset>" + " and skin " + "<green>" + skinName)
+                    + "<reset>...";
+            sender.sendRichMessage(message);
+        }
+
+        String requestedSkin = skinName == null ? name : skinName;
+        Location spawnLoc = location;
+        if (spawnLoc == null) {
+            if (sender instanceof Player player) {
+                spawnLoc = player.getLocation();
+            } else {
+                spawnLoc = new Location(Bukkit.getWorlds().get(0), 0, 0, 0);
+                if (sender != null) {
+                    sender.sendRichMessage("<red>No location specified, defaulting to " + spawnLoc.getX() + ", " + spawnLoc.getY() + ", " + spawnLoc.getZ() + ".");
+                }
+            }
+        }
+        final Location finalSpawnLoc = spawnLoc;
+
+        MojangAPI.getSkinAsync(requestedSkin).whenComplete((skin, error) ->
+                Bukkit.getScheduler().runTask(TerminatorPlus.getInstance(), () -> {
+                    if (error != null && sender != null) {
+                        sender.sendRichMessage("<red>Skin lookup failed for <yellow>" + requestedSkin + "<red>. Spawning bot(s) with fallback skin.");
+                    }
+                    createBots(finalSpawnLoc, name, skin, amount, null);
+                    if (sender != null) {
+                        sender.sendRichMessage("Process completed (<red>" + ((System.currentTimeMillis() - timestamp) / 1000D) + "s<reset>).");
+                    }
+                }));
+    }
+
     @Override
     public void createBots(CommandSender sender, String name, String skinName, int n, NeuralNetwork network, Location location) {
         long timestamp = System.currentTimeMillis();

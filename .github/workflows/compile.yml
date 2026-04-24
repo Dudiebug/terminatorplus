@@ -2,18 +2,34 @@ name: "Compile"
 
 on: [push, pull_request]
 
+# Branch-aware toolchain: mc-1.21.11 still builds on Java 21, but mc-26.1.2 and
+# master require Java 25 (Paper 26.1+ dev-bundle). Pick the JDK by branch so the
+# same workflow is green on every long-lived branch.
 jobs:
   gradle:
     strategy:
+      fail-fast: false
       matrix:
         os: [ ubuntu-latest ]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Select Java version by branch
+        id: java
+        shell: bash
+        run: |
+          branch="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          case "$branch" in
+            mc-1.21.11) echo "version=21" >> "$GITHUB_OUTPUT" ;;
+            *)          echo "version=25" >> "$GITHUB_OUTPUT" ;;
+          esac
+          echo "Selected Java ${GITHUB_OUTPUT} for branch $branch"
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 21
+          java-version: ${{ steps.java.outputs.version }}
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4

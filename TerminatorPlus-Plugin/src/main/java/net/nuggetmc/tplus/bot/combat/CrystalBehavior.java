@@ -9,8 +9,6 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.EnderCrystal;
 import org.bukkit.entity.LivingEntity;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
 
 import java.util.Arrays;
 import java.util.List;
@@ -28,18 +26,31 @@ public final class CrystalBehavior implements WeaponBehavior {
 
     @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
-        if (distance > MAX_DISTANCE) return 0;
-        if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) return 0;
+        int alive = bot.getAliveTicks();
+        if (distance > MAX_DISTANCE) {
+            CombatDebugger.log(bot, "crystal-skip", "reason=range dist=" + String.format("%.2f", distance));
+            return 0;
+        }
+        if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, alive)) {
+            CombatDebugger.log(bot, "crystal-skip", "reason=cooldown left=" + bot.getBotCooldowns().remaining(COOLDOWN_KEY, alive));
+            return 0;
+        }
 
         BotInventory inv = bot.getBotInventory();
-        if (!inv.hasCrystalKit()) return 0;
+        if (!inv.hasCrystalKit()) {
+            CombatDebugger.log(bot, "crystal-skip", "reason=no-kit");
+            return 0;
+        }
 
         World world = target.getWorld();
         // First try to spawn on an existing host block next to the target.
         Block hostBlock = findHostBlockNear(target.getLocation());
         if (hostBlock == null) {
             hostBlock = placeHost(bot, target, world);
-            if (hostBlock == null) return 0;
+            if (hostBlock == null) {
+                CombatDebugger.log(bot, "crystal-skip", "reason=no-host-block");
+                return 0;
+            }
         }
 
         Location spawn = hostBlock.getLocation().add(0.5, 1.0, 0.5);
@@ -51,9 +62,10 @@ public final class CrystalBehavior implements WeaponBehavior {
         crystal.remove();
         world.createExplosion(spawn, 6.0f, false, true, bot.getBukkitEntity());
         world.playSound(spawn, Sound.ENTITY_GENERIC_EXPLODE, 1f, 1f);
+        CombatDebugger.log(bot, "crystal-boom", "dist=" + String.format("%.2f", distance));
 
-        consumeOne(inv.raw(), Material.END_CRYSTAL);
-        bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, bot.getAliveTicks());
+        consumeOne(inv, Material.END_CRYSTAL);
+        bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, alive);
         return COOLDOWN;
     }
 
@@ -80,15 +92,15 @@ public final class CrystalBehavior implements WeaponBehavior {
     }
 
     private Block placeHost(Bot bot, LivingEntity target, World world) {
-        PlayerInventory inv = bot.getBotInventory().raw();
+        BotInventory inv = bot.getBotInventory();
         Material hostMat;
         int hostSlot;
-        if (world.getEnvironment() == World.Environment.NETHER && bot.getBotInventory().findHotbar(Material.GLOWSTONE) >= 0) {
+        if (world.getEnvironment() == World.Environment.NETHER && inv.findMainInventory(Material.GLOWSTONE) >= 0) {
             hostMat = Material.GLOWSTONE;
-            hostSlot = bot.getBotInventory().findHotbar(Material.GLOWSTONE);
+            hostSlot = inv.findMainInventory(Material.GLOWSTONE);
         } else {
             hostMat = Material.OBSIDIAN;
-            hostSlot = bot.getBotInventory().findHotbar(Material.OBSIDIAN);
+            hostSlot = inv.findMainInventory(Material.OBSIDIAN);
         }
         if (hostSlot < 0) return null;
 
@@ -104,18 +116,7 @@ public final class CrystalBehavior implements WeaponBehavior {
         return candidate;
     }
 
-    private void consumeOne(PlayerInventory inv, Material type) {
-        for (int i = 0; i < 36; i++) {
-            ItemStack it = inv.getItem(i);
-            if (it != null && it.getType() == type) {
-                int amt = it.getAmount();
-                if (amt <= 1) inv.setItem(i, new ItemStack(Material.AIR));
-                else {
-                    it.setAmount(amt - 1);
-                    inv.setItem(i, it);
-                }
-                return;
-            }
-        }
+    private void consumeOne(BotInventory inv, Material type) {
+        inv.decrementMaterial(type);
     }
 }

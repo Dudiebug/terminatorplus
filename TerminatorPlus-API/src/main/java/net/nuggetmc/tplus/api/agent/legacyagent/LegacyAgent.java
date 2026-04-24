@@ -351,19 +351,32 @@ public class LegacyAgent extends Agent {
     }
 
     private void fallDamageCheck(Terminator bot) {
-        if (bot.isFalling()) {
-            bot.look(BlockFace.DOWN);
+        if (!bot.isFalling()) return;
 
-            Material itemType;
+        Material itemType = bot.getDimension() == World.Environment.NETHER
+                ? Material.TWISTING_VINES
+                : Material.WATER_BUCKET;
 
-            if (bot.getDimension() == World.Environment.NETHER) {
-                itemType = Material.TWISTING_VINES;
-            } else {
-                itemType = Material.WATER_BUCKET;
+        LivingEntity le = bot.getBukkitEntity();
+        if (le instanceof org.bukkit.entity.Player p) {
+            ItemStack held = p.getInventory().getItemInMainHand();
+            if (held != null) {
+                Material heldType = held.getType();
+                // Don't swap the weapon out for a water bucket during a mace-smash dive.
+                // Vanilla mace fall-damage scaling means the smash ITSELF negates the fall
+                // damage on a successful hit, and writing a water bucket to mainhand mid-
+                // dive wipes the mace + resets attackStrengthTicker, so the crushing smash
+                // downgrades to a 0-damage air swing.
+                if (heldType == Material.MACE) return;
+                // Already holding the clutch item — no write needed. Just keep looking down.
+                if (heldType == itemType) {
+                    bot.look(BlockFace.DOWN);
+                    return;
+                }
             }
-
-            bot.setItem(new ItemStack(itemType));
         }
+
+        bot.look(BlockFace.DOWN);
     }
 
     @Override
@@ -454,8 +467,6 @@ public class LegacyAgent extends Agent {
             world.playSound(loc, sound, 1, 1);
 
             if (itemType == Material.WATER_BUCKET) {
-                bot.setItem(new ItemStack(Material.BUCKET));
-
                 scheduler.runTaskLater(plugin, () -> {
                     Block block = loc.getBlock();
 
@@ -463,7 +474,6 @@ public class LegacyAgent extends Agent {
                     	&& ((Waterlogged)block.getBlockData()).isWaterlogged();
                     if (block.getType() == Material.WATER || waterloggedNow) {
                         bot.look(BlockFace.DOWN);
-                        bot.setItem(new ItemStack(Material.WATER_BUCKET));
                         world.playSound(loc, Sound.ITEM_BUCKET_FILL, 1, 1);
                         if (waterloggedNow) {
                         	Waterlogged data = (Waterlogged)loc.getBlock().getBlockData();
@@ -863,8 +873,6 @@ public class LegacyAgent extends Agent {
 
             if (LegacyMats.BREAK.contains(m0) && LegacyMats.BREAK.contains(m1) && LegacyMats.BREAK.contains(m2)) {
 
-                npc.setItem(new ItemStack(Material.COBBLESTONE));
-
                 Block place = playerNPC.getLocation().getBlock();
 
                 if (miningAnim.containsKey(playerNPC)) {
@@ -881,7 +889,6 @@ public class LegacyAgent extends Agent {
                 if (m0 != Material.WATER)
 	                scheduler.runTaskLater(plugin, () -> {
 	                    npc.sneak();
-	                    npc.setItem(new ItemStack(Material.COBBLESTONE));
 	                    npc.punch();
 	                    npc.look(BlockFace.DOWN);
 	
@@ -1246,14 +1253,12 @@ public class LegacyAgent extends Agent {
         bot.punch();
         loc.getBlock().setType(Material.WATER);
         world.playSound(loc, Sound.ITEM_BUCKET_EMPTY, 1, 1);
-        bot.setItem(new org.bukkit.inventory.ItemStack(Material.BUCKET));
 
         scheduler.runTaskLater(plugin, () -> {
             Block block = loc.getBlock();
 
             if (block.getType() == Material.WATER) {
                 bot.look(BlockFace.DOWN);
-                bot.setItem(new ItemStack(Material.WATER_BUCKET));
                 world.playSound(loc, Sound.ITEM_BUCKET_FILL, 1, 1);
                 block.setType(Material.AIR);
             }
@@ -1365,7 +1370,6 @@ public class LegacyAgent extends Agent {
 
                 Location place = loc.clone().add(0, -0.1, 0);
 
-                bot.setItem(new ItemStack(Material.OAK_BOAT));
                 bot.look(BlockFace.DOWN);
                 bot.punch();
 
