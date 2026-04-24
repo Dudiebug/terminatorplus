@@ -2,12 +2,14 @@ package net.nuggetmc.tplus.bot.combat;
 
 import net.nuggetmc.tplus.bot.Bot;
 import net.nuggetmc.tplus.bot.loadout.BotInventory;
+import org.bukkit.FluidCollisionMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.util.Vector;
 
 /**
  * Overworld / End respawn-anchor bomb: place a respawn anchor next to the target,
@@ -25,8 +27,8 @@ public final class AnchorBombBehavior implements WeaponBehavior {
     public static final String COOLDOWN_KEY = "anchor";
     private static final int COOLDOWN = 50;
     /** Stay outside the ~5-block vanilla explosion radius so the bot survives its own bomb. */
-    private static final double MIN_DISTANCE = 6.0;
-    private static final double MAX_DISTANCE = 8.0;
+    public static final double MIN_DISTANCE = 6.0;
+    public static final double MAX_DISTANCE = 8.0;
 
     @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
@@ -50,6 +52,10 @@ public final class AnchorBombBehavior implements WeaponBehavior {
             CombatDebugger.log(bot, "anchor-skip", "reason=no-kit");
             return 0;
         }
+        if (inv.findMainInventory(Material.RESPAWN_ANCHOR) < 0 || inv.findMainInventory(Material.GLOWSTONE) < 0) {
+            CombatDebugger.log(bot, "anchor-skip", "reason=missing-resource");
+            return 0;
+        }
 
         World world = target.getWorld();
         Block placeAt = findPlaceableBlock(target.getLocation());
@@ -58,12 +64,15 @@ public final class AnchorBombBehavior implements WeaponBehavior {
             return 0;
         }
 
+        Location boom = placeAt.getLocation().add(0.5, 0.5, 0.5);
+        if (!hasClearLine(bot, boom)) {
+            CombatDebugger.log(bot, "anchor-skip", "reason=blocked-line");
+            return 0;
+        }
+
         placeAt.setType(Material.RESPAWN_ANCHOR);
         consumeOne(inv, Material.RESPAWN_ANCHOR);
-        // Consume glowstone to represent the "charge" step.
         consumeOne(inv, Material.GLOWSTONE);
-
-        Location boom = placeAt.getLocation().add(0.5, 0.5, 0.5);
         bot.faceLocation(boom);
         bot.punch();
 
@@ -90,6 +99,15 @@ public final class AnchorBombBehavior implements WeaponBehavior {
             if (b.getType().isAir()) return b;
         }
         return null;
+    }
+
+    private boolean hasClearLine(Bot bot, Location boom) {
+        Location eye = bot.getBukkitEntity().getEyeLocation();
+        Vector direction = boom.toVector().subtract(eye.toVector());
+        double length = direction.length();
+        if (length < 1.0e-6) return true;
+        direction.normalize();
+        return eye.getWorld().rayTraceBlocks(eye, direction, length, FluidCollisionMode.NEVER, true) == null;
     }
 
     private void consumeOne(BotInventory inv, Material type) {

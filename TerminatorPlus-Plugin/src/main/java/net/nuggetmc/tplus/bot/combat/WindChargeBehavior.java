@@ -169,8 +169,6 @@ public final class WindChargeBehavior implements WeaponBehavior {
         bot.getLocation().getWorld().playSound(bot.getLocation(),
                 Sound.BLOCK_BEACON_POWER_SELECT, 0.6f, 2.0f);
 
-        // Cooldown starts now (at plan time), not at fire time, so minimum 6s between attempts.
-        bot.getBotCooldowns().set(BOOST_COOLDOWN_KEY, BOOST_COOLDOWN, bot.getAliveTicks());
     }
 
     private static void executePlan(Bot bot, WindChargeMovePlan plan) {
@@ -186,5 +184,6 @@ public final class WindChargeBehavior implements WeaponBehavior {
             w.setVelocity(velocity);
         });
         spawn.getWorld().playSound(spawn, Sound.ENTITY_WIND_CHARGE_THROW, 1f, 1f);
+        bot.getBotCooldowns().set(BOOST_COOLDOWN_KEY, BOOST_COOLDOWN, bot.getAliveTicks());
     }
 }

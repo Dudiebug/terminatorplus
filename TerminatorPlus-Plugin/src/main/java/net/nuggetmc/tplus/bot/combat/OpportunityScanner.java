@@ -4,6 +4,7 @@ import net.nuggetmc.tplus.TerminatorPlus;
 import net.nuggetmc.tplus.bot.Bot;
 import net.nuggetmc.tplus.bot.loadout.BotInventory;
 import org.bukkit.Bukkit;
+import org.bukkit.FluidCollisionMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
@@ -156,12 +157,15 @@ public final class OpportunityScanner {
     private static final String WATER_DOUSE_CD      = "opp_water_douse";
     private static final String TNT_TRAP_CD         = "opp_tnt_trap";
 
+    private static final String SWORD_CRIT_CD       = "opp_sword_crit";
+    private static final String SPRINT_RESET_CD     = "opp_sprint_reset";
+    private static final String PURSUE_GAP_CD       = "opp_pursue_gap";
     private static final String ARMOR_REPAIR_CD     = "opp_armor_repair";
 
     // ==================================================================
     // Tunable thresholds -- pulled from wiki guidance
     // ==================================================================
-    private static final double CRYSTAL_TRAP_RANGE = 6.0;
+    private static final double CRYSTAL_TRAP_RANGE = CrystalBehavior.MAX_DISTANCE;
     private static final double MELEE_RANGE = 3.5;
     private static final double TIPPED_ARROW_MIN = 4.0;
     private static final double TIPPED_ARROW_MAX = 30.0;
@@ -496,33 +500,36 @@ public final class OpportunityScanner {
 
         // 28. STRENGTH_BUFF -- pre-engage drink Strength.
         //    Wiki: "Strength II can be used to out-damage golden apples"
+        PotionType strength = pickBestDrinkable(inv, PotionType.STRONG_STRENGTH, PotionType.STRENGTH);
         if (snap.distance >= 6.0 && snap.distance <= 20.0
                 && !botHasEffect(bot, PotionEffectType.STRENGTH)
-                && hasDrinkable(inv, PotionType.STRENGTH)
+                && strength != null
                 && bot.getBotCooldowns().ready(STRENGTH_BUFF_CD, alive)) {
-            if (executeDrinkPotion(bot, PotionType.STRENGTH)) {
+            if (executeDrinkPotion(bot, strength)) {
                 bot.getBotCooldowns().set(STRENGTH_BUFF_CD, 1800, alive);
                 return true;
             }
         }
 
         // 29. SPEED_BUFF -- long range engage, drink Speed.
+        PotionType speed = pickBestDrinkable(inv, PotionType.STRONG_SWIFTNESS, PotionType.SWIFTNESS);
         if (snap.distance >= 10.0
                 && !botHasEffect(bot, PotionEffectType.SPEED)
-                && hasDrinkable(inv, PotionType.SWIFTNESS)
+                && speed != null
                 && bot.getBotCooldowns().ready(SPEED_BUFF_CD, alive)) {
-            if (executeDrinkPotion(bot, PotionType.SWIFTNESS)) {
+            if (executeDrinkPotion(bot, speed)) {
                 bot.getBotCooldowns().set(SPEED_BUFF_CD, 1800, alive);
                 return true;
             }
         }
 
         // 30. FIRE_RES_BUFF -- standing in/near lava, drink Fire Resistance.
+        PotionType fireRes = pickBestDrinkable(inv, PotionType.LONG_FIRE_RESISTANCE, PotionType.FIRE_RESISTANCE);
         if ((snap.botInLavaArea || snap.botOnFire)
                 && !botHasEffect(bot, PotionEffectType.FIRE_RESISTANCE)
-                && hasDrinkable(inv, PotionType.FIRE_RESISTANCE)
+                && fireRes != null
                 && bot.getBotCooldowns().ready(FIRE_RES_CD, alive)) {
-            if (executeDrinkPotion(bot, PotionType.FIRE_RESISTANCE)) {
+            if (executeDrinkPotion(bot, fireRes)) {
                 bot.getBotCooldowns().set(FIRE_RES_CD, 600, alive);
                 return true;
             }
@@ -587,6 +594,36 @@ public final class OpportunityScanner {
             }
         }
 
+        // 35b. Sword/axe fundamentals for default kits.
+        if (hasSwordOrAxe(inv) && snap.botOnGround && snap.distance <= 3.2
+                && bot.getBotCooldowns().ready(SWORD_CRIT_CD, alive)
+                && BotCombatTiming.chargeReady(bot)
+                && !BotCombatTiming.targetHasIFrames(target)) {
+            if (executeSwordCritSetup(bot, target)) {
+                bot.getBotCooldowns().set(SWORD_CRIT_CD, 18, alive);
+                return true;
+            }
+        }
+
+        if (hasSwordOrAxe(inv) && snap.distance <= MELEE_RANGE
+                && bot.getBotCooldowns().ready(SPRINT_RESET_CD, alive)
+                && !BotCombatTiming.isCritWindow(bot)
+                && !(snap.botOnGround && snap.distance <= 3.2 && BotCombatTiming.chargeReady(bot))) {
+            if (executeSprintReset(bot, target)) {
+                bot.getBotCooldowns().set(SPRINT_RESET_CD, 12, alive);
+                return true;
+            }
+        }
+
+        if (hasSwordOrAxe(inv) && snap.targetSprintingAway
+                && snap.distance > MELEE_RANGE && snap.distance <= 8.0
+                && bot.getBotCooldowns().ready(PURSUE_GAP_CD, alive)) {
+            if (executePursueGapClose(bot, target)) {
+                bot.getBotCooldowns().set(PURSUE_GAP_CD, 10, alive);
+                return true;
+            }
+        }
+
         // ===============================================================
         // TIER D -- finisher and maintenance
         // ===============================================================
@@ -627,12 +664,17 @@ public final class OpportunityScanner {
         if (needsPlace) {
             if (!below.getType().isAir()) return false;
             if (!hasItem(bot.getBotInventory(), Material.OBSIDIAN)) return false;
-            below.setType(Material.OBSIDIAN);
-            consumeOne(bot, Material.OBSIDIAN);
         }
 
         Location crystalSpawn = below.getLocation().add(0.5, 1.0, 0.5);
-        if (!crystalSpawn.getBlock().getType().isAir()) return false;
+        if (!crystalSpawn.getBlock().getType().isAir()
+                || !crystalSpawn.clone().add(0, 1, 0).getBlock().getType().isAir()) return false;
+        if (!isSafeCrystalSpawn(bot, crystalSpawn) || !hasClearLine(bot, crystalSpawn)) return false;
+
+        if (needsPlace) {
+            below.setType(Material.OBSIDIAN);
+            consumeOne(bot, Material.OBSIDIAN);
+        }
 
         bot.faceLocation(crystalSpawn);
         bot.punch();
@@ -819,11 +861,13 @@ public final class OpportunityScanner {
         if (!obsBlock.getType().isAir()) return false;
         if (!hasItem(bot.getBotInventory(), Material.OBSIDIAN)) return false;
 
+        Location crystalSpawn = obsBlock.getLocation().add(0.5, 1.0, 0.5);
+        if (!crystalSpawn.getBlock().getType().isAir()
+                || !crystalSpawn.clone().add(0, 1, 0).getBlock().getType().isAir()) return false;
+        if (!isSafeCrystalSpawn(bot, crystalSpawn) || !hasClearLine(bot, crystalSpawn)) return false;
+
         obsBlock.setType(Material.OBSIDIAN);
         consumeOne(bot, Material.OBSIDIAN);
-
-        Location crystalSpawn = obsBlock.getLocation().add(0.5, 1.0, 0.5);
-        if (!crystalSpawn.getBlock().getType().isAir()) return false;
 
         World world = feet.getWorld();
         EnderCrystal crystal = world.spawn(crystalSpawn, EnderCrystal.class,
@@ -1195,6 +1239,43 @@ public final class OpportunityScanner {
         return true;
     }
 
+    private boolean executeSwordCritSetup(Bot bot, LivingEntity target) {
+        CombatDebugger.log(bot, "opp-attempt", "name=SWORD_CRIT_SETUP");
+        int slot = findSwordAxeSlot(bot.getBotInventory());
+        if (slot < 0 || selectSlot(bot, slot) < 0) return false;
+        bot.faceLocation(target.getLocation());
+        bot.jump();
+        return true;
+    }
+
+    private boolean executeSprintReset(Bot bot, LivingEntity target) {
+        CombatDebugger.log(bot, "opp-attempt", "name=SPRINT_RESET");
+        int slot = findSwordAxeSlot(bot.getBotInventory());
+        if (slot < 0 || selectSlot(bot, slot) < 0) return false;
+        bot.faceLocation(target.getLocation());
+        boolean wasSprinting = bot.isSprinting();
+        bot.setSprinting(true);
+        boolean hit = tryMeleeAttack(bot, target);
+        bot.setSprinting(wasSprinting);
+        return hit;
+    }
+
+    private boolean executePursueGapClose(Bot bot, LivingEntity target) {
+        CombatDebugger.log(bot, "opp-attempt", "name=PURSUE_GAP_CLOSE");
+        int slot = findSwordAxeSlot(bot.getBotInventory());
+        if (slot >= 0) selectSlot(bot, slot);
+        Vector toTarget = target.getLocation().toVector().subtract(bot.getLocation().toVector()).setY(0);
+        if (toTarget.lengthSquared() < 1.0e-6) return false;
+        toTarget.normalize();
+        bot.faceLocation(target.getLocation());
+        if (bot.isBotOnGround()) {
+            bot.jump(toTarget.multiply(0.35).setY(0.42));
+        } else {
+            bot.walk(toTarget.multiply(0.28));
+        }
+        return true;
+    }
+
     // ==================================================================
     // EXECUTORS -- TIER D (finisher and maintenance)
     // ==================================================================
@@ -1214,15 +1295,44 @@ public final class OpportunityScanner {
         if (snap.distance >= 8.0 && snap.distance <= 28.0 && inv.hasTrident()
                 && bot.getBotCooldowns().ready(TridentBehavior.COOLDOWN_KEY, alive)) {
             int slot = inv.findHotbar(Material.TRIDENT);
-            if (slot >= 0) selectSlot(bot, slot);
-            return false;
+            if (slot < 0 || selectSlot(bot, slot) < 0) return false;
+            new TridentBehavior().ticksFor(bot, target, snap.distance);
+            return true;
         }
 
         if (snap.distance >= 10.0 && inv.hasEnderPearl()
                 && bot.getBotCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, alive)) {
-            return false;
+            return executeFinisherPearl(bot, target);
+        }
+        if (snap.distance <= MeleeBehavior.ATTACK_RANGE) {
+            int slot = findSwordAxeSlot(inv);
+            if (slot < 0) slot = inv.findHotbar(Material.TRIDENT);
+            if (slot >= 0 && selectSlot(bot, slot) >= 0) {
+                bot.faceLocation(target.getLocation());
+                return tryMeleeAttack(bot, target);
+            }
         }
         return false;
+    }
+
+    private boolean executeFinisherPearl(Bot bot, LivingEntity target) {
+        int slot = bot.getBotInventory().findHotbar(Material.ENDER_PEARL);
+        if (slot < 0) return false;
+        slot = selectSlot(bot, slot);
+        if (slot < 0) return false;
+
+        Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
+        Vector aim = target.getEyeLocation().toVector().subtract(spawn.toVector()).normalize();
+        bot.faceLocation(target.getLocation());
+        bot.punch();
+        spawn.getWorld().spawn(spawn, EnderPearl.class, p -> {
+            p.setShooter(bot.getBukkitEntity());
+            p.setVelocity(aim.multiply(2.0));
+        });
+        spawn.getWorld().playSound(spawn, Sound.ENTITY_ENDER_PEARL_THROW, 1f, 1f);
+        bot.getBotInventory().decrementMainInventorySlot(slot, 1);
+        bot.getBotCooldowns().set(EnderPearlBehavior.COOLDOWN_KEY, 60, bot.getAliveTicks());
+        return true;
     }
 
     private boolean executeArmorRepair(Bot bot) {
@@ -1290,6 +1400,16 @@ public final class OpportunityScanner {
             if (inv.findHotbar(m) >= 0) return true;
         }
         return false;
+    }
+
+    private static boolean hasSwordOrAxe(BotInventory inv) {
+        return findSwordAxeSlot(inv) >= 0;
+    }
+
+    private static int findSwordAxeSlot(BotInventory inv) {
+        int sword = inv.findSword();
+        if (sword >= 0) return sword;
+        return inv.findAxe();
     }
 
     private static int findAxeSlot(BotInventory inv) {
@@ -1434,6 +1554,13 @@ public final class OpportunityScanner {
         return findDrinkable(inv, type) != null;
     }
 
+    private static PotionType pickBestDrinkable(BotInventory inv, PotionType... types) {
+        for (PotionType type : types) {
+            if (hasDrinkable(inv, type)) return type;
+        }
+        return null;
+    }
+
     private static ItemStack findDrinkable(BotInventory inv, PotionType type) {
         PlayerInventory raw = inv.raw();
         for (int i = 0; i < 36; i++) {
@@ -1495,6 +1622,19 @@ public final class OpportunityScanner {
 
     private static boolean botHasEffect(Bot bot, PotionEffectType type) {
         return bot.getBukkitEntity().hasPotionEffect(type);
+    }
+
+    private static boolean isSafeCrystalSpawn(Bot bot, Location spawn) {
+        return bot.getLocation().distance(spawn) >= CrystalBehavior.MIN_DISTANCE;
+    }
+
+    private static boolean hasClearLine(Bot bot, Location target) {
+        Location eye = bot.getBukkitEntity().getEyeLocation();
+        Vector direction = target.toVector().subtract(eye.toVector());
+        double length = direction.length();
+        if (length < 1.0e-6) return true;
+        direction.normalize();
+        return eye.getWorld().rayTraceBlocks(eye, direction, length, FluidCollisionMode.NEVER, true) == null;
     }
 
     // ==================================================================
