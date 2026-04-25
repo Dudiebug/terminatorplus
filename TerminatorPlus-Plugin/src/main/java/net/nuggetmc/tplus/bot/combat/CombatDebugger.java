@@ -3,7 +3,11 @@ package net.nuggetmc.tplus.bot.combat;
 import net.nuggetmc.tplus.TerminatorPlus;
 import net.nuggetmc.tplus.bot.Bot;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 
@@ -240,10 +244,51 @@ public final class CombatDebugger {
     }
 
     private static void emit(Bot bot, String event, String detail) {
-        String payload = "[tplus-cbt] " + bot.getBotName() + " t=" + bot.getAliveTicks() + " " + event
+        String payload = "[tplus-cbt] "
+                + "bot=" + sanitizeToken(bot.getBotName())
+                + " tick=" + bot.getAliveTicks()
+                + " " + describeTarget(bot)
+                + " event=" + event
                 + (detail.isEmpty() ? "" : " " + detail);
         String line = TS_FORMAT.format(LocalDateTime.now()) + " " + payload;
         FILE_IO.execute(() -> writeToDebugFiles(bot, line));
+    }
+
+    private static String describeTarget(Bot bot) {
+        UUID targetId = bot.getTargetPlayer();
+        if (targetId == null) {
+            return "target=none";
+        }
+
+        Entity entity = Bukkit.getEntity(targetId);
+        if (!(entity instanceof LivingEntity living) || !entity.isValid()) {
+            return "target=stale id=" + shortId(targetId);
+        }
+
+        StringBuilder out = new StringBuilder()
+                .append("target=").append(sanitizeToken(entity.getName()))
+                .append(" targetType=").append(entity.getType().name());
+
+        Location botLoc = bot.getBukkitEntity().getLocation();
+        Location targetLoc = entity.getLocation();
+        if (botLoc.getWorld() != null && botLoc.getWorld().equals(targetLoc.getWorld())) {
+            out.append(" targetDist=").append(fmt(botLoc.distance(targetLoc)));
+        }
+
+        out.append(" targetHp=").append(fmt(living.getHealth()));
+        double maxHp = maxHealthOf(living);
+        if (maxHp > 0.0) {
+            out.append("/").append(fmt(maxHp));
+        }
+
+        return out.toString();
+    }
+
+    private static double maxHealthOf(LivingEntity living) {
+        if (living.getAttribute(Attribute.MAX_HEALTH) == null) {
+            return -1.0;
+        }
+        return living.getAttribute(Attribute.MAX_HEALTH).getValue();
     }
 
     private static String fmt(double d) {
@@ -302,5 +347,15 @@ public final class CombatDebugger {
 
     private static String sanitize(String value) {
         return value.replaceAll("[^A-Za-z0-9_.-]", "_");
+    }
+
+    private static String sanitizeToken(String value) {
+        if (value == null || value.isEmpty()) return "unknown";
+        return value.replaceAll("\\s+", "_").replaceAll("[^A-Za-z0-9_.:-]", "_");
+    }
+
+    private static String shortId(UUID id) {
+        String raw = id.toString();
+        return raw.substring(0, 8);
     }
 }
