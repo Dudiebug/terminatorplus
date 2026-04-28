@@ -68,12 +68,32 @@ public final class UtilityBehavior implements WeaponBehavior {
             CombatDebugger.log(bot, "cobweb-skip", "reason=placement-blocked");
             return 0;
         }
-        block.setType(Material.COBWEB);
+        if (!hasPlaceSupport(block)) {
+            CombatDebugger.log(bot, "cobweb-skip",
+                    "reason=no-support below=" + block.getRelative(0, -1, 0).getType().name());
+            return 0;
+        }
+        placeBlock(bot, block, Material.COBWEB, "utility-cobweb");
         CombatDebugger.log(bot, "cobweb-place", "slot=" + slot + " dot=" + String.format("%.2f", fleeDot));
 
         bot.getBotInventory().decrementMainInventorySlot(slot, 1);
 
         bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, alive);
         return COOLDOWN;
+    }
+
+    private static void placeBlock(Bot bot, Block block, Material material, String source) {
+        Material previous = block.getType();
+        CombatDebugger.blockPlace(bot, source, material, block, previous);
+        block.setType(material);
+    }
+
+    private static boolean hasPlaceSupport(Block block) {
+        return block.getRelative(0, -1, 0).getType().isSolid()
+                || block.getRelative(1, 0, 0).getType().isSolid()
+                || block.getRelative(-1, 0, 0).getType().isSolid()
+                || block.getRelative(0, 0, 1).getType().isSolid()
+                || block.getRelative(0, 0, -1).getType().isSolid()
+                || block.getRelative(0, 1, 0).getType().isSolid();
     }
 }

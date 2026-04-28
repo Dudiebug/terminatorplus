@@ -8,11 +8,12 @@ import org.bukkit.util.Vector;
  */
 public final class CombatState {
 
-    public enum Phase { IDLE, CHARGING, AIRBORNE, RELEASE }
+    public enum Phase { IDLE, CHARGING, MACE_CHARGING, AIRBORNE, RELEASE }
 
     private Phase phase = Phase.IDLE;
     private int phaseTicks = 0;
     private Vector chargeDirection;
+    private double phaseStartY = Double.NaN;
 
     public Phase getPhase() {
         return phase;
@@ -21,6 +22,7 @@ public final class CombatState {
     public void setPhase(Phase phase) {
         this.phase = phase;
         this.phaseTicks = 0;
+        this.phaseStartY = Double.NaN;
     }
 
     public int tickPhase() {
@@ -39,9 +41,18 @@ public final class CombatState {
         this.chargeDirection = v == null ? null : v.clone();
     }
 
+    public double getPhaseStartY() {
+        return phaseStartY;
+    }
+
+    public void setPhaseStartY(double phaseStartY) {
+        this.phaseStartY = phaseStartY;
+    }
+
     public void reset() {
         phase = Phase.IDLE;
         phaseTicks = 0;
         chargeDirection = null;
+        phaseStartY = Double.NaN;
     }
 }

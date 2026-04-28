@@ -32,6 +32,7 @@ import net.nuggetmc.tplus.api.event.BotDamageByPlayerEvent;
 import net.nuggetmc.tplus.api.event.BotFallDamageEvent;
 import net.nuggetmc.tplus.api.event.BotKilledByPlayerEvent;
 import net.nuggetmc.tplus.api.utils.*;
+import net.nuggetmc.tplus.bot.combat.BotCombatTiming;
 import net.nuggetmc.tplus.bot.combat.CombatDirector;
 import net.nuggetmc.tplus.bot.combat.CombatDebugger;
 import net.nuggetmc.tplus.bot.combat.CombatState;
@@ -349,17 +350,6 @@ public class Bot extends ServerPlayer implements Terminator {
         } else {
             groundTicks = 0;
         }
-        if (CombatDebugger.isOn(this)) {
-            Location loc = getLocation();
-            CombatDebugger.log(this, "move-tick",
-                    "pos=" + fmt(loc.getX()) + "," + fmt(loc.getY()) + "," + fmt(loc.getZ())
-                            + " vel=" + fmtVec(velocity)
-                            + " onGround=" + onTheGround
-                            + " phase=" + combatState.getPhase()
-                            + " jumpTicks=" + jumpTicks
-                            + " groundTicks=" + groundTicks);
-        }
-
         // Vanilla Player.attack() reads this.fallDistance and this.onGround()
         // to decide whether an attack is a crit (1.5× damage + particles). We
         // override doTick() to skip aiStep(), which is where vanilla advances
@@ -515,7 +505,17 @@ public class Bot extends ServerPlayer implements Terminator {
 
     @Override
     public void block(int blockLength, int cooldown) {
-        if (!shield || blockUse) return;
+        if (!shield || blockUse) {
+            if (CombatDebugger.isOn(this)) {
+                CombatDebugger.log(this, "shield-skip",
+                        "reason=" + (!shield ? "disabled" : "cooldown")
+                                + " blockUse=" + blockUse
+                                + " off=" + offhandType());
+            }
+            return;
+        }
+        CombatDebugger.log(this, "shield-request",
+                "length=" + blockLength + " cooldown=" + cooldown + " off=" + offhandType());
         startBlocking();
         scheduler.runTaskLater(plugin, () -> stopBlocking(cooldown), blockLength);
     }
@@ -523,15 +523,19 @@ public class Bot extends ServerPlayer implements Terminator {
     private void startBlocking() {
         this.blocking = true;
         this.blockUse = true;
+        CombatDebugger.log(this, "shield-start", "off=" + offhandType());
         startUsingItem(InteractionHand.OFF_HAND);
         //sendPacket(new ClientboundSetEntityDataPacket(getId(), entityData, true));
         sendPacket(new ClientboundSetEntityDataPacket(getId(), entityData.packDirty()));
     }
 
     private void stopBlocking(int cooldown) {
+        boolean wasBlocking = this.blocking;
         this.blocking = false;
         stopUsingItem();
         scheduler.runTaskLater(plugin, () -> this.blockUse = false, cooldown);
+        CombatDebugger.log(this, "shield-stop",
+                "cooldown=" + cooldown + " wasBlocking=" + wasBlocking + " off=" + offhandType());
         //sendPacket(new ClientboundSetEntityDataPacket(getId(), entityData, true));
         sendPacket(new ClientboundSetEntityDataPacket(getId(), entityData.packDirty()));
     }
@@ -550,7 +554,6 @@ public class Bot extends ServerPlayer implements Terminator {
 
     private void updateLocation() {
         double y;
-        String mode;
 
         MathUtils.clean(velocity); // TODO lag????
 
@@ -558,26 +561,18 @@ public class Bot extends ServerPlayer implements Terminator {
             y = Math.min(velocity.getY() + 0.1, 0.1);
             addFriction(0.8);
             velocity.setY(y);
-            mode = "fluid";
         } else {
             if (groundTicks != 0) {
                 velocity.setY(0);
                 addFriction(0.5);
                 y = 0;
-                mode = "ground";
             } else {
                 y = velocity.getY();
                 if(jumpTicks - 3 <= 0) {
                     velocity.setY(Math.max(y - 0.08, -3.5));
                 }
-                mode = "air";
             }
         }
-        if (CombatDebugger.isOn(this)) {
-            CombatDebugger.log(this, "move-step",
-                    "mode=" + mode + " vel=" + fmtVec(velocity) + " moveY=" + fmt(y));
-        }
-
         this.move(MoverType.SELF, new Vec3(velocity.getX(), y, velocity.getZ()));
     }
 
@@ -631,16 +626,11 @@ public class Bot extends ServerPlayer implements Terminator {
     @Override
     public void walk(Vector vel) {
         double max = 0.4;
-        Vector before = velocity.clone();
 
         Vector sum = velocity.clone().add(vel);
         if (sum.length() > max) sum.normalize().multiply(max);
 
         velocity = sum;
-        if (CombatDebugger.isOn(this)) {
-            CombatDebugger.log(this, "move-walk",
-                    "input=" + fmtVec(vel) + " before=" + fmtVec(before) + " after=" + fmtVec(sum));
-        }
     }
 
     @Override
@@ -651,11 +641,19 @@ public class Bot extends ServerPlayer implements Terminator {
         // scores are reproducible run-to-run. For everyone else, use the vanilla Bukkit attack
         // so sweep attacks, mace fall-damage scaling, enchantments and density bonuses apply.
         if (network != null) {
+            double before = entityHealth(entity);
             punch();
             double damage = ItemUtils.getLegacyAttackDamage(
                     getBukkitEntity().getInventory().getItemInMainHand());
             if (entity instanceof Damageable) {
                 ((Damageable) entity).damage(damage, getBukkitEntity());
+            }
+            if (CombatDebugger.isOn(this)) {
+                double after = entityHealth(entity);
+                CombatDebugger.log(this, "attack-result",
+                        "mode=legacy crit=false hp=" + fmt(before) + "->" + fmt(after)
+                                + " delta=" + fmt(before - after)
+                                + " held=" + mainhandType());
             }
             return;
         }
@@ -666,11 +664,43 @@ public class Bot extends ServerPlayer implements Terminator {
                         "reason=non-melee-held held=" + botInventory.getSelected().getType().name());
                 return;
             }
+            boolean crit = BotCombatTiming.isCritWindow(this);
+            float charge = getAttackStrengthScale(0.0f);
+            double before = entityHealth(entity);
+            boolean targetBlocking = entity instanceof org.bukkit.entity.Player player && player.isBlocking();
+            if (CombatDebugger.isOn(this)) {
+                CombatDebugger.log(this, "attack-try",
+                        "mode=vanilla held=" + mainhandType()
+                                + " charge=" + fmt(charge)
+                                + " crit=" + crit
+                                + " fall=" + fmt(fallDistance)
+                                + " vy=" + fmt(velocity.getY())
+                                + " sprint=" + isSprinting()
+                                + " targetBlocking=" + targetBlocking
+                                + " targetHp=" + fmt(before));
+            }
             punch();
             getBukkitEntity().attack(entity);
+            if (CombatDebugger.isOn(this)) {
+                double after = entityHealth(entity);
+                CombatDebugger.log(this, "attack-result",
+                        "mode=vanilla crit=" + crit
+                                + " hp=" + fmt(before) + "->" + fmt(after)
+                                + " delta=" + fmt(before - after)
+                                + " targetBlocking=" + targetBlocking
+                                + " held=" + mainhandType());
+            }
         } else if (entity instanceof Damageable d) {
+            double before = entityHealth(entity);
             punch();
             d.damage(1.0, getBukkitEntity());
+            if (CombatDebugger.isOn(this)) {
+                double after = entityHealth(entity);
+                CombatDebugger.log(this, "attack-result",
+                        "mode=damageable crit=false hp=" + fmt(before) + "->" + fmt(after)
+                                + " delta=" + fmt(before - after)
+                                + " held=" + mainhandType());
+            }
         }
     }
 
@@ -684,17 +714,10 @@ public class Bot extends ServerPlayer implements Terminator {
         double vy = velocity.getY();
 
         if (vy > 0) {
-            if (CombatDebugger.isOn(this)) {
-                CombatDebugger.log(this, "move-ground", "result=false reason=ascending vy=" + fmt(vy));
-            }
             return false;
         }
 
-        boolean grounded = checkStandingOn();
-        if (CombatDebugger.isOn(this)) {
-            CombatDebugger.log(this, "move-ground", "result=" + grounded + " vy=" + fmt(vy));
-        }
-        return grounded;
+        return checkStandingOn();
     }
 
     public boolean checkStandingOn() {
@@ -881,6 +904,10 @@ public class Bot extends ServerPlayer implements Terminator {
             agent.onPlayerDamage(event);
 
             if (event.isCancelled()) {
+                CombatDebugger.log(this, "damage",
+                        "raw=" + fmt(f) + " applied=0.00 cancelled=true blocking=" + blocking
+                                + " src=" + damageSourceToken(damagesource)
+                                + " attacker=" + attackerToken(attacker));
                 return false;
             }
 
@@ -890,7 +917,21 @@ public class Bot extends ServerPlayer implements Terminator {
             damage = f;
         }
 
+        float beforeHp = getHealth();
         boolean damaged = super.hurtServer(worldServer, damagesource, damage);
+        float afterHp = getHealth();
+
+        if (CombatDebugger.isOn(this)) {
+            CombatDebugger.log(this, "damage",
+                    "raw=" + fmt(f)
+                            + " applied=" + fmt(damage)
+                            + " hp=" + fmt(beforeHp) + "->" + fmt(afterHp)
+                            + " damaged=" + damaged
+                            + " blocked=" + (!damaged && blocking)
+                            + " blocking=" + blocking
+                            + " src=" + damageSourceToken(damagesource)
+                            + " attacker=" + attackerToken(attacker));
+        }
 
         if (!damaged && blocking) {
             getBukkitEntity().getWorld().playSound(getLocation(), Sound.ITEM_SHIELD_BLOCK, 1, 1);
@@ -953,10 +994,6 @@ public class Bot extends ServerPlayer implements Terminator {
     @Override
     public void faceLocation(Location loc) {
         look(loc.toVector().subtract(getLocation().toVector()), false);
-        if (CombatDebugger.isOn(this)) {
-            CombatDebugger.log(this, "move-face",
-                    "target=" + fmt(loc.getX()) + "," + fmt(loc.getY()) + "," + fmt(loc.getZ()));
-        }
     }
 
     @Override
@@ -995,6 +1032,7 @@ public class Bot extends ServerPlayer implements Terminator {
         World world = loc.getWorld();
 
         if (!LegacyMats.isSolid(block.getType())) {
+            CombatDebugger.blockPlace(this, "bot-attemptBlockPlace", type, block, block.getType());
             block.setType(type);
             if (world != null) world.playSound(loc, Sound.BLOCK_STONE_PLACE, SoundCategory.BLOCKS, 1, 1);
         }
@@ -1096,10 +1134,6 @@ public class Bot extends ServerPlayer implements Terminator {
     public void doTick() {
         detectEquipmentUpdates();
         baseTick();
-        if (CombatDebugger.isOn(this)) {
-            CombatDebugger.log(this, "move-attack-charge",
-                    "ticker=" + attackStrengthTicker + " scale=" + fmt(getAttackStrengthScale(0.0f)));
-        }
         // Vanilla Player.aiStep() normally advances this each tick; we skip aiStep
         // to avoid hunger/ability mutations on bots, but BotCombatTiming reads the
         // resulting attack-strength scale as the gate for full-damage/crit swings.
@@ -1115,6 +1149,47 @@ public class Bot extends ServerPlayer implements Terminator {
     @Override
     public World.Environment getDimension() {
         return getBukkitEntity().getWorld().getEnvironment();
+    }
+
+    private String mainhandType() {
+        ItemStack held = getBukkitEntity().getInventory().getItemInMainHand();
+        return held == null ? "AIR" : held.getType().name();
+    }
+
+    private String offhandType() {
+        ItemStack held = getBukkitEntity().getInventory().getItemInOffHand();
+        return held == null ? "AIR" : held.getType().name();
+    }
+
+    private static double entityHealth(org.bukkit.entity.Entity entity) {
+        if (entity instanceof Damageable damageable) {
+            try {
+                return Math.max(0.0, damageable.getHealth());
+            } catch (IllegalStateException ignored) {
+                return 0.0;
+            }
+        }
+        return -1.0;
+    }
+
+    private static String damageSourceToken(DamageSource source) {
+        return safeToken(source == null ? "unknown" : source.toString());
+    }
+
+    private static String attackerToken(Entity attacker) {
+        if (attacker == null) return "none";
+        try {
+            org.bukkit.entity.Entity bukkit = attacker.getBukkitEntity();
+            if (bukkit == null) return attacker.getType().toString();
+            return bukkit.getType().name() + ":" + safeToken(bukkit.getName());
+        } catch (RuntimeException ignored) {
+            return safeToken(attacker.getType().toString());
+        }
+    }
+
+    private static String safeToken(String value) {
+        if (value == null || value.isBlank()) return "unknown";
+        return value.replaceAll("\\s+", "_").replaceAll("[^A-Za-z0-9_.:-]", "_");
     }
 
     private static String fmt(double value) {

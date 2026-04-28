@@ -6,6 +6,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.attribute.Attribute;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.inventory.ItemStack;
@@ -39,7 +40,8 @@ public final class CombatDebugger {
     private static final Set<UUID> ENABLED = ConcurrentHashMap.newKeySet();
     private static final Map<UUID, Integer> LAST_PUNCH_TICK = new ConcurrentHashMap<>();
     private static final Map<UUID, Integer> LAST_INV_DUMP_TICK = new ConcurrentHashMap<>();
-    private static final int INV_DUMP_INTERVAL_TICKS = 20; // ~1 s
+    private static final Map<String, Integer> LAST_COMPACT_EVENT_TICK = new ConcurrentHashMap<>();
+    private static final int INV_DUMP_INTERVAL_TICKS = 1; // every combat tick
     private static final ExecutorService FILE_IO = Executors.newSingleThreadExecutor(r -> {
         Thread thread = new Thread(r, "tplus-debug-writer");
         thread.setDaemon(true);
@@ -59,6 +61,7 @@ public final class CombatDebugger {
         ENABLED.remove(bot);
         LAST_PUNCH_TICK.remove(bot);
         LAST_INV_DUMP_TICK.remove(bot);
+        LAST_COMPACT_EVENT_TICK.keySet().removeIf(key -> key.startsWith(bot.toString() + "|"));
     }
 
     public static void enableAll() {
@@ -70,6 +73,7 @@ public final class CombatDebugger {
         ENABLED.clear();
         LAST_PUNCH_TICK.clear();
         LAST_INV_DUMP_TICK.clear();
+        LAST_COMPACT_EVENT_TICK.clear();
     }
 
     public static boolean isOn(Bot bot) {
@@ -140,6 +144,23 @@ public final class CombatDebugger {
         emit(bot, "swing-block", "reason=" + reason + " val=" + fmt(value));
     }
 
+    public static void blockPlace(Bot bot, String source, Material material, Block block, Material previous) {
+        if (!isOn(bot)) return;
+        Block below = block.getRelative(0, -1, 0);
+        Material belowType = below.getType();
+        boolean belowSolid = belowType.isSolid();
+        boolean floating = !belowSolid && block.getY() > block.getWorld().getMinHeight();
+        Location loc = block.getLocation();
+        emit(bot, "block-place",
+                "src=" + sanitizeToken(source)
+                        + " mat=" + material.name()
+                        + " loc=" + loc.getBlockX() + "," + loc.getBlockY() + "," + loc.getBlockZ()
+                        + " prev=" + previous.name()
+                        + " below=" + belowType.name()
+                        + " belowSolid=" + belowSolid
+                        + " floating=" + floating);
+    }
+
     /**
      * Full swing-decision trace: logs both passes and blocks, with the exact
      * charge / i-frame inputs used by the gate.
@@ -200,17 +221,23 @@ public final class CombatDebugger {
     }
 
     /**
-     * Periodic inventory snapshot — once per {@link #INV_DUMP_INTERVAL_TICKS}
-     * ticks per bot. Lets a post-fight telemetry pass see whether a
-     * {@code melee-skip} happened because the bot was holding COBBLESTONE,
-     * a gapple, or nothing at all.
+     * Inventory snapshot emitted each combat tick. The rest of combatdebug stays
+     * compact, but held-item churn is high-value when diagnosing bad weapon swaps.
      */
     public static void inventorySnapshot(Bot bot) {
+        inventorySnapshot(bot, "periodic", false);
+    }
+
+    public static void inventorySnapshotNow(Bot bot, String reason) {
+        inventorySnapshot(bot, reason == null || reason.isBlank() ? "manual" : reason, true);
+    }
+
+    private static void inventorySnapshot(Bot bot, String reason, boolean force) {
         if (!isOn(bot)) return;
         UUID id = bot.getUUID();
         int now = bot.getAliveTicks();
         Integer last = LAST_INV_DUMP_TICK.get(id);
-        if (last != null && now - last < INV_DUMP_INTERVAL_TICKS) return;
+        if (!force && last != null && now - last < INV_DUMP_INTERVAL_TICKS) return;
         LAST_INV_DUMP_TICK.put(id, now);
 
         PlayerInventory inv = bot.getBukkitEntity().getInventory();
@@ -227,9 +254,34 @@ public final class CombatDebugger {
         ItemStack legs = inv.getLeggings();
         ItemStack boots = inv.getBoots();
         emit(bot, "inventory",
-                "held=" + heldSlot + ":" + shortMat(held)
+                "reason=" + sanitizeToken(reason)
+                        + " held=" + heldSlot + ":" + shortMat(held)
                         + " hot=[" + hot + "]"
                         + " off=" + shortMat(off)
+                        + " blocking=" + bot.isBotBlocking()
+                        + " kit[melee=" + (bot.getBotInventory().findSword() >= 0 || bot.getBotInventory().findAxe() >= 0)
+                        + " axe=" + (bot.getBotInventory().findAxe() >= 0)
+                        + " mace=" + bot.getBotInventory().hasMace()
+                        + " trident=" + bot.getBotInventory().hasTrident()
+                        + " pearl=" + bot.getBotInventory().hasEnderPearl()
+                        + " wind=" + bot.getBotInventory().hasWindCharge()
+                        + " crystal=" + bot.getBotInventory().hasCrystalKit()
+                        + " anchor=" + bot.getBotInventory().hasAnchorKit()
+                        + " cobweb=" + bot.getBotInventory().hasCobweb()
+                        + " totem=" + bot.getBotInventory().hasTotem()
+                        + " elytra=" + bot.getBotInventory().hasElytra()
+                        + " firework=" + bot.getBotInventory().hasFirework()
+                        + "] stock[wind=" + countMaterial(inv, Material.WIND_CHARGE)
+                        + " pearl=" + countMaterial(inv, Material.ENDER_PEARL)
+                        + " crystal=" + countMaterial(inv, Material.END_CRYSTAL)
+                        + " obsidian=" + countMaterial(inv, Material.OBSIDIAN)
+                        + " anchor=" + countMaterial(inv, Material.RESPAWN_ANCHOR)
+                        + " glowstone=" + countMaterial(inv, Material.GLOWSTONE)
+                        + " cobweb=" + countMaterial(inv, Material.COBWEB)
+                        + " gapple=" + countMaterial(inv, Material.GOLDEN_APPLE)
+                        + " totem=" + countMaterial(inv, Material.TOTEM_OF_UNDYING)
+                        + " rocket=" + countMaterial(inv, Material.FIREWORK_ROCKET)
+                        + "]"
                         + " H=" + shortMat(helm)
                         + " C=" + shortMat(chest)
                         + " L=" + shortMat(legs)
@@ -243,7 +295,22 @@ public final class CombatDebugger {
         return m.name();
     }
 
+    private static int countMaterial(PlayerInventory inv, Material type) {
+        int total = 0;
+        for (ItemStack stack : inv.getStorageContents()) {
+            if (stack != null && stack.getType() == type) {
+                total += stack.getAmount();
+            }
+        }
+        ItemStack off = inv.getItemInOffHand();
+        if (off != null && off.getType() == type) {
+            total += off.getAmount();
+        }
+        return total;
+    }
+
     private static void emit(Bot bot, String event, String detail) {
+        if (!shouldEmitCompact(bot, event)) return;
         String payload = "[tplus-cbt] "
                 + "bot=" + sanitizeToken(bot.getBotName())
                 + " tick=" + bot.getAliveTicks()
@@ -252,6 +319,28 @@ public final class CombatDebugger {
                 + (detail.isEmpty() ? "" : " " + detail);
         String line = TS_FORMAT.format(LocalDateTime.now()) + " " + payload;
         FILE_IO.execute(() -> writeToDebugFiles(bot, line));
+    }
+
+    private static boolean shouldEmitCompact(Bot bot, String event) {
+        if (event.startsWith("move-")) return false;
+        int interval = compactInterval(event);
+        if (interval <= 0) return true;
+        String key = bot.getUUID() + "|" + event;
+        int now = bot.getAliveTicks();
+        Integer last = LAST_COMPACT_EVENT_TICK.get(key);
+        if (last != null && now - last < interval) return false;
+        LAST_COMPACT_EVENT_TICK.put(key, now);
+        return true;
+    }
+
+    private static int compactInterval(String event) {
+        return switch (event) {
+            case "dir-entry", "dir-ready", "snapshot", "scanner-miss" -> 100;
+            case "dir-noop" -> 40;
+            case "weapon-pick", "mace-cd" -> 20;
+            case "melee-try", "swing-gate" -> 10;
+            default -> 0;
+        };
     }
 
     private static String describeTarget(Bot bot) {

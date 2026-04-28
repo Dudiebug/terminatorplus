@@ -64,6 +64,7 @@ public final class CrystalBehavior implements WeaponBehavior {
         }
 
         if (host.placedMaterial() != null) {
+            CombatDebugger.blockPlace(bot, "crystal-host", host.placedMaterial(), host.block(), host.block().getType());
             host.block().setType(host.placedMaterial());
             consumeOne(inv, host.placedMaterial());
         }
@@ -102,6 +103,7 @@ public final class CrystalBehavior implements WeaponBehavior {
             candidate = footLoc.getBlock();
             if (!candidate.getType().isAir()) return null;
         }
+        if (!hasPlaceSupport(candidate)) return null;
         if (!canSpawnCrystalAbove(candidate)) return null;
         return new HostPlan(candidate, hostMat);
     }
@@ -131,6 +133,15 @@ public final class CrystalBehavior implements WeaponBehavior {
     private boolean canSpawnCrystalAbove(Block host) {
         return host.getRelative(0, 1, 0).getType().isAir()
                 && host.getRelative(0, 2, 0).getType().isAir();
+    }
+
+    private boolean hasPlaceSupport(Block block) {
+        return block.getRelative(0, -1, 0).getType().isSolid()
+                || block.getRelative(1, 0, 0).getType().isSolid()
+                || block.getRelative(-1, 0, 0).getType().isSolid()
+                || block.getRelative(0, 0, 1).getType().isSolid()
+                || block.getRelative(0, 0, -1).getType().isSolid()
+                || block.getRelative(0, 1, 0).getType().isSolid();
     }
 
     private boolean hasClearLine(Bot bot, Location spawn) {

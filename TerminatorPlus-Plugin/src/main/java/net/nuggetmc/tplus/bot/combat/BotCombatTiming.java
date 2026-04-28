@@ -72,11 +72,15 @@ public final class BotCombatTiming {
         Vector velocity = bot.getVelocity();
         if (isCritWindow(bot)) return false;
         if (!bot.isBotOnGround() && velocity.getY() > CRIT_DESCENT_VELOCITY) {
+            if (bot.isSprinting()) bot.setSprinting(false);
             CombatDebugger.log(bot, "melee-wait", "reason=crit-window vy=" + String.format("%.2f", velocity.getY()));
             return true;
         }
-        if (bot.isBotOnGround() && distance <= 3.2 && !bot.isSprinting()) {
-            bot.jump();
+        if (bot.isBotOnGround() && distance <= 3.2) {
+            if (bot.isSprinting()) bot.setSprinting(false);
+            Vector jump = bot.getVelocity();
+            jump.setY(0.42);
+            bot.setVelocity(jump);
             CombatDebugger.log(bot, "melee-wait", "reason=crit-jump");
             return true;
         }
