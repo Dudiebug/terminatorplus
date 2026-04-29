@@ -71,6 +71,14 @@ public final class CombatDirector {
             return true;
         }
 
+        lastBranch = "mace-charging";
+        if (bot.getCombatState().getPhase() == CombatState.Phase.MACE_CHARGING && inv.hasMace()) {
+            CombatDebugger.weaponPick(bot, "MACE(charging)", distance, true);
+            selectType(inv, Material.MACE);
+            mace.ticksFor(bot, target, distance);
+            return true;
+        }
+
         lastBranch = "airborne-mace";
         if (bot.getCombatState().getPhase() == CombatState.Phase.AIRBORNE && inv.hasMace()) {
             CombatDebugger.weaponPick(bot, "MACE(airborne-commit)", distance, true);
@@ -90,6 +98,7 @@ public final class CombatDirector {
             if (dx * dx + dz * dz <= 100.0 && targetLoc.getY() <= botLoc.getY() + 2.0) {
                 CombatDebugger.macePhase(bot, CombatState.Phase.IDLE, CombatState.Phase.AIRBORNE);
                 bot.getCombatState().setPhase(CombatState.Phase.AIRBORNE);
+                bot.getCombatState().setPhaseStartY(botLoc.getY());
                 CombatDebugger.weaponPick(bot, "MACE(aerial-dive)", distance, true);
                 selectType(inv, Material.MACE);
                 mace.ticksFor(bot, target, distance);
@@ -135,6 +144,20 @@ public final class CombatDirector {
                             + " targetAway=" + snapshot.targetSprintingAway);
         }
 
+        int shieldAxe = inv.findAxe();
+        if (snapshot.targetBlocking && shieldAxe >= 0 && distance <= MeleeBehavior.ATTACK_RANGE) {
+            inv.selectMainInventorySlot(shieldAxe);
+            CombatDebugger.weaponPick(bot, "AXE(shield)", distance, true);
+            if (!BotCombatTiming.shouldPlanNormalMelee(bot, target)) {
+                CombatDebugger.log(bot, "opp-skip",
+                        "name=DIRECTOR_SHIELD_MELEE reason=charge charge="
+                                + String.format("%.3f", BotCombatTiming.charge(bot)));
+                return false;
+            }
+            melee.ticksFor(bot, target, distance);
+            return true;
+        }
+
         World.Environment env = bot.getDimension();
         lastBranch = "crystal";
         if (env != World.Environment.NETHER && inv.hasCrystalKit()
@@ -165,8 +188,24 @@ public final class CombatDirector {
 
         lastBranch = "melee";
         if (distance <= 3.5 || onlyTridentMelee) {
-            boolean maceSmashReady = inv.hasMace() && grounded
-                    && bot.getBotCooldowns().ready(MaceBehavior.COOLDOWN_KEY, alive);
+            if (snapshot.targetBlocking && axe >= 0) {
+                inv.selectMainInventorySlot(axe);
+                CombatDebugger.weaponPick(bot, "AXE(shield)", distance, true);
+                if (!BotCombatTiming.shouldPlanNormalMelee(bot, target)) {
+                    CombatDebugger.log(bot, "opp-skip",
+                            "name=DIRECTOR_MELEE_SHIELD reason=charge charge="
+                                    + String.format("%.3f", BotCombatTiming.charge(bot)));
+                    return false;
+                }
+                melee.ticksFor(bot, target, distance);
+                return true;
+            }
+
+            boolean hasSwordOrAxe = sword >= 0 || axe >= 0;
+            boolean maceSmashReady = inv.hasMace() && !hasSwordOrAxe && !snapshot.targetBlocking
+                    && snapshot.openSkyAboveBot && inv.hasWindCharge() && grounded
+                    && bot.getBotCooldowns().ready(MaceBehavior.COOLDOWN_KEY, alive)
+                    && bot.getBotCooldowns().ready(WindChargeBehavior.COOLDOWN_KEY, alive);
 
             if (maceSmashReady) {
                 CombatDebugger.weaponPick(bot, "MACE(smash)", distance, true);
@@ -186,6 +225,12 @@ public final class CombatDirector {
                 CombatDebugger.weaponPick(bot, pickLabel, distance, true);
             } else {
                 CombatDebugger.weaponPick(bot, "MELEE(empty)", distance, true);
+            }
+            if (!BotCombatTiming.shouldPlanNormalMelee(bot, target)) {
+                CombatDebugger.log(bot, "opp-skip",
+                        "name=DIRECTOR_MELEE reason=charge charge="
+                                + String.format("%.3f", BotCombatTiming.charge(bot)));
+                return false;
             }
             melee.ticksFor(bot, target, distance);
             return true;

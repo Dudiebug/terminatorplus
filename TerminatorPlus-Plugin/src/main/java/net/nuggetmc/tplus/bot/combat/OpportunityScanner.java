@@ -209,6 +209,21 @@ public final class OpportunityScanner {
                         + " botHp=" + String.format("%.2f", snap.botHpFraction)
                         + " targetHp=" + String.format("%.2f", snap.targetHpFraction));
 
+        // Shield breaks beat flashy burst plays. If the target is actively
+        // blocking, keep trying to put an axe hit through instead of swapping
+        // to mace/crystal/wind and letting the shield soak the pressure.
+        if (snap.targetBlocking && snap.distance <= MELEE_RANGE
+                && hasAxe(inv) && snap.botOnGround
+                && bot.getBotCooldowns().ready(STUN_SLAM_CD, alive)) {
+            if (!BotCombatTiming.shouldPlanNormalMelee(bot, target)) {
+                chargeSkip(bot, "STUN_SLAM");
+            } else
+            if (executeStunSlam(bot, target)) {
+                bot.getBotCooldowns().set(STUN_SLAM_CD, 20, alive);
+                return true;
+            }
+        }
+
         // ===============================================================
         // TIER S -- game-ending plays
         // ===============================================================
@@ -245,6 +260,9 @@ public final class OpportunityScanner {
                 && snap.distance >= 1.5 && snap.distance <= MELEE_RANGE
                 && inv.hasCrystalKit() && hasKnockbackSword(inv)
                 && bot.getBotCooldowns().ready(HIT_CRYSTAL_CD, alive)) {
+            if (!BotCombatTiming.shouldPlanSprintReset(bot, target)) {
+                chargeSkip(bot, "HIT_CRYSTAL");
+            } else
             if (executeHitCrystal(bot, target)) {
                 bot.getBotCooldowns().set(HIT_CRYSTAL_CD, 50, alive);
                 return true;
@@ -263,14 +281,17 @@ public final class OpportunityScanner {
             }
         }
 
-        // 5. STUN_SLAM -- shielded target + axe + mace.
-        //    Wiki "Stun-slamming": axe-disable the shield, then mace smash.
+        // 5. STUN_SLAM -- shielded target + axe.
+        //    Break the shield first; the normal pipeline can choose a follow-up
+        //    weapon on the next tick instead of immediately hiding the axe swap.
         if (snap.targetBlocking && snap.distance <= MELEE_RANGE
-                && inv.hasMace() && hasAxe(inv) && snap.botOnGround
-                && bot.getBotCooldowns().ready(STUN_SLAM_CD, alive)
-                && bot.getBotCooldowns().ready(MaceBehavior.COOLDOWN_KEY, alive)) {
+                && hasAxe(inv) && snap.botOnGround
+                && bot.getBotCooldowns().ready(STUN_SLAM_CD, alive)) {
+            if (!BotCombatTiming.shouldPlanNormalMelee(bot, target)) {
+                chargeSkip(bot, "STUN_SLAM");
+            } else
             if (executeStunSlam(bot, target)) {
-                bot.getBotCooldowns().set(STUN_SLAM_CD, 90, alive);
+                bot.getBotCooldowns().set(STUN_SLAM_CD, 20, alive);
                 return true;
             }
         }
@@ -283,7 +304,7 @@ public final class OpportunityScanner {
         //     mace is ready for a full-fall smash. Gated on openSkyAboveBot —
         //     if there's a ceiling, the bot can't gain altitude and would
         //     faceplant its own blast, so it falls through to normal melee.
-        if (snap.botOnGround && snap.openSkyAboveBot
+        if (!snap.targetBlocking && snap.botOnGround && snap.openSkyAboveBot
                 && inv.hasMace() && inv.hasWindCharge()
                 && snap.distance <= 5.0
                 && bot.getBotCooldowns().ready(WIND_MACE_CD, alive)
@@ -294,7 +315,6 @@ public final class OpportunityScanner {
                 // cooldown (see MaceBehavior.JUMP_COOLDOWN) gates the smash
                 // window itself, but we space out the wind-launch setup.
                 bot.getBotCooldowns().set(WIND_MACE_CD, 160, alive);
-                bot.getBotCooldowns().set(WindChargeBehavior.COOLDOWN_KEY, 55, alive);
                 return true;
             }
         }
@@ -662,7 +682,7 @@ public final class OpportunityScanner {
 
         boolean needsPlace = !isHostBlock(below.getType());
         if (needsPlace) {
-            if (!below.getType().isAir()) return false;
+            if (!canPlaceBlockAt(bot, below, "crystal-trap-host")) return false;
             if (!hasItem(bot.getBotInventory(), Material.OBSIDIAN)) return false;
         }
 
@@ -672,7 +692,7 @@ public final class OpportunityScanner {
         if (!isSafeCrystalSpawn(bot, crystalSpawn) || !hasClearLine(bot, crystalSpawn)) return false;
 
         if (needsPlace) {
-            below.setType(Material.OBSIDIAN);
+            placeBlock(bot, below, Material.OBSIDIAN, "crystal-trap-host");
             consumeOne(bot, Material.OBSIDIAN);
         }
 
@@ -733,10 +753,8 @@ public final class OpportunityScanner {
         bot.faceLocation(target.getLocation());
         if (!tryMeleeAttack(bot, target)) return false;
 
-        // Step 2: hotkey to mace. CombatDirector pipeline picks up mace on
-        //         the next tick and fires the standard MaceBehavior dive.
-        int maceSlot = bot.getBotInventory().findHotbar(Material.MACE);
-        if (maceSlot >= 0) selectSlot(bot, maceSlot);
+        // Leave the axe selected so the shield-break is visible and so another
+        // blocking tick does not immediately get overwritten by a mace swap.
         bot.getCombatState().setPhase(CombatState.Phase.IDLE);
         return true;
     }
@@ -768,26 +786,15 @@ public final class OpportunityScanner {
         if (maceSlot < 0) return false;
         if (selectSlot(bot, maceSlot) < 0) return false;
 
-        // Step 2: pay the wind-charge cost, no entity spawn, no slot swap.
+        // Step 2: hold the mace before jumping. MaceBehavior owns the actual
+        // wind-charge throw/launch so both director and scanner paths share the
+        // same charge timing and height telemetry.
         bot.faceLocation(target.getLocation());
-        bot.punch();
-        bot.getLocation().getWorld().playSound(bot.getLocation(),
-                Sound.ENTITY_WIND_CHARGE_THROW, 1f, 1.1f);
-        consumeOne(bot, Material.WIND_CHARGE);
-
-        // Step 3: direct launch, horizontal bias toward the target.
-        Vector toTarget = target.getLocation().toVector()
-                .subtract(bot.getLocation().toVector()).setY(0);
-        if (toTarget.lengthSquared() > 1.0e-6) {
-            toTarget.normalize().multiply(0.25);
-        } else {
-            toTarget.setX(0).setZ(0);
-        }
-        bot.setVelocity(new Vector(toTarget.getX(), 1.5, toTarget.getZ()));
-
-        // Step 4: let MaceBehavior's AIRBORNE path finish the play.
-        bot.getCombatState().setPhase(CombatState.Phase.AIRBORNE);
-        bot.getBotCooldowns().set(MaceBehavior.COOLDOWN_KEY, 55, bot.getAliveTicks());
+        CombatState state = bot.getCombatState();
+        CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.MACE_CHARGING);
+        state.setPhase(CombatState.Phase.MACE_CHARGING);
+        state.setPhaseStartY(bot.getLocation().getY());
+        CombatDebugger.log(bot, "mace-charge-start", "src=scanner minHold=10");
         return true;
     }
 
@@ -858,7 +865,7 @@ public final class OpportunityScanner {
         forward.normalize();
 
         Block obsBlock = feet.clone().add(forward).getBlock();
-        if (!obsBlock.getType().isAir()) return false;
+        if (!canPlaceBlockAt(bot, obsBlock, "face-place-host")) return false;
         if (!hasItem(bot.getBotInventory(), Material.OBSIDIAN)) return false;
 
         Location crystalSpawn = obsBlock.getLocation().add(0.5, 1.0, 0.5);
@@ -866,7 +873,7 @@ public final class OpportunityScanner {
                 || !crystalSpawn.clone().add(0, 1, 0).getBlock().getType().isAir()) return false;
         if (!isSafeCrystalSpawn(bot, crystalSpawn) || !hasClearLine(bot, crystalSpawn)) return false;
 
-        obsBlock.setType(Material.OBSIDIAN);
+        placeBlock(bot, obsBlock, Material.OBSIDIAN, "face-place-host");
         consumeOne(bot, Material.OBSIDIAN);
 
         World world = feet.getWorld();
@@ -889,14 +896,14 @@ public final class OpportunityScanner {
         Location targetLoc = target.getLocation();
         Block headBlock = world.getBlockAt(targetLoc.getBlockX(),
                 targetLoc.getBlockY() + 2, targetLoc.getBlockZ());
-        if (!headBlock.getType().isAir()) return false;
+        if (!canPlaceBlockAt(bot, headBlock, "head-web")) return false;
 
         int slot = bot.getBotInventory().findHotbar(Material.COBWEB);
         if (slot >= 0) selectSlot(bot, slot);
         bot.faceLocation(headBlock.getLocation());
         bot.punch();
 
-        headBlock.setType(Material.COBWEB);
+        placeBlock(bot, headBlock, Material.COBWEB, "head-web");
         consumeOne(bot, Material.COBWEB);
         return true;
     }
@@ -908,11 +915,11 @@ public final class OpportunityScanner {
         predicted.setY(target.getLocation().getY() + 1);
 
         Block place = predicted.getBlock();
-        if (!place.getType().isAir()) return false;
+        if (!canPlaceBlockAt(bot, place, "hit-web")) return false;
 
         int slot = bot.getBotInventory().findHotbar(Material.COBWEB);
         if (slot >= 0) selectSlot(bot, slot);
-        place.setType(Material.COBWEB);
+        placeBlock(bot, place, Material.COBWEB, "hit-web");
         consumeOne(bot, Material.COBWEB);
         return true;
     }
@@ -924,9 +931,10 @@ public final class OpportunityScanner {
             at = at.getRelative(0, 1, 0);
             if (!at.getType().isAir()) return false;
         }
+        if (!canPlaceBlockAt(bot, at, "foot-pin")) return false;
         int slot = bot.getBotInventory().findHotbar(Material.COBWEB);
         if (slot >= 0) selectSlot(bot, slot);
-        at.setType(Material.COBWEB);
+        placeBlock(bot, at, Material.COBWEB, "foot-pin");
         consumeOne(bot, Material.COBWEB);
         return true;
     }
@@ -939,17 +947,19 @@ public final class OpportunityScanner {
         CombatDebugger.log(bot, "opp-attempt", "name=WEB_BUBBLE");
         Block feet = bot.getLocation().getBlock();
         Block head = feet.getRelative(0, 1, 0);
-        if (!feet.getType().isAir() && !head.getType().isAir()) return false;
+        boolean canFeet = canPlaceBlockAt(bot, feet, "web-bubble-feet");
+        boolean canHead = canPlaceBlockAt(bot, head, "web-bubble-head");
+        if (!canFeet && !canHead) return false;
 
         int slot = bot.getBotInventory().findHotbar(Material.COBWEB);
         if (slot >= 0) selectSlot(bot, slot);
 
-        if (feet.getType().isAir()) {
-            feet.setType(Material.COBWEB);
+        if (canFeet) {
+            placeBlock(bot, feet, Material.COBWEB, "web-bubble-feet");
             consumeOne(bot, Material.COBWEB);
         }
-        if (head.getType().isAir()) {
-            head.setType(Material.COBWEB);
+        if (canHead) {
+            placeBlock(bot, head, Material.COBWEB, "web-bubble-head");
             consumeOne(bot, Material.COBWEB);
         }
         return true;
@@ -970,7 +980,7 @@ public final class OpportunityScanner {
         bot.faceLocation(above.getLocation());
         bot.punch();
 
-        above.setType(Material.LAVA);
+        placeBlock(bot, above, Material.LAVA, "web-drain-lava");
         scheduleBlockClear(above, Material.AIR, 6L);
         return true;
     }
@@ -1177,7 +1187,7 @@ public final class OpportunityScanner {
         bot.faceLocation(targetFeet.getLocation());
         bot.punch();
 
-        targetFeet.setType(Material.LAVA);
+        placeBlock(bot, targetFeet, Material.LAVA, "lava-pin");
         scheduleBlockClear(targetFeet, Material.AIR, 4L);
         return true;
     }
@@ -1194,7 +1204,7 @@ public final class OpportunityScanner {
 
         bot.faceLocation(at.getLocation());
         bot.punch();
-        at.setType(Material.FIRE);
+        placeBlock(bot, at, Material.FIRE, "fire-zone");
         if (igniter == Material.FIRE_CHARGE) consumeOne(bot, Material.FIRE_CHARGE);
         return true;
     }
@@ -1212,7 +1222,7 @@ public final class OpportunityScanner {
         int slot = bot.getBotInventory().findHotbar(Material.WATER_BUCKET);
         if (slot >= 0) selectSlot(bot, slot);
         bot.punch();
-        feet.setType(Material.WATER);
+        placeBlock(bot, feet, Material.WATER, "water-douse");
         scheduleBlockClear(feet, Material.AIR, 10L);
         return true;
     }
@@ -1228,11 +1238,11 @@ public final class OpportunityScanner {
         bot.faceLocation(place.getLocation());
         bot.punch();
 
-        place.setType(Material.TNT);
+        placeBlock(bot, place, Material.TNT, "tnt-trap");
         consumeOne(bot, Material.TNT);
 
         Block above = place.getRelative(0, 1, 0);
-        if (above.getType().isAir()) above.setType(Material.FIRE);
+        if (above.getType().isAir()) placeBlock(bot, above, Material.FIRE, "tnt-trap-fire");
         if (hasItem(bot.getBotInventory(), Material.FIRE_CHARGE)) {
             consumeOne(bot, Material.FIRE_CHARGE);
         }
@@ -1241,15 +1251,26 @@ public final class OpportunityScanner {
 
     private boolean executeSwordCritSetup(Bot bot, LivingEntity target) {
         CombatDebugger.log(bot, "opp-attempt", "name=SWORD_CRIT_SETUP");
+        if (!BotCombatTiming.shouldPlanSprintReset(bot, target)) {
+            chargeSkip(bot, "SWORD_CRIT_SETUP");
+            return false;
+        }
         int slot = findSwordAxeSlot(bot.getBotInventory());
         if (slot < 0 || selectSlot(bot, slot) < 0) return false;
         bot.faceLocation(target.getLocation());
-        bot.jump();
+        if (bot.isSprinting()) bot.setSprinting(false);
+        Vector jump = bot.getVelocity();
+        jump.setY(0.42);
+        bot.setVelocity(jump);
         return true;
     }
 
     private boolean executeSprintReset(Bot bot, LivingEntity target) {
         CombatDebugger.log(bot, "opp-attempt", "name=SPRINT_RESET");
+        if (!BotCombatTiming.shouldPlanSprintReset(bot, target)) {
+            chargeSkip(bot, "SPRINT_RESET");
+            return false;
+        }
         int slot = findSwordAxeSlot(bot.getBotInventory());
         if (slot < 0 || selectSlot(bot, slot) < 0) return false;
         bot.faceLocation(target.getLocation());
@@ -1305,6 +1326,10 @@ public final class OpportunityScanner {
             return executeFinisherPearl(bot, target);
         }
         if (snap.distance <= MeleeBehavior.ATTACK_RANGE) {
+            if (!BotCombatTiming.shouldPlanNormalMelee(bot, target)) {
+                chargeSkip(bot, "FINISHER_MELEE");
+                return false;
+            }
             int slot = findSwordAxeSlot(inv);
             if (slot < 0) slot = inv.findHotbar(Material.TRIDENT);
             if (slot >= 0 && selectSlot(bot, slot) >= 0) {
@@ -1655,6 +1680,42 @@ public final class OpportunityScanner {
         return true;
     }
 
+    private static void chargeSkip(Bot bot, String branch) {
+        CombatDebugger.log(bot, "opp-skip",
+                "name=" + branch + " reason=charge charge=" + String.format("%.3f", BotCombatTiming.charge(bot)));
+    }
+
+    private static boolean canPlaceBlockAt(Bot bot, Block block, String source) {
+        if (!block.getType().isAir()) {
+            CombatDebugger.log(bot, "block-place-skip",
+                    "src=" + source + " reason=occupied at=" + block.getType().name());
+            return false;
+        }
+        if (!hasPlaceSupport(block)) {
+            CombatDebugger.log(bot, "block-place-skip",
+                    "src=" + source
+                            + " reason=no-support loc=" + block.getX() + "," + block.getY() + "," + block.getZ()
+                            + " below=" + block.getRelative(0, -1, 0).getType().name());
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean hasPlaceSupport(Block block) {
+        return block.getRelative(0, -1, 0).getType().isSolid()
+                || block.getRelative(1, 0, 0).getType().isSolid()
+                || block.getRelative(-1, 0, 0).getType().isSolid()
+                || block.getRelative(0, 0, 1).getType().isSolid()
+                || block.getRelative(0, 0, -1).getType().isSolid()
+                || block.getRelative(0, 1, 0).getType().isSolid();
+    }
+
+    private static void placeBlock(Bot bot, Block block, Material material, String source) {
+        Material previous = block.getType();
+        CombatDebugger.blockPlace(bot, source, material, block, previous);
+        block.setType(material);
+    }
+
     private static boolean armorNeedsRepair(Bot bot) {
         PlayerInventory inv = bot.getBukkitEntity().getInventory();
         ItemStack[] armor = {inv.getHelmet(), inv.getChestplate(),
@@ -1691,4 +1752,3 @@ public final class OpportunityScanner {
         }, delayTicks);
     }
 }
-
