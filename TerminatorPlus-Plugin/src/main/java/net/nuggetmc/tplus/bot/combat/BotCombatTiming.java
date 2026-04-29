@@ -225,6 +225,14 @@ public final class BotCombatTiming {
         CombatDebugger.log(bot, "sweep-check", diag.details());
     }
 
+    public static boolean predictsSweep(Bot bot, LivingEntity target, double distance) {
+        return sweepDiagnostic(bot, target, distance).eligible;
+    }
+
+    public static int sweepVictimCount(Bot bot, LivingEntity target) {
+        return countSweepTargets(bot, target);
+    }
+
     public static void logSweepSkipIfRelevant(Bot bot, LivingEntity target, double distance, String reason, String branch) {
         if (!CombatDebugger.isOn(bot)) return;
         if (bot.getBotInventory().findSword() < 0 || distance > MeleeBehavior.ATTACK_RANGE) return;
@@ -234,8 +242,8 @@ public final class BotCombatTiming {
                         + " branch=" + branch
                         + " charge=" + fmt3(diag.charge)
                         + " range=" + fmt2(distance)
-                        + " eligible=" + diag.eligible
-                        + " targets=" + diag.targets);
+                        + " sweepPred=" + diag.eligible
+                        + " sweepVictimCount=" + diag.targets);
     }
 
     private static SweepDiagnostic sweepDiagnostic(Bot bot, LivingEntity target, double distance) {
@@ -314,11 +322,11 @@ public final class BotCombatTiming {
         }
 
         String details() {
-            return "eligible=" + eligible
+            return "sweepPred=" + eligible
                     + " reason=" + reason
                     + " charge=" + fmt3(charge)
                     + " range=" + fmt2(distance)
-                    + " targets=" + targets;
+                    + " sweepVictimCount=" + targets;
         }
     }
 }
