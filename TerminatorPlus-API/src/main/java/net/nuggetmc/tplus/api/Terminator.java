@@ -2,6 +2,7 @@ package net.nuggetmc.tplus.api;
 
 import com.mojang.authlib.GameProfile;
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.NeuralNetwork;
+import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementTrainingSnapshot;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -154,6 +155,10 @@ public interface Terminator {
 
     default boolean executePlannedCombat(LivingEntity target) {
         return combatTick(target);
+    }
+
+    default MovementTrainingSnapshot movementTrainingSnapshot(LivingEntity target) {
+        return MovementTrainingSnapshot.unavailable();
     }
 
     /**

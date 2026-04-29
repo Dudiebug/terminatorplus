@@ -49,6 +49,12 @@ public class NeuralNetwork {
         return network;
     }
 
+    public static NeuralNetwork createMovementControllerNetwork(MovementNetwork movementNetwork) {
+        NeuralNetwork network = new NeuralNetwork(new HashMap<>());
+        network.setMovementNetwork(movementNetwork);
+        return network;
+    }
+
     public NodeConnections fetch(BotNode node) {
         return nodes.get(node);
     }

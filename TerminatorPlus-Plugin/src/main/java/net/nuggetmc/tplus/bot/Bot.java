@@ -28,6 +28,7 @@ import net.nuggetmc.tplus.api.Terminator;
 import net.nuggetmc.tplus.api.agent.Agent;
 import net.nuggetmc.tplus.api.agent.legacyagent.LegacyMats;
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.NeuralNetwork;
+import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementTrainingSnapshot;
 import net.nuggetmc.tplus.api.event.BotDamageByPlayerEvent;
 import net.nuggetmc.tplus.api.event.BotFallDamageEvent;
 import net.nuggetmc.tplus.api.event.BotKilledByPlayerEvent;
@@ -36,6 +37,7 @@ import net.nuggetmc.tplus.bot.combat.BotCombatTiming;
 import net.nuggetmc.tplus.bot.combat.CombatDirector;
 import net.nuggetmc.tplus.bot.combat.CombatDebugger;
 import net.nuggetmc.tplus.bot.combat.CombatIntent;
+import net.nuggetmc.tplus.bot.combat.MeleeBehavior;
 import net.nuggetmc.tplus.bot.combat.CombatState;
 import net.nuggetmc.tplus.bot.combat.MovementState;
 import net.nuggetmc.tplus.bot.combat.WindChargeMovePlan;
@@ -92,6 +94,8 @@ public class Bot extends ServerPlayer implements Terminator {
     private MovementState movementState;
     private boolean jumpedThisTick;
     private final MovementOutputApplier movementOutputApplier;
+    private boolean lastMovementControllerFallback;
+    private boolean lastMovementControllerHeld;
     /** Pending wind-charge self-boost (aim + fire tick). Null when not planning a throw. */
     public WindChargeMovePlan pendingWindChargePlan;
 
@@ -340,6 +344,8 @@ public class Bot extends ServerPlayer implements Terminator {
     public boolean tryMovementControllerMove(org.bukkit.entity.LivingEntity target) {
         if (!usesMovementController()) return false;
         MovementOutputApplier.ApplyResult result = movementOutputApplier.tryApply(this, target, network.movementNetwork());
+        lastMovementControllerFallback = result.fallback();
+        lastMovementControllerHeld = result.held();
         return !result.fallback();
     }
 
@@ -348,6 +354,51 @@ public class Bot extends ServerPlayer implements Terminator {
         CombatDirector director = plugin.getCombatDirector();
         if (director == null) return false;
         return director.execute(this, target, getMovementState());
+    }
+
+    @Override
+    public MovementTrainingSnapshot movementTrainingSnapshot(org.bukkit.entity.LivingEntity target) {
+        if (target == null || !target.isValid()) return MovementTrainingSnapshot.unavailable();
+        CombatIntent intent = getCombatIntent();
+        MovementState movement = getMovementState();
+        double distance = getLocation().distance(target.getLocation());
+        double horizontalDistance = getLocation().toVector()
+                .subtract(target.getLocation().toVector())
+                .setY(0)
+                .length();
+        boolean inMeleeRange = distance <= MeleeBehavior.ATTACK_RANGE;
+        boolean legalCritSetup = intent.wantsCritSetup()
+                && inMeleeRange
+                && movement.isFalling()
+                && BotCombatTiming.isCritWindow(this)
+                && BotCombatTiming.shouldPlanNormalMelee(this, target);
+        boolean legalSprintSetup = intent.wantsSprintHit()
+                && inMeleeRange
+                && movement.isSprinting()
+                && BotCombatTiming.shouldPlanSprintReset(this, target);
+        boolean holdCompliant = !intent.wantsHoldPosition() || lastMovementControllerHeld;
+        return new MovementTrainingSnapshot(
+                true,
+                distance,
+                horizontalDistance,
+                intent.desiredRange(),
+                intent.rangeUrgency(),
+                intent.wantsCritSetup(),
+                intent.wantsSprintHit(),
+                intent.wantsHoldPosition(),
+                intent.isCommitted(),
+                intent.commitProgress(),
+                movement.isSprinting(),
+                movement.justJumped(),
+                movement.isFalling(),
+                movement.isRetreating(),
+                movement.isCircling(),
+                movement.approachSpeed(),
+                legalCritSetup,
+                legalSprintSetup,
+                holdCompliant,
+                lastMovementControllerFallback
+        );
     }
 
     @Override

@@ -5,6 +5,9 @@ import net.nuggetmc.tplus.api.BotManager;
 import net.nuggetmc.tplus.api.Terminator;
 import net.nuggetmc.tplus.api.agent.legacyagent.EnumTargetGoal;
 import net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent;
+import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementNetwork;
+import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementNetworkGenetics;
+import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementTrainingSnapshot;
 import net.nuggetmc.tplus.api.utils.ChatUtils;
 import net.nuggetmc.tplus.api.utils.MathUtils;
 import net.nuggetmc.tplus.api.utils.MojangAPI;
@@ -45,6 +48,7 @@ public class IntelligenceAgent {
     private final String botName;
     private final String botSkin;
     private final int cutoff;
+    private final TrainingMode trainingMode;
 
     private final Map<String, Terminator> bots;
 
@@ -55,8 +59,15 @@ public class IntelligenceAgent {
 
     private final Set<CommandSender> users;
     private final Map<Integer, Set<Map<BotNode, Map<BotDataType, Double>>>> genProfiles;
+    private final Map<Integer, List<MovementNetwork>> movementGenerations;
+    private final Map<Terminator, MovementFitness> movementFitness;
+    private final Random random;
 
     public IntelligenceAgent(AIManager aiManager, int populationSize, String name, String skin, Plugin plugin, BotManager manager) {
+        this(aiManager, populationSize, name, skin, plugin, manager, TrainingMode.MOVEMENT_CONTROLLER);
+    }
+
+    public IntelligenceAgent(AIManager aiManager, int populationSize, String name, String skin, Plugin plugin, BotManager manager, TrainingMode trainingMode) {
         this.plugin = plugin;
         this.manager = manager;
         this.aiManager = aiManager;
@@ -67,8 +78,14 @@ public class IntelligenceAgent {
         this.bots = new HashMap<>();
         this.users = new HashSet<>(Collections.singletonList(Bukkit.getConsoleSender()));
         this.cutoff = 5;
+        this.trainingMode = trainingMode == null ? TrainingMode.MOVEMENT_CONTROLLER : trainingMode;
         this.genProfiles = new HashMap<>();
-        this.populationSize = populationSize;
+        this.movementGenerations = new HashMap<>();
+        this.movementFitness = new HashMap<>();
+        this.populationSize = this.trainingMode == TrainingMode.MOVEMENT_CONTROLLER
+                ? MovementNetworkGenetics.normalizePopulationSize(populationSize)
+                : populationSize;
+        this.random = new Random(Objects.hash(this.name, this.botName, this.trainingMode.name()));
         this.active = true;
 
         scheduler.runTaskAsynchronously(plugin, () -> {
@@ -115,15 +132,34 @@ public class IntelligenceAgent {
         print("Creating " + (populationSize == 1 ? "new bot" : ChatColor.RED + NumberFormat.getInstance(Locale.US).format(populationSize) + ChatColor.RESET + " new bots")
                 + " with name " + ChatColor.GREEN + botName.replace("%", ChatColor.LIGHT_PURPLE + "%" + ChatColor.RESET)
                 + (botSkin == null ? "" : ChatColor.RESET + " and skin " + ChatColor.GREEN + botSkin)
+                + ChatColor.RESET + " using " + ChatColor.YELLOW + trainingMode.label()
                 + ChatColor.RESET + "...");
 
         Set<Map<BotNode, Map<BotDataType, Double>>> loadedProfiles = genProfiles.get(generation);
+        List<MovementNetwork> loadedMovementNetworks = movementGenerations.get(generation);
         Location loc = PlayerUtils.findAbove(primary.getLocation(), 20);
 
         scheduler.runTask(plugin, () -> {
             Set<Terminator> bots;
 
-            if (loadedProfiles == null) {
+            if (trainingMode == TrainingMode.MOVEMENT_CONTROLLER) {
+                List<MovementNetwork> movementNetworks = loadedMovementNetworks == null
+                        ? MovementNetworkGenetics.randomPopulation(populationSize, random)
+                        : loadedMovementNetworks;
+                if (movementNetworks.size() != populationSize) {
+                    print("Stored movement population size did not match; regenerating this generation safely.");
+                    movementNetworks = MovementNetworkGenetics.randomPopulation(populationSize, random);
+                }
+                List<NeuralNetwork> networks = new ArrayList<>();
+                for (MovementNetwork movementNetwork : movementNetworks) {
+                    networks.add(NeuralNetwork.createMovementControllerNetwork(
+                            MovementNetworkGenetics.isValid(movementNetwork)
+                                    ? MovementNetworkGenetics.copy(movementNetwork)
+                                    : MovementNetwork.randomDefault()));
+                }
+
+                bots = manager.createBots(loc, botName, skinData, networks);
+            } else if (loadedProfiles == null) {
                 bots = manager.createBots(loc, botName, skinData, populationSize, NeuralNetwork.RANDOM);
             } else {
                 List<NeuralNetwork> networks = new ArrayList<>();
@@ -158,12 +194,34 @@ public class IntelligenceAgent {
         print("The bots will now attack each other.");
 
         agent.setTargetType(EnumTargetGoal.NEAREST_BOT);
+        movementFitness.clear();
 
         while (aliveCount() > 1) {
+            if (trainingMode == TrainingMode.MOVEMENT_CONTROLLER) {
+                sampleMovementFitness();
+            }
             sleep(1000);
+        }
+        if (trainingMode == TrainingMode.MOVEMENT_CONTROLLER) {
+            sampleMovementFitness();
         }
 
         print("Generation " + ChatColor.RED + generation + ChatColor.RESET + " has ended.");
+
+        if (trainingMode == TrainingMode.MOVEMENT_CONTROLLER) {
+            finishMovementGeneration();
+        } else {
+            finishLegacyGeneration();
+        }
+
+        sleep(2000);
+
+        clearBots();
+
+        agent.setTargetType(EnumTargetGoal.NONE);
+    }
+
+    private void finishLegacyGeneration() throws InterruptedException {
 
         HashMap<Terminator, Integer> values = new HashMap<>();
 
@@ -235,12 +293,86 @@ public class IntelligenceAgent {
         }
 
         genProfiles.put(generation + 1, profiles);
+    }
 
-        sleep(2000);
+    private void finishMovementGeneration() {
+        List<MovementNetworkGenetics.ScoredNetwork> scored = new ArrayList<>();
+        HashMap<Terminator, Integer> displayValues = new HashMap<>();
 
-        clearBots();
+        for (Terminator bot : bots.values()) {
+            double fitness = movementFitness(bot);
+            displayValues.put(bot, (int) Math.round(fitness));
+            NeuralNetwork network = bot.getNeuralNetwork();
+            MovementNetwork movementNetwork = network == null ? null : network.movementNetwork();
+            if (MovementNetworkGenetics.isValid(movementNetwork)) {
+                scored.add(new MovementNetworkGenetics.ScoredNetwork(movementNetwork, fitness));
+            }
+        }
 
-        agent.setTargetType(EnumTargetGoal.NONE);
+        List<Map.Entry<Terminator, Integer>> sorted = MathUtils.sortByValue(displayValues);
+        int rank = 1;
+        for (Map.Entry<Terminator, Integer> entry : sorted) {
+            if (rank > Math.min(cutoff, sorted.size())) break;
+            Terminator bot = entry.getKey();
+            print(ChatColor.GRAY + "[" + ChatColor.YELLOW + "#" + rank + ChatColor.GRAY + "] "
+                    + ChatColor.GREEN + bot.getBotName()
+                    + ChatUtils.BULLET_FORMATTED + ChatColor.RED + entry.getValue() + " fitness"
+                    + ChatUtils.BULLET_FORMATTED + ChatColor.RED + bot.getKills() + " kills");
+            rank++;
+        }
+
+        if (!scored.isEmpty()) {
+            double best = scored.stream().mapToDouble(MovementNetworkGenetics.ScoredNetwork::fitness).max().orElse(0.0);
+            double average = scored.stream().mapToDouble(MovementNetworkGenetics.ScoredNetwork::fitness).average().orElse(0.0);
+            print("Movement generation " + ChatColor.RED + generation + ChatColor.RESET
+                    + " best=" + ChatColor.YELLOW + MathUtils.round2Dec(best)
+                    + ChatColor.RESET + " avg=" + ChatColor.YELLOW + MathUtils.round2Dec(average)
+                    + ChatColor.RESET + ".");
+        }
+
+        movementGenerations.put(generation + 1,
+                MovementNetworkGenetics.nextGeneration(scored, populationSize, generation, random));
+    }
+
+    private void sampleMovementFitness() {
+        for (Terminator bot : bots.values()) {
+            if (!bot.isBotAlive()) continue;
+            Terminator targetBot = nearestAliveBot(bot);
+            if (targetBot == null) continue;
+            movementFitness.computeIfAbsent(bot, ignored -> new MovementFitness())
+                    .sample(bot, targetBot.getBukkitEntity());
+        }
+    }
+
+    private Terminator nearestAliveBot(Terminator bot) {
+        Terminator best = null;
+        double bestDistance = Double.MAX_VALUE;
+        Location loc = bot.getLocation();
+        for (Terminator other : bots.values()) {
+            if (other == bot || !other.isBotAlive()) continue;
+            Location otherLoc = other.getLocation();
+            if (loc.getWorld() != otherLoc.getWorld()) continue;
+            double distance = loc.distanceSquared(otherLoc);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = other;
+            }
+        }
+        return best;
+    }
+
+    private double movementFitness(Terminator bot) {
+        MovementFitness stats = movementFitness.get(bot);
+        double fitness = bot.getAliveTicks() * 0.25
+                + bot.getKills() * 275.0
+                + bot.getBotHealth() * 12.0;
+        if (stats != null) {
+            fitness += stats.score();
+        }
+        if (bot.getBotMaxHealth() > 0.0f) {
+            fitness -= Math.max(0.0, bot.getBotMaxHealth() - bot.getBotHealth()) * 4.0;
+        }
+        return fitness;
     }
 
     private int aliveCount() {
@@ -300,6 +432,13 @@ public class IntelligenceAgent {
             print("The input value for the population size is lower than the cutoff (" + ChatColor.RED + cutoff + ChatColor.RESET + ")!"
                     + " The new population size is " + ChatColor.RED + populationSize + ChatColor.RESET + ".");
         }
+        if (trainingMode == TrainingMode.MOVEMENT_CONTROLLER) {
+            int normalized = MovementNetworkGenetics.normalizePopulationSize(populationSize);
+            if (normalized != populationSize) {
+                populationSize = normalized;
+                print("Movement training population has been clamped to " + ChatColor.RED + populationSize + ChatColor.RESET + ".");
+            }
+        }
 
         if (!(manager.getAgent() instanceof LegacyAgent)) {
             print("The AI manager currently only supports " + ChatColor.AQUA + "LegacyAgent" + ChatColor.RESET + ".");
@@ -339,5 +478,119 @@ public class IntelligenceAgent {
         print("Removed " + ChatColor.RED + formatted + ChatColor.RESET + " entit" + (size == 1 ? "y" : "ies") + ".");
 
         bots.clear();*/
+    }
+
+    public enum TrainingMode {
+        MOVEMENT_CONTROLLER("movement-controller"),
+        LEGACY_FULL_REPLACEMENT("legacy-full-replacement");
+
+        private final String label;
+
+        TrainingMode(String label) {
+            this.label = label;
+        }
+
+        public String label() {
+            return label;
+        }
+
+        public static TrainingMode from(String raw) {
+            if (raw == null || raw.isBlank()) return MOVEMENT_CONTROLLER;
+            String normalized = raw.trim().toLowerCase(Locale.ROOT);
+            if (normalized.equals("legacy") || normalized.equals("classic") || normalized.equals("full")
+                    || normalized.equals("full-replacement")) {
+                return LEGACY_FULL_REPLACEMENT;
+            }
+            return MOVEMENT_CONTROLLER;
+        }
+    }
+
+    private static final class MovementFitness {
+        private int samples;
+        private int stuckSamples;
+        private int oscillations;
+        private int critSetups;
+        private int sprintSetups;
+        private int holdCompliant;
+        private int holdViolations;
+        private int fallbackSamples;
+        private int jumpSamples;
+        private int sprintSamples;
+        private double rangeScore;
+        private double urgencyScore;
+        private double circlingScore;
+        private double retreatScore;
+        private double previousForwardSpeed;
+        private Location previousLocation;
+
+        void sample(Terminator bot, org.bukkit.entity.LivingEntity target) {
+            MovementTrainingSnapshot snap = bot.movementTrainingSnapshot(target);
+            if (!snap.available()) return;
+            samples++;
+
+            double desired = Math.max(0.75, snap.desiredRange());
+            double error = Math.abs(snap.horizontalDistance() - desired);
+            rangeScore += Math.max(0.0, 1.0 - error / Math.max(4.0, desired));
+
+            if (snap.rangeUrgency() > 0.35 && snap.horizontalDistance() > desired) {
+                urgencyScore += Math.min(1.0, snap.approachSpeed() / 0.42) * snap.rangeUrgency();
+                if (snap.isRetreating()) urgencyScore -= snap.rangeUrgency();
+            } else if (snap.horizontalDistance() < desired * 0.75 && snap.isRetreating()) {
+                retreatScore += 0.5;
+            }
+
+            if (snap.isCircling() && error <= 3.0 && !snap.wantsHoldPosition()) {
+                circlingScore += 0.6;
+            }
+            if (snap.wantsCritSetup()) {
+                if (snap.legalCritSetup()) critSetups++;
+                else if (snap.justJumped()) rangeScore -= 0.35;
+            }
+            if (snap.wantsSprintHit()) {
+                if (snap.legalSprintHitSetup()) sprintSetups++;
+                else if (snap.isSprinting()) rangeScore -= 0.15;
+            }
+            if (snap.wantsHoldPosition()) {
+                if (snap.holdPositionCompliant()) holdCompliant++;
+                else holdViolations++;
+            }
+            if (snap.movementFallback()) fallbackSamples++;
+            if (snap.justJumped()) jumpSamples++;
+            if (snap.isSprinting()) sprintSamples++;
+
+            if (previousForwardSpeed != 0.0 && Math.signum(previousForwardSpeed) != Math.signum(snap.approachSpeed())) {
+                oscillations++;
+            }
+            previousForwardSpeed = snap.approachSpeed();
+
+            Location now = bot.getLocation();
+            if (previousLocation != null && now.getWorld() == previousLocation.getWorld()
+                    && now.distanceSquared(previousLocation) < 0.0025
+                    && snap.rangeUrgency() > 0.25) {
+                stuckSamples++;
+            }
+            previousLocation = now.clone();
+        }
+
+        double score() {
+            if (samples == 0) return 0.0;
+            double score = 0.0;
+            score += (rangeScore / samples) * 300.0;
+            score += (urgencyScore / samples) * 220.0;
+            score += (circlingScore / samples) * 90.0;
+            score += (retreatScore / samples) * 70.0;
+            score += critSetups * 75.0;
+            score += sprintSetups * 45.0;
+            score += holdCompliant * 35.0;
+            score -= holdViolations * 85.0;
+            score -= fallbackSamples * 35.0;
+            score -= stuckSamples * 45.0;
+            score -= oscillations * 12.0;
+            double jumpRate = jumpSamples / (double) samples;
+            double sprintRate = sprintSamples / (double) samples;
+            if (jumpRate > 0.45 && critSetups == 0) score -= (jumpRate - 0.45) * 180.0;
+            if (sprintRate > 0.8 && sprintSetups == 0) score -= (sprintRate - 0.8) * 120.0;
+            return score;
+        }
     }
 }
