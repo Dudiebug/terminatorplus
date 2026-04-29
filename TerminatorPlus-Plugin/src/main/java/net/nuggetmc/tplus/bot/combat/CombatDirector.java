@@ -30,7 +30,56 @@ public final class CombatDirector {
 
     public boolean tick(Bot bot, LivingEntity target) {
         if (target == null || !target.isValid()) return false;
+        plan(bot, target, bot.getCombatIntent());
         if (bot.hasNeuralNetwork()) return false;
+
+        return execute(bot, target, bot.getMovementState());
+    }
+
+    /**
+     * Writes Director -> MovementNetwork hints only. This method must not choose
+     * attacks, mutate loadouts, or bypass CombatDirector execution gates.
+     */
+    public CombatIntent plan(Bot bot, LivingEntity target, CombatIntent previousIntent) {
+        if (target == null || !target.isValid()) {
+            bot.setCombatIntent(CombatIntent.DEFAULT);
+            return bot.getCombatIntent();
+        }
+
+        double distance = bot.getLocation().distance(target.getLocation());
+        BotInventory inv = bot.getBotInventory();
+        CombatState.Phase phase = bot.getCombatState().getPhase();
+        boolean committed = phase != CombatState.Phase.IDLE;
+        boolean meleeRange = distance <= MeleeBehavior.ATTACK_RANGE;
+        boolean canSpecial = BotCombatTiming.shouldPlanSprintReset(bot, target);
+        String branchName = branchHint(bot, inv, distance, phase, canSpecial);
+        double desiredRange = desiredRangeFor(branchName);
+        double weaponRange = weaponRangeFor(branchName);
+
+        CombatIntent intent = new CombatIntent(
+                desiredRange,
+                rangeUrgency(distance, desiredRange),
+                meleeRange && BotCombatTiming.readyForVanillaSpecial(bot)
+                        && !BotCombatTiming.isCritWindow(bot)
+                        && !BotCombatTiming.targetHasIFrames(target),
+                meleeRange && canSpecial,
+                committed,
+                committed,
+                commitProgress(bot.getCombatState()),
+                weaponRange,
+                branchName
+        );
+        bot.setCombatIntent(intent);
+        return intent;
+    }
+
+    /**
+     * Executes legal combat actions. MovementState is observed movement context,
+     * not permission to attack; CombatDirector still owns timing and legality.
+     */
+    public boolean execute(Bot bot, LivingEntity target, MovementState movementState) {
+        if (target == null || !target.isValid()) return false;
+        bot.setMovementState(movementState);
 
         double distance = bot.getLocation().distance(target.getLocation());
         BotInventory inv = bot.getBotInventory();
@@ -292,5 +341,60 @@ public final class CombatDirector {
 
     private void logSweepBranchSkip(Bot bot, LivingEntity target, double distance, String reason, String branch) {
         BotCombatTiming.logSweepSkipIfRelevant(bot, target, distance, reason, branch);
+    }
+
+    private static String branchHint(
+            Bot bot,
+            BotInventory inv,
+            double distance,
+            CombatState.Phase phase,
+            boolean canSpecial
+    ) {
+        return switch (phase) {
+            case MACE_CHARGING -> "mace-charging";
+            case AIRBORNE -> "airborne-mace";
+            case CHARGING -> "trident-charging";
+            case RELEASE -> "release";
+            case IDLE -> {
+                if (distance <= MeleeBehavior.ATTACK_RANGE && canSpecial) yield "melee-ready";
+                if (distance >= TridentBehavior.MIN_DISTANCE && distance <= TridentBehavior.MAX_DISTANCE
+                        && inv.hasTrident()
+                        && bot.getBotCooldowns().ready(TridentBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
+                    yield "trident-ready";
+                }
+                if (distance >= 28.0 && distance <= 64.0 && inv.hasEnderPearl()
+                        && bot.getBotCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, bot.getAliveTicks())) {
+                    yield "pearl-ready";
+                }
+                yield "neutral";
+            }
+        };
+    }
+
+    private static double desiredRangeFor(String branchName) {
+        return switch (branchName) {
+            case "trident-charging", "trident-ready" -> 12.0;
+            case "pearl-ready" -> 28.0;
+            case "mace-charging", "airborne-mace" -> 3.0;
+            default -> 3.5;
+        };
+    }
+
+    private static double weaponRangeFor(String branchName) {
+        return switch (branchName) {
+            case "trident-charging", "trident-ready" -> TridentBehavior.MAX_DISTANCE;
+            case "pearl-ready" -> 64.0;
+            default -> MeleeBehavior.ATTACK_RANGE;
+        };
+    }
+
+    private static double rangeUrgency(double distance, double desiredRange) {
+        if (!Double.isFinite(distance) || desiredRange <= 0.0) return 0.0;
+        return Math.min(1.0, Math.abs(distance - desiredRange) / desiredRange);
+    }
+
+    private static double commitProgress(CombatState state) {
+        if (state.getPhase() == CombatState.Phase.IDLE) return 0.0;
+        return Math.min(1.0, state.getPhaseTicks() / 40.0);
     }
 }

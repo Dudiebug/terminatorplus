@@ -35,7 +35,9 @@ import net.nuggetmc.tplus.api.utils.*;
 import net.nuggetmc.tplus.bot.combat.BotCombatTiming;
 import net.nuggetmc.tplus.bot.combat.CombatDirector;
 import net.nuggetmc.tplus.bot.combat.CombatDebugger;
+import net.nuggetmc.tplus.bot.combat.CombatIntent;
 import net.nuggetmc.tplus.bot.combat.CombatState;
+import net.nuggetmc.tplus.bot.combat.MovementState;
 import net.nuggetmc.tplus.bot.combat.WindChargeMovePlan;
 import net.nuggetmc.tplus.bot.loadout.BotInventory;
 import net.nuggetmc.tplus.bot.loadout.Cooldowns;
@@ -85,6 +87,9 @@ public class Bot extends ServerPlayer implements Terminator {
     private final BotInventory botInventory;
     private final Cooldowns cooldowns;
     private final CombatState combatState;
+    private CombatIntent combatIntent;
+    private MovementState movementState;
+    private boolean jumpedThisTick;
     /** Pending wind-charge self-boost (aim + fire tick). Null when not planning a throw. */
     public WindChargeMovePlan pendingWindChargePlan;
 
@@ -103,6 +108,8 @@ public class Bot extends ServerPlayer implements Terminator {
         this.botInventory = new BotInventory(this);
         this.cooldowns = new Cooldowns();
         this.combatState = new CombatState();
+        this.combatIntent = CombatIntent.DEFAULT;
+        this.movementState = MovementState.DEFAULT;
         if (addToPlayerList) {
             minecraftServer.getPlayerList().getPlayers().add(this);
             inPlayerList = true;
@@ -291,6 +298,22 @@ public class Bot extends ServerPlayer implements Terminator {
         return combatState;
     }
 
+    public CombatIntent getCombatIntent() {
+        return combatIntent;
+    }
+
+    public void setCombatIntent(CombatIntent combatIntent) {
+        this.combatIntent = combatIntent == null ? CombatIntent.DEFAULT : combatIntent;
+    }
+
+    public MovementState getMovementState() {
+        return movementState;
+    }
+
+    public void setMovementState(MovementState movementState) {
+        this.movementState = movementState == null ? MovementState.DEFAULT : movementState;
+    }
+
     @Override
     public boolean combatTick(org.bukkit.entity.LivingEntity target) {
         CombatDirector director = plugin.getCombatDirector();
@@ -365,6 +388,7 @@ public class Bot extends ServerPlayer implements Terminator {
         }
 
         updateLocation();
+        updateMovementState();
 
         if (!isAlive()) return;
 
@@ -576,6 +600,21 @@ public class Bot extends ServerPlayer implements Terminator {
         this.move(MoverType.SELF, new Vec3(velocity.getX(), y, velocity.getZ()));
     }
 
+    private void updateMovementState() {
+        Vector horizontalVelocity = velocity.clone();
+        horizontalVelocity.setY(0);
+        movementState = new MovementState(
+                isSprinting(),
+                jumpedThisTick,
+                isFalling(),
+                false,
+                false,
+                horizontalVelocity.length(),
+                getLocation().getDirection()
+        );
+        jumpedThisTick = false;
+    }
+
     @Override
     public boolean isBotInWater() {
         Location loc = getLocation();
@@ -598,6 +637,7 @@ public class Bot extends ServerPlayer implements Terminator {
         if (jumpTicks == 0 && groundTicks > 1) {
             jumpTicks = 4;
             velocity = vel;
+            jumpedThisTick = true;
             if (CombatDebugger.isOn(this)) {
                 CombatDebugger.log(this, "move-jump", "accepted vel=" + fmtVec(vel));
             }
