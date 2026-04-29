@@ -1,6 +1,6 @@
 # TerminatorPlus Wiki
 
-TerminatorPlus is a Paper plugin that spawns server-side player bots with combat AI, a full editable inventory, and a preset system. Unlike basic NPC plugins, each bot is an NMS `ServerPlayer` subclass — it takes and deals real damage, uses real items, and reacts to its surroundings.
+TerminatorPlus is a Paper plugin that spawns server-side player bots with combat AI, a full editable inventory, movement neural networks, and a preset system. Each bot is an NMS `ServerPlayer` subclass — it takes and deals real damage, uses real items, and reacts to its surroundings through vanilla mechanics.
 
 ## Pages
 
@@ -9,16 +9,32 @@ TerminatorPlus is a Paper plugin that spawns server-side player bots with combat
 - [Commands](Commands)
 - [Loadouts](Loadouts)
 - [Combat Behaviors](Combat-Behaviors)
+- [Movement Network](Movement-Network)
+- [AI Training](AI-Training)
+- [Brain Persistence](Brain-Persistence)
+- [Configuration](Configuration)
 - [Presets](Presets)
 - [Inventory GUI](Inventory-GUI)
-- [Neural Network Mode](Neural-Network-Mode)
 - [API](API)
 - [Troubleshooting](Troubleshooting)
 - [Changelog](Changelog)
+- [Release Notes 5.1.0](Release-Notes-5.1.0)
 
-## What's New
+## What's New in 5.1.0
 
-- **Weapon-aware combat AI** — bots use swords, maces, tridents with momentum, wind charges, ender pearls, end crystals, respawn anchors, cobwebs, totems, and elytra gliding with firework boosts.
-- **Full inventory editor** — `/bot inventory <bot-name>` opens a 54-slot chest you can edit like a real inventory.
-- **Presets** — save a bot's loadout and behavior settings to YAML, then re-apply to any bot.
-- **Neural-network training mode is preserved** — the AI pipeline only kicks in for non-training bots, so fitness scoring stays deterministic.
+**Combat reliability (Issue #6)**
+- Vanilla attack ordering fix — `Bot.attack()` calls `getBukkitEntity().attack(entity)` before swing/punch to prevent charge reset before damage.
+- Charge-aware planning — CombatDirector skips attack branches until charge is ready, reducing swing-block spam.
+- Mace recharge planning with custom gravity and required airtime tracking.
+- Mace airborne tracking with ground clip tolerance and velocity-aware horizontal damping.
+- Sweep instrumentation and telemetry cleanup (critPred, sweepPred, chargeAtVanillaAttack, targetHp, etc.).
+
+**Movement neural network (Issue #7)**
+- Movement-only neural network — the NN controls footwork (strafing, spacing, sprint/jump timing, approach/retreat). It does **not** control combat decisions.
+- **CombatDirector** retains full authority over weapon selection, attack timing, and combat execution.
+- CombatIntent/MovementState coupling — the Director tells the NN what it wants (range, urgency, crit/sprint/hold hints), and the NN reports its movement state back for timing validation.
+- In-JVM genetic algorithm training with tournament selection, uniform crossover, and adaptive mutation.
+- Brain persistence — trained networks save to `brain.json` with schema validation and safe fallback.
+- Configurable training loadout mixing for generalized movement learning.
+- Legacy movement and full-replacement NN modes remain available.
+- Non-NN bots are unaffected.

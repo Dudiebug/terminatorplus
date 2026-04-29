@@ -1,72 +1,101 @@
 # Changelog
 
-## Unreleased — Combat + Inventory + Presets Overhaul
+## 5.1.0 — Combat Reliability + Movement Neural Network
+
+See [Release Notes 5.1.0](Release-Notes-5.1.0) for full details.
+
+### Added
+
+**Combat Reliability (Issue #6)**
+- Vanilla attack ordering fix — `Bot.attack()` calls vanilla attack before swing/punch to prevent charge reset.
+- Charge-aware planning — CombatDirector waits for full attack charge before committing to attacks.
+- Mace recharge planning with gravity-aware airtime tracking.
+- Mace airborne tracking with ground clip tolerance and velocity-aware horizontal damping.
+- Sweep instrumentation and telemetry (sweep-check, sweep-skip).
+- Combat telemetry fields: `critPred`, `sweepPred`, `chargeAtVanillaAttack`, `chargeAfterVanillaAttack`, `targetHp`, `targetHpDelta`.
+- `/bot combatdebug` command for per-bot combat trace logging.
+
+**Movement Neural Network (Issue #7)**
+- Movement-only neural network — controls footwork (strafing, spacing, sprint/jump timing, approach/retreat). Does **not** control combat.
+- CombatDirector.plan() / execute() split with CombatIntent / MovementState coupling.
+- 30-value MovementInput schema, 8-value MovementOutput schema.
+- MovementOutputApplier with threshold-based movement decisions.
+- In-JVM genetic algorithm: tournament selection, uniform crossover, adaptive Gaussian mutation, elite preservation.
+- Configurable fitness scoring with 17 weighted factors.
+- Training loadout mixing with weighted random pool.
+- Brain persistence: `brain.json` with schema validation, safe fallback, auto-backup on reset.
+- `/ai brain <status|load|save|reset>` commands.
+- `/ai movement` command for spawning movement-controller bots.
+- `/ai reinforcement` now accepts `movement-controller` (default) or `legacy` mode.
+
+**Loadouts**
+- New loadouts: `vanilla`, `axe`, `smp`, `pot`, `spear`.
+- `/bot loadoutmix` command for distributing loadouts across bots.
+- Loadout mix presets: `alltypes`, `core`, `problem`.
+
+**Configuration**
+- Full `ai.movement-network` config section (mode, shape, fallback, brain path, autosave, debug).
+- Full `ai.training` config section (population, generations, GA parameters, adaptive mutation).
+- `ai.training.fitness-weights` with 17 configurable factors.
+- `ai.training.loadouts` with weighted pool configuration.
+
+### Changed
+
+- Training mode defaults to `movement-controller` (NN handles movement, Director handles combat) instead of legacy full-replacement.
+- CombatDirector split into `plan()` and `execute()` phases for movement NN integration.
+
+### Fixed
+
+- Bots no longer waste swings on uncharged attacks (charge-aware planning).
+- Vanilla attack damage calculation now runs before swing/punch animation (correct ordering).
+- Mace smash no longer commits when airtime is insufficient for recharge.
+- Mace airborne tracking no longer overshoots on moving targets.
+
+### Known limitations
+
+- Changing `hidden-layers` after training invalidates saved brains.
+- Training with large populations impacts server TPS.
+- Movement NN is disabled by default for normal bots.
+
+---
+
+## Unreleased (pre-5.1.0) — Combat + Inventory + Presets Overhaul
 
 ### Added
 
 **Combat AI**
 - Weapon-aware `CombatDirector` that picks the right behavior per tick based on inventory, distance, cooldowns, and dimension.
-- **Melee** behavior using vanilla `Player.attack()` (real crits, shields, enchants).
-- **Mace smash**: jump → peak → fall-damage-scaled smash.
-- **Trident momentum throw**: sprint run-up builds velocity, released spear keeps the stacked momentum (5–28 block window).
-- **Wind charge**: zoning lob at ≥ 4 blocks.
-- **Ender pearl**: gap-closer at 14–35 blocks, leads target velocity.
-- **End crystal PvP**: auto-places obsidian host block, spawns crystal, detonates (Overworld / End only).
-- **Respawn anchor bomb**: Nether-only place/charge/detonate chain.
-- **Cobweb utility**: drops web at feet of fleeing target (≤ 4.5 blocks).
-- **Elytra glide** (passive): auto-activates when falling, uses firework rockets, dive-trident combo.
-- **Elytra ↔ chestplate swap**: bot swaps automatically when both are present and state changes.
-- **Totem of undying** (passive): swaps a totem into the offhand when HP < 6 so vanilla pop triggers.
-- Neural-network bots bypass the director entirely to preserve deterministic fitness.
+- Melee, Mace Smash, Trident Momentum Throw, Wind Charge, Ender Pearl, Crystal PvP, Anchor Bomb, Cobweb, Elytra Glide, Totem Swap, and Heal behaviors.
+- Neural-network bots bypass the director to preserve deterministic fitness.
 
 **Inventory**
-- Full per-bot inventory: 9 hotbar + 27 storage + 4 armor + 1 offhand slots, each independently editable.
-- `/bot inventory <name>` — double-chest GUI mirrors the bot's inventory; edits save on close.
-- `/bot give <item> [bot] [slot]` — drop items into specific slots of specific bots.
-- `/bot armor <tier>` — quick full-armor apply.
-- `/bot weapons [bot]` — prints which combat behaviors each bot's inventory unlocks.
+- Full per-bot inventory: 9 hotbar + 27 storage + 4 armor + 1 offhand.
+- `/bot inventory <name>` GUI editor.
+- `/bot give`, `/bot armor`, `/bot weapons` commands.
 
 **Loadouts**
 - Built-in loadouts: `sword`, `mace`, `trident`, `windcharge`, `skydiver`, `hybrid`, `crystalpvp`, `anchorbomb`, `pvp`, `clear`.
-- `/bot loadout <name> [bot]` — optional bot target (previously always all-bots).
+- `/bot loadout <name> [bot]`.
 
 **Presets**
-- YAML preset system: captures all 41 slots + selected hotbar + behavior settings (goal, mob-target, player-list, shield).
-- Items serialized via `ItemStack.serializeAsBytes` + Base64 — full NBT round-trip.
-- Commands: `/bot preset save`, `apply`, `list`, `delete`.
-- `apply` without a bot-name applies to every spawned bot.
-- `load` kept as an alias for `apply`.
+- YAML preset system with full NBT round-trip.
+- `/bot preset save`, `apply`, `list`, `delete`.
 
 **Permissions**
-- `terminatorplus.admin` for destructive commands (`reset`, `preset delete`).
-- `terminatorplus.manage` for day-to-day bot management.
-- `terminatorplus.*` parent node.
-- All three declared with descriptions in `plugin.yml`.
+- `terminatorplus.admin`, `terminatorplus.manage`, `terminatorplus.*`.
 
 **API**
-- `Terminator.combatTick(LivingEntity)` — drive the new combat director from your own plugin.
-- Dimension awareness via `Terminator.getDimension()`.
-
-**Wiki**
-- Full documentation set under `wiki/`: Home, Installation, Quick Start, Commands, Loadouts, Combat Behaviors, Presets, Inventory GUI, Neural Network Mode, API, Troubleshooting, Changelog.
+- `Terminator.combatTick(LivingEntity)`.
+- `Terminator.getDimension()`.
 
 ### Changed
-
-- `/bot loadout` is now per-bot by default when a bot-name is passed, else applies to all.
-- `/bot give` accepts `[bot] [slot]` for targeted placement. Single-arg form (set default item on every bot) still works.
-- `plugin.yml` now declares the `bot`, `terminatorplus`, `ai`, `botenvironment` commands with aliases and descriptions so `/help` works correctly.
-- Normal bots now take and deal vanilla damage (real crits, shield breaks, enchantment effects). Only neural-network training bots still use the legacy deterministic damage table.
+- Normal bots use vanilla damage (real crits, shields, enchantments).
+- `/bot loadout` is per-bot when a name is passed.
+- `/bot give` accepts `[bot] [slot]` for targeted placement.
 
 ### Fixed
-
-- Bots now correctly switch hotbar slots when the combat director chooses a weapon — main hand reflects the active item via packet sync.
-- Fall damage on mace smash now stacks against the target, not the bot.
-
-### Known limitations
-
-- Paper 1.21.1 only. Other versions spawn bots but may break.
-- Trained neural-network weights aren't persisted across server restarts.
-- Crystal PvP doesn't place obsidian in The End if the arena uses end stone only — bring your own blocks.
+- Hotbar slot sync when combat director switches weapons.
+- Fall damage stacking on mace smash.
 
 ## Previous versions
 

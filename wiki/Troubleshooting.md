@@ -1,95 +1,129 @@
 # Troubleshooting / FAQ
 
-## Version mismatch banner on startup
+## Version mismatch on startup
 
-```
-[TerminatorPlus] Running on version: 1.21.X, required version: 1.21.1, correct version: false
-```
+If the console shows a version mismatch, your server version doesn't match the jar's target build. Bots may spawn but behave unexpectedly. **Fix**: run the Paper version that matches your jar (26.1.2 or 1.21.11). Spigot and CraftBukkit are not supported.
 
-Bots will spawn but the NMS subclass is targeting a different mapping. **Fix**: run Paper **1.21.1** exactly. Spigot and CraftBukkit are not supported (Paper-only API is used throughout).
+## Bot does not move
 
-## "Bot won't glide"
+Possible causes:
+- **Movement NN fallback**: if the movement network is enabled but the brain file is missing or corrupt, the bot may fall back to legacy movement. Check with `/ai brain status`. Fix with `/ai brain load` or `/ai brain reset`.
+- **No target**: bots need a target to move toward. Check the target goal with `/bot settings setgoal`.
+- **Hold-position**: the CombatDirector may be requesting hold-position. This is normal during certain combat phases.
 
-The `ElytraBehavior` is passive — it checks every tick for:
+## Movement NN falls back to legacy
 
+The movement network falls back to legacy movement when:
+- The brain file is missing or corrupt.
+- The network shape doesn't match the config (e.g. `hidden-layers` was changed after training).
+- Input validation fails.
+
+Check `/ai brain status` for details. Fix with `/ai brain load` (if a valid file exists) or `/ai brain reset` followed by retraining.
+
+## Brain file missing
+
+- Default location: `plugins/TerminatorPlus/ai/brain.json`
+- Check the configured path in `config.yml` under `ai.movement-network.brain-path`.
+- Use `/ai brain save` to create the file after training, or `/ai brain reset` to generate a random brain.
+
+## Brain file corrupt
+
+If the brain file contains invalid JSON, wrong schema version, or NaN values:
+- The load is rejected with a descriptive error message.
+- Bots fall back to legacy movement — no crash.
+- Use `/ai brain reset` to generate a fresh brain. The corrupt file is backed up automatically.
+
+## Shape mismatch
+
+If `ai.movement-network.hidden-layers` was changed after a brain was saved, the saved brain's shape won't match:
+- The load reports a shape mismatch error.
+- Either revert the config to match the saved brain, or `/ai brain reset` and retrain.
+
+## Training causes lag
+
+Training spawns many bots fighting simultaneously. To reduce server load:
+- Lower `ai.training.population-size` (try 60--80).
+- Increase `ai.movement-network.tick-rate` (evaluate every 2--3 ticks instead of every tick).
+- Ensure the training arena is in a pre-generated area to avoid chunk loading overhead.
+
+## Commands not found
+
+- Make sure you're running the correct jar version.
+- Check permissions: most commands require `terminatorplus.manage` (default: op).
+- `/bot reset`, `/bot preset delete`, and `/bot combatdebug` require `terminatorplus.admin`.
+
+## Loadout name invalid
+
+Loadout names are case-sensitive. Valid names: `sword`, `mace`, `trident`, `windcharge`, `skydiver`, `hybrid`, `crystalpvp`, `anchorbomb`, `pvp`, `vanilla`, `axe`, `smp`, `pot`, `spear`, `clear`.
+
+## Bot won't glide
+
+`ElytraBehavior` checks every tick for:
 1. An elytra in the chestplate slot (slot 38).
 2. The bot falling more than a few blocks.
 
-If either fails, no glide. Check with:
+Check with `/bot weapons`. If elytra is not listed, equip one via `/bot loadout skydiver` or `/bot inventory <name>`.
 
-```
-/bot weapons
-```
+For firework boosts, you also need `FIREWORK_ROCKET` in the hotbar.
 
-If `elytra` is dark-grey instead of yellow, the bot doesn't have one equipped. Fix with `/bot loadout skydiver` or `/bot loadout pvp`, or put an elytra in slot 38 via `/bot inventory <name>`.
+## Bot won't throw trident
 
-For firework boosts, you also need a `FIREWORK_ROCKET` in the hotbar.
-
-## "Bot won't throw trident"
-
-Run `/bot weapons <bot>` to check. Common causes:
-- Trident isn't in the **hotbar** (slots 0–8). Tridents in storage don't count.
-- Target is outside the 5–28 block window. At < 5 the bot defaults to melee; at > 28 it prefers wind charge or pearl.
+Common causes:
+- Trident isn't in the **hotbar** (slots 0--8). Tridents in storage don't count.
+- Target is outside the 5--28 block window. At < 5 the bot defaults to melee; at > 28 it prefers wind charge or pearl.
 - Trident cooldown (60t) hasn't elapsed.
 
-## "Preset didn't apply"
+Check with `/bot weapons <bot>`.
 
-Scenarios:
+## Mace/trident behavior seems odd
 
-1. **Bot is a training bot** — neural-network bots ignore the combat director entirely. Preset items still apply, but behaviors won't trigger.
-2. **Preset file outdated** — check `plugins/TerminatorPlus/presets/<name>.yml`. If `version:` isn't `1`, you may be on a format that's not supported yet (unlikely at this stage).
-3. **Typo in preset name** — `/bot preset list` shows all saved names. They're case-sensitive.
+- **Mace**: the bot needs to be grounded and within 3.5 blocks. It jumps, waits for peak, then dives. If the target moves away during the jump, the bot may abort.
+- **Trident**: the bot sprints toward the target before throwing (momentum build-up phase). This looks like a brief charge-up delay.
+- **Charge timing**: the CombatDirector waits for full attack charge (0.95) before swinging, and smash-ready charge (0.848) for mace. This prevents low-damage swings but may look like hesitation.
 
-## "Crystal PvP / anchor bomb does nothing"
+## Crystal PvP / anchor bomb does nothing
 
-These behaviors are dimension-gated:
+These are dimension-gated:
 
 | Behavior | Allowed dimensions |
 | --- | --- |
 | Crystal PvP | Overworld, The End |
 | Anchor Bomb | The Nether only |
 
-In the wrong dimension, the director falls through to the next behavior (mace / melee / trident).
+Both also require the full kit in the hotbar (Crystal: `END_CRYSTAL` + `OBSIDIAN`; Anchor: `RESPAWN_ANCHOR` + `GLOWSTONE`).
 
-Both also require the full kit in the hotbar:
-- Crystal: `END_CRYSTAL` + `OBSIDIAN` (auto-placed next to target).
-- Anchor: `RESPAWN_ANCHOR` + `GLOWSTONE`.
+## Preset didn't apply
 
-## "Inventory GUI won't open"
+1. **Bot is a legacy training bot** — full-replacement NN bots bypass the combat director. Items apply, but weapon behaviors won't trigger.
+2. **Preset file format** — check `plugins/TerminatorPlus/presets/<name>.yml` has `version: 1`.
+3. **Typo in preset name** — `/bot preset list` shows all saved names. Case-sensitive.
 
-- The command takes a bot name: `/bot inventory TestBot`.
-- Bot must exist (`/bot count` shows all).
+## Inventory GUI won't open
+
+- Provide a bot name: `/bot inventory TestBot`.
+- Bot must exist (`/bot count`).
 - You need `terminatorplus.manage` (default: op).
 - The bottom row of the GUI is decorative — clicks there are cancelled.
 
-## "I can't hit bots with weapons / bots don't take damage"
+## Bots don't take damage from players
 
-If you have a PvP plugin (e.g. WorldGuard region `pvp deny`), it may block damage to/from bots. Bots are real players to the server, so PvP-gating plugins treat them as PvP interactions.
+If a PvP plugin (e.g. WorldGuard region `pvp deny`) is active, it may block damage to/from bots. Bots are real `ServerPlayer` entities, so PvP-gating plugins treat them as PvP interactions.
 
-## "Bot's /bot reset was rejected"
+## Totem doesn't pop
 
-`/bot reset` (and `/bot preset delete`) require `terminatorplus.admin`, not just `terminatorplus.manage`. See [Installation](Installation) permissions table.
-
-## "Firework rockets auto-fire outside combat"
-
-`ElytraBehavior` only fires rockets while the bot is gliding. If you see them launching on the ground, the bot is transitioning between states — the auto-chestplate-swap should kick in within a few ticks. If it doesn't, verify the bot has a backup chestplate in storage (the `skydiver` and `pvp` loadouts stash one at slots 9 and 10 respectively).
-
-## "Bot teleports to a random spot instead of my target" (ender pearl)
-
-The pearl targets `target.getLocation() + targetVelocity * (distance/12)` — it leads moving targets. If the target stops suddenly between throw and impact, the pearl may land behind them. This is working as intended; vanilla handles the teleport destination.
-
-## "Totem doesn't pop"
-
-Pre-check:
 - A totem must be in the **offhand** (slot 40) at the moment of fatal damage.
-- `TotemBehavior` swaps it in automatically when HP drops below 6, but fatal damage faster than one tick (e.g. crystal explosion while already at 4 HP) can outrun the swap. Put a totem in slot 40 via `/bot inventory <name>` to keep one parked there permanently.
+- `TotemBehavior` auto-swaps at HP < 6, but instant-kill damage can outrun the swap. Park a totem at slot 40 via `/bot inventory <name>`.
 
-## "I'm on Paper 1.21.3 / 1.21.4"
+## Firework rockets fire outside combat
 
-Unsupported. The NMS `ServerPlayer` subclass is bound to 1.21.1 mappings. Run 1.21.1 or wait for a compatibility update.
+`ElytraBehavior` only fires rockets while gliding. Ground launches indicate a brief state transition — the auto-chestplate-swap should kick in within a few ticks. Verify a backup chestplate exists in storage.
+
+## Combat debug telemetry
+
+Enable with `/bot combatdebug <name|all> on`. Outputs per-tick fields to console for diagnosing combat issues. See [Combat Behaviors](Combat-Behaviors) for field descriptions.
 
 ## Getting help
 
 - `/terminatorplus debuginfo` uploads a debug log to mclo.gs — share the link when reporting bugs.
-- Issues: [GitHub Issues](https://github.com/HorseNuggets/TerminatorPlus/issues)
+- Issues: [GitHub Issues](https://github.com/Dudiebug/terminatorplus/issues)
 - Discord: [invite](https://discord.gg/vZVSf2D6mz)
