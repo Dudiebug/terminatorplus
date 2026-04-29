@@ -31,7 +31,13 @@ public final class CombatDirector {
     public boolean tick(Bot bot, LivingEntity target) {
         if (target == null || !target.isValid()) return false;
         plan(bot, target, bot.getCombatIntent());
-        if (bot.hasNeuralNetwork()) return false;
+        // NN bots route combat through executePlannedCombat() inside move(), which is
+        // gated on side/ground checks that fail mid-launch. Committed weapon phases
+        // (mace charge/airborne, trident charge) must keep ticking or the smash fires
+        // after the bot has landed. The per-tick guard in execute() blocks double-fire.
+        if (bot.hasNeuralNetwork() && bot.getCombatState().getPhase() == CombatState.Phase.IDLE) {
+            return false;
+        }
 
         return execute(bot, target, bot.getMovementState());
     }
@@ -114,6 +120,14 @@ public final class CombatDirector {
         totem.tick(bot, target);
         consumable.tick(bot, target);
         windCharge.tickMovementBoost(bot, target, distance);
+
+        // NN bots can hit execute() twice per tick (committed-phase path in tick(),
+        // then executePlannedCombat() inside move()). Weapon branches aren't
+        // idempotent — tickPhase() would double-advance and doAttack() could swing
+        // twice on the same frame. Utility ticks above are safe to repeat.
+        if (!bot.getCombatState().markExecuted(alive)) {
+            return true;
+        }
 
         if (combo.inProgress(bot)) {
             CombatDebugger.log(bot, "combo-in-progress");

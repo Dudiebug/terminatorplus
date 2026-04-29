@@ -15,6 +15,7 @@ public final class CombatState {
     private Vector chargeDirection;
     private double phaseStartY = Double.NaN;
     private int maceAirborneGroundTicks = 0;
+    private int lastExecuteTick = Integer.MIN_VALUE;
 
     public Phase getPhase() {
         return phase;
@@ -57,6 +58,12 @@ public final class CombatState {
 
     public void clearMaceAirborneGroundTicks() {
         maceAirborneGroundTicks = 0;
+    }
+
+    public boolean markExecuted(int aliveTick) {
+        if (lastExecuteTick == aliveTick) return false;
+        lastExecuteTick = aliveTick;
+        return true;
     }
 
     public void reset() {
