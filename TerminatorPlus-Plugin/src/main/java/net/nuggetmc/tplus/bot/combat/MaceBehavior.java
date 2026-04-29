@@ -308,13 +308,13 @@ public final class MaceBehavior implements WeaponBehavior {
     }
 
     private void doAttack(Bot bot, LivingEntity target) {
-        boolean crit = BotCombatTiming.isCritWindow(bot);
+        boolean critPred = BotCombatTiming.isCritWindow(bot);
         float charge = bot.getAttackStrengthScale(0.0f);
         double before = target.getHealth();
         boolean targetBlocking = targetBlocking(target);
         if (CombatDebugger.isOn(bot)) {
             CombatDebugger.log(bot, "mace-attack",
-                    "crit=" + crit
+                    "critPred=" + critPred
                             + " charge=" + fmt(charge)
                             + " fall=" + fmt(bot.fallDistance)
                             + " vy=" + fmt(bot.getVelocity().getY())
@@ -333,9 +333,9 @@ public final class MaceBehavior implements WeaponBehavior {
         if (CombatDebugger.isOn(bot)) {
             double after = Math.max(0.0, target.getHealth());
             CombatDebugger.log(bot, "mace-damage",
-                    "crit=" + crit
-                            + " hp=" + fmt(before) + "->" + fmt(after)
-                            + " delta=" + fmt(before - after)
+                    "critPred=" + critPred
+                            + " targetHp=" + fmt(before) + "->" + fmt(after)
+                            + " targetHpDelta=" + fmt(before - after)
                             + " targetBlocking=" + targetBlocking);
         }
     }

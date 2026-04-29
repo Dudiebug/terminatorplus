@@ -45,9 +45,48 @@ public final class MeleeBehavior implements WeaponBehavior {
         if (!BotCombatTiming.canSwing(bot, target)) {
             return 0;
         }
+        boolean debug = CombatDebugger.isOn(bot);
+        double targetHpBefore = 0.0;
+        boolean critPred = false;
+        boolean sweepPred = false;
+        int sweepVictimCount = 0;
+        if (debug) {
+            targetHpBefore = target.getHealth();
+            critPred = BotCombatTiming.isCritWindow(bot);
+            sweepPred = BotCombatTiming.predictsSweep(bot, target, distance);
+            sweepVictimCount = BotCombatTiming.sweepVictimCount(bot, target);
+        }
         bot.attack(target);
+        if (debug) {
+            logAttackSummary(bot, target, held, charge, targetHpBefore, critPred, sweepPred, sweepVictimCount);
+        }
         CombatDebugger.meleeHit(bot, held.getType().name());
         return 0;
+    }
+
+    private static void logAttackSummary(
+            Bot bot,
+            LivingEntity target,
+            ItemStack held,
+            float chargeBefore,
+            double targetHpBefore,
+            boolean critPred,
+            boolean sweepPred,
+            int sweepVictimCount
+    ) {
+        if (!CombatDebugger.isOn(bot)) return;
+
+        double targetHpAfter = Math.max(0.0, target.getHealth());
+
+        CombatDebugger.log(bot, "attack-summary",
+                "branch=melee"
+                        + " weapon=" + held.getType().name()
+                        + " chargeBefore=" + fmt3(chargeBefore)
+                        + " critPred=" + critPred
+                        + " sweepPred=" + sweepPred
+                        + " sweepVictimCount=" + sweepVictimCount
+                        + " targetHp=" + fmt2(targetHpBefore) + "->" + fmt2(targetHpAfter)
+                        + " targetHpDelta=" + fmt2(targetHpBefore - targetHpAfter));
     }
 
     private static boolean isMeleeWeapon(ItemStack stack) {
@@ -57,5 +96,13 @@ public final class MeleeBehavior implements WeaponBehavior {
         if (m == Material.MACE || m == Material.TRIDENT) return true;
         String name = m.name();
         return name.endsWith("_SWORD") || name.endsWith("_AXE");
+    }
+
+    private static String fmt2(double value) {
+        return String.format("%.2f", value);
+    }
+
+    private static String fmt3(double value) {
+        return String.format("%.3f", value);
     }
 }
