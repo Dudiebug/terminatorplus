@@ -127,13 +127,17 @@ Higher weight = more frequent selection. Set weight to 0 or remove from the pool
 
 ## Spawning trained bots
 
-After training, spawn bots that use the saved brain:
+After training, spawn fighting bots that use the saved brain:
 
 ```
 /ai movement 5 Soldier
 ```
 
-These bots load the saved brain from `brain.json` and use the movement-controller NN for footwork while the CombatDirector handles combat. If no brain file exists, they get a random network.
+These bots use the loaded movement brain for footwork while the CombatDirector handles combat. They are not training bots — they fight normally and don't run a GA loop.
+
+**Important:** `/bot create` bots do **not** use the trained brain. They always spawn with no network attached and run legacy movement. If you want production bots that use your trained brain, use `/ai movement` to spawn them.
+
+The plugin auto-loads `brain.json` on startup, so the brain is available to `/ai movement` immediately after a server restart without needing `/ai brain load`.
 
 ## Configuration reference
 

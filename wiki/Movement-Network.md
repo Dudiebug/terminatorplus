@@ -120,11 +120,25 @@ When `ai.movement-network.fallback-to-legacy-movement` is `true` (default), a fa
 
 | Mode | Set by | Behavior |
 | --- | --- | --- |
-| **Legacy** | Default for `/bot create` | Classic movement logic, no NN involved |
-| **Movement Controller** | `/ai reinforcement` (default) or `/ai movement` | NN handles movement, CombatDirector handles combat |
+| **Legacy** | `/bot create` (always) | Classic movement logic, no NN involved |
+| **Movement Controller** | `/ai movement` (deploy) or `/ai reinforcement` (train) | NN handles movement, CombatDirector handles combat |
 | **Full Replacement** | `/ai reinforcement ... legacy` | Legacy NN replaces both movement and combat (original training pipeline) |
 
-Normal bots spawned with `/bot create` are never affected by the movement NN unless the server operator explicitly enables it in config. Training bots spawned with `/ai reinforcement` default to movement-controller mode.
+## Deploying a trained brain
+
+`/bot create` bots **never use the movement NN** — they spawn with no network attached and always run legacy movement. The `ai.movement-network.enabled` config flag does not change this; it only controls fallback behavior for bots that already have a network attached.
+
+To deploy a trained brain on production fighting bots, use **`/ai movement`**:
+
+```
+/ai reinforcement 120 TrainBot      # 1. train (autosaves best brain)
+/ai stop                             # 2. end training
+/ai movement 5 Soldier               # 3. spawn fighting bots that use the trained brain
+```
+
+Bots spawned via `/ai movement` are not training bots. They fight normally — the CombatDirector picks weapons and times attacks, and the trained NN handles their footwork. The plugin auto-loads `brain.json` from disk on startup, so you don't need to run `/ai brain load` after a server restart.
+
+Note: `/ai brain load` only affects bots spawned **after** the load. Existing bots keep whatever network they had when they were spawned. To swap a brain on live bots, despawn and respawn them.
 
 ## Configuration
 

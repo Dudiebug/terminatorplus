@@ -47,14 +47,16 @@ Built against **Paper 26.1.2** and **Paper 1.21.11** (Java 25). Spigot and Craft
 /bot preset apply mykit                # apply to all bots
 ```
 
-Start a movement-controller training session:
+Train a movement brain and deploy it:
 
 ```
-/ai reinforcement 120 TrainBot         # default: movement-controller mode
+/ai reinforcement 120 TrainBot         # train (autosaves best brain to brain.json)
 /ai brain status                       # check brain state
-/ai brain save                         # save the best brain to disk
 /ai stop                               # end training
+/ai movement 5 Soldier                 # spawn 5 fighting bots that use the trained brain
 ```
+
+Bots spawned via `/ai movement` are fighting bots, not training bots. They use the trained brain for movement and the CombatDirector for combat. `/bot create` bots do not use the brain — they always run legacy movement.
 
 ## Loadouts
 

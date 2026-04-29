@@ -25,7 +25,7 @@ ai:
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `enabled` | bool | `false` | Enable movement NN for normal bots. Training bots always use it regardless. |
+| `enabled` | bool | `false` | Gates whether bots that **already have a network** (spawned via `/ai movement` or `/ai reinforcement`) actually run the network. When `false`, those bots fall back to legacy movement. **Does not affect `/bot create` bots** — those always spawn without a network. To deploy a trained brain, use `/ai movement`. |
 | `mode` | string | `movement-controller` | NN mode. `movement-controller` = movement only; Director handles combat. |
 | `tick-rate` | int (1--20) | `1` | Evaluate the network every N ticks. Higher values reduce CPU cost but lower movement responsiveness. |
 | `input-size` | int | `30` | Number of input values. Must match MovementInput schema (30). |
@@ -81,7 +81,7 @@ ai:
       crit-setup: 75.0
       sprint-hit: 45.0
       hold-position: 35.0
-      strafing-circling: 90.0
+      strafing-circling: 90.0   # legacy alias, currently unused by the runtime
       circling: 90.0
       retreat: 70.0
       survival: 0.25

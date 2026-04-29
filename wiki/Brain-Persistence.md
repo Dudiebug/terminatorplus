@@ -8,6 +8,8 @@ Default path: `plugins/TerminatorPlus/ai/brain.json`
 
 Configurable via `ai.movement-network.brain-path` in `config.yml`. The path is relative to the plugin's data folder.
 
+The plugin auto-loads `brain.json` on startup. Bots spawned via `/ai movement` use the loaded brain immediately. `/bot create` bots do not use the brain — they always spawn with no network attached.
+
 ## Commands
 
 ### `/ai brain status`

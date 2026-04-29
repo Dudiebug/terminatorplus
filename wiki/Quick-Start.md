@@ -61,7 +61,7 @@ T2 now mirrors TestBot's loadout.
 
 Prints a per-bot summary of which combat behaviors the bot's inventory unlocks.
 
-## 8. Try movement-controller training
+## 8. Train a movement brain
 
 ```
 /ai reinforcement 120 TrainBot
@@ -71,9 +71,18 @@ Spawns 120 bots with random movement networks. They fight each other while the g
 
 ```
 /ai brain status        # check current brain state
-/ai brain save          # save the best brain to disk
 /ai stop                # end the training session
 ```
+
+The best brain is autosaved to `brain.json` whenever fitness improves.
+
+## 9. Deploy the trained brain
+
+```
+/ai movement 5 Soldier
+```
+
+Spawns 5 fighting bots that use the trained brain for movement. These are not training bots — they fight normally with the CombatDirector handling combat. `/bot create` bots do not use the brain.
 
 ## Next
 
