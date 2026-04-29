@@ -90,7 +90,8 @@ public final class CombatDirector {
         lastBranch = "aerial-dive";
         if (bot.getCombatState().getPhase() == CombatState.Phase.IDLE
                 && !bot.isBotOnGround() && bot.getVelocity().getY() < -0.3
-                && inv.hasMace()) {
+                && inv.hasMace()
+                && BotCombatTiming.shouldPlanCurrentMaceDive(bot, target)) {
             Location botLoc = bot.getLocation();
             Location targetLoc = target.getLocation();
             double dx = targetLoc.getX() - botLoc.getX();
@@ -205,7 +206,8 @@ public final class CombatDirector {
             boolean maceSmashReady = inv.hasMace() && !hasSwordOrAxe && !snapshot.targetBlocking
                     && snapshot.openSkyAboveBot && inv.hasWindCharge() && grounded
                     && bot.getBotCooldowns().ready(MaceBehavior.COOLDOWN_KEY, alive)
-                    && bot.getBotCooldowns().ready(WindChargeBehavior.COOLDOWN_KEY, alive);
+                    && bot.getBotCooldowns().ready(WindChargeBehavior.COOLDOWN_KEY, alive)
+                    && BotCombatTiming.shouldPlanGroundMaceSmash(bot, target, MaceBehavior.LAUNCH_Y);
 
             if (maceSmashReady) {
                 CombatDebugger.weaponPick(bot, "MACE(smash)", distance, true);

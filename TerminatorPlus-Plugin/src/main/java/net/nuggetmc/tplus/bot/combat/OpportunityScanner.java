@@ -299,8 +299,8 @@ public final class OpportunityScanner {
         // 5b. WIND_MACE_SMASH -- mace + wind charge + open sky.
         //     The wiki "Mace PvP" core play: the bot fires a wind charge under
         //     itself and jumps on the same tick, which blasts it ~5 blocks up.
-        //     It immediately swaps to the mace so the mace-cooldown ticks
-        //     during the ascent; by the time the bot peaks and falls, the
+        //     It holds the mace, then validates the planned launch against
+        //     the bot's custom gravity before committing, so the
         //     mace is ready for a full-fall smash. Gated on openSkyAboveBot —
         //     if there's a ceiling, the bot can't gain altitude and would
         //     faceplant its own blast, so it falls through to normal melee.
@@ -309,7 +309,8 @@ public final class OpportunityScanner {
                 && snap.distance <= 5.0
                 && bot.getBotCooldowns().ready(WIND_MACE_CD, alive)
                 && bot.getBotCooldowns().ready(MaceBehavior.COOLDOWN_KEY, alive)
-                && bot.getBotCooldowns().ready(WindChargeBehavior.COOLDOWN_KEY, alive)) {
+                && bot.getBotCooldowns().ready(WindChargeBehavior.COOLDOWN_KEY, alive)
+                && BotCombatTiming.shouldPlanGroundMaceSmash(bot, target, MaceBehavior.LAUNCH_Y)) {
             if (executeWindMaceSmash(bot, target)) {
                 // Long cooldown so this doesn't dominate every fight; mace
                 // cooldown (see MaceBehavior.JUMP_COOLDOWN) gates the smash
@@ -760,24 +761,14 @@ public final class OpportunityScanner {
     }
 
     /**
-     * Wind-launched mace smash — Scenario A: mace stays in main hand the
-     * whole time, so the 33.3-tick mace attack-strength recharge is the
-     * ONLY cooldown clock running. Single-tick sequence:
-     *   1) Put the mace in hand FIRST. This is the one-and-only item
-     *      switch in the play; vanilla Player resets attackStrengthTicker
-     *      on every item switch, so any later swap would restart the crit
-     *      recharge and the smash would land as a normal 6-dmg swing.
-     *   2) Consume one wind charge from anywhere in the inventory and
-     *      play the throw sound (no WindCharge entity is spawned — the
-     *      physical charge can't produce upward knockback from feet-level
-     *      origin because vanilla's (target-origin).normalize() factor is
-     *      zero at the bot's own position).
-     *   3) Directly bot.setVelocity to launch (~1.5 Y). Air time under
-     *      vanilla gravity gives ~36 ticks which clears the 33-tick mace
-     *      recharge window — the smash on impact is crit-eligible.
-     *   4) CombatState.AIRBORNE so MaceBehavior's dive path takes over
-     *      (track + steer + fire impact while still airborne so
-     *      fallDistance > 0).
+     * Wind-launched mace smash: mace stays in main hand while the 33.3-tick
+     * attack-strength recharge runs.
+     *   1) Put the mace in hand first; later swaps would restart the crit
+     *      recharge and make the smash land as a normal 6-dmg swing.
+     *   2) Let MaceBehavior own the visual wind-charge throw and named launch
+     *      velocity.
+     *   3) Validate launch airtime against BotCombatTiming's custom-gravity
+     *      formula before committing AIRBORNE.
      */
     private boolean executeWindMaceSmash(Bot bot, LivingEntity target) {
         CombatDebugger.log(bot, "opp-attempt", "name=WIND_MACE_SMASH");

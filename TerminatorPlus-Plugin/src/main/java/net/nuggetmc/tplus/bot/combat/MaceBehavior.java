@@ -8,13 +8,13 @@ import org.bukkit.Sound;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.WindCharge;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Vector;
 
 /**
- * Jump-smash behavior for the 1.21 mace. The bot fires a wind charge down at
- * its own feet and launches upward on the same tick; the vertical impulse puts
- * the bot 8–10 blocks above the ground, well above the target, and the mace
- * dive that follows slams the target with full fall-damage + density bonus.
+ * Jump-smash behavior for the 1.21 mace. The bot holds the mace long enough for
+ * the vanilla attack-strength clock to recharge, then launches and tracks the
+ * target while airborne so the impact can use real mace fall-damage scaling.
  */
 public final class MaceBehavior implements WeaponBehavior {
 
@@ -23,17 +23,11 @@ public final class MaceBehavior implements WeaponBehavior {
     private static final double MAX_DISTANCE = 6.0;
     private static final double ATTACK_RANGE = 3.5;
     private static final int JUMP_COOLDOWN = 55;
+    private static final int PRE_JUMP_MIN_HOLD_TICKS = 10;
+    private static final int PRE_JUMP_TIMEOUT_TICKS = 45;
+    private static final int HEIGHT_LOG_TICKS = 10;
 
-    /**
-     * Total upward impulse (Y component of initial velocity). At vanilla gravity
-     * (-0.08 b/t after the first tick) and no drag, {@code 2.0} sustains positive
-     * vy for ~25 ticks and produces a practical peak of ~8–10 blocks before the
-     * dive reacquires the target. Big enough that the wind-charge detonation at
-     * the feet reads as the cause of the launch, small enough that airtime
-     * (≈36 ticks to apex + descent) still clears the 33-tick mace recharge.
-     */
-    private static final double JUMP_Y = 2.0;
-    /** Horizontal impulse blended with target direction. */
+    static final double LAUNCH_Y = 2.0;
     private static final double JUMP_XZ = 0.25;
 
     @Override
@@ -46,7 +40,6 @@ public final class MaceBehavior implements WeaponBehavior {
             state.reset();
             return 0;
         }
-        // During an aerial dive the bot may be far above the target; let it keep tracking.
         if (distance > MAX_DISTANCE && state.getPhase() != CombatState.Phase.AIRBORNE) {
             state.reset();
             return 0;
@@ -59,10 +52,15 @@ public final class MaceBehavior implements WeaponBehavior {
             case CHARGING:
             case IDLE:
             case RELEASE: {
+                if (targetBlocking(target)) {
+                    CombatDebugger.log(bot, "mace-skip",
+                            "reason=target-blocking held=" + heldType(bot));
+                    state.reset();
+                    return 0;
+                }
                 if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks())) {
                     int left = bot.getBotCooldowns().remaining(COOLDOWN_KEY, bot.getAliveTicks());
                     CombatDebugger.maceCd(bot, left);
-                    // Stay close but don't jump-smash. Fall through to melee on the sword if lateral.
                     if (distance <= ATTACK_RANGE && BotCombatTiming.canSwing(bot, target)) {
                         doAttack(bot, target);
                     }
@@ -73,38 +71,63 @@ public final class MaceBehavior implements WeaponBehavior {
                     return 0;
                 }
 
-                Vector horiz = toTarget.clone();
-                horiz.setY(0);
-                if (horiz.lengthSquared() > 1.0e-6) horiz.normalize().multiply(JUMP_XZ);
-                Vector launch = horiz.setY(JUMP_Y);
+                CombatDebugger.log(bot, "mace-charge-start",
+                        "minHold=" + PRE_JUMP_MIN_HOLD_TICKS
+                                + " charge=" + fmt(bot.getAttackStrengthScale(0.0f))
+                                + " held=" + heldType(bot));
+                CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.MACE_CHARGING);
+                state.setPhase(CombatState.Phase.MACE_CHARGING);
+                state.setPhaseStartY(bot.getLocation().getY());
+                return 0;
+            }
+            case MACE_CHARGING: {
+                int chargeTicks = state.tickPhase();
+                float charge = bot.getAttackStrengthScale(0.0f);
+                boolean ready = BotCombatTiming.smashChargeReady(bot);
+                boolean planReady = BotCombatTiming.shouldLaunchMaceSmash(bot, target, LAUNCH_Y);
+                CombatDebugger.log(bot, "mace-charge",
+                        "ticks=" + chargeTicks
+                                + " charge=" + fmt(charge)
+                                + " ready=" + ready
+                                + " airReady=" + planReady
+                                + " held=" + heldType(bot)
+                                + " ground=" + bot.isBotOnGround());
 
-                // Wind-charge-at-feet visual effect. Fires BEFORE bot.jump() so
-                // the explosion particles/sound read as the cause of the launch.
-                // The wind charge is thrown from eye height straight down so it
-                // bursts at the bot's feet on the next tick; spawning it right
-                // at feet level would have it collide with the ground on spawn
-                // and fizzle silently. We intentionally do NOT use the vanilla
-                // knockback physics for the launch — bot.jump()'s direct velocity
-                // set is what carries the bot; the wind charge is purely for
-                // player-readable cause-and-effect.
-                //
-                // If the bot has no wind charges (non-mace kits that happen to
-                // satisfy the CombatDirector smash gate), we just skip the throw
-                // and go straight to the jump. Consume is best-effort — the
-                // mace jump still fires without it.
-                throwWindChargeAtFeet(bot);
+                if (targetBlocking(target)) {
+                    CombatDebugger.log(bot, "mace-reset",
+                            "reason=target-blocking held=" + heldType(bot));
+                    CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.IDLE);
+                    state.reset();
+                    return 0;
+                }
+                if (!bot.isBotOnGround()) {
+                    CombatDebugger.log(bot, "mace-reset",
+                            "reason=prejump-airborne held=" + heldType(bot));
+                    CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.IDLE);
+                    state.reset();
+                    return 0;
+                }
+                if (chargeTicks >= PRE_JUMP_TIMEOUT_TICKS && (!ready || !planReady)) {
+                    CombatDebugger.log(bot, "mace-reset",
+                            "reason=prejump-timeout charge=" + fmt(charge)
+                                    + " airReady=" + planReady
+                                    + " held=" + heldType(bot));
+                    CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.IDLE);
+                    state.reset();
+                    return 0;
+                }
+                if (chargeTicks < PRE_JUMP_MIN_HOLD_TICKS || !ready || !planReady) {
+                    return 0;
+                }
 
-                bot.jump(launch);
-                bot.getBotCooldowns().set(COOLDOWN_KEY, JUMP_COOLDOWN, bot.getAliveTicks());
-                CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.AIRBORNE);
-                state.setPhase(CombatState.Phase.AIRBORNE);
-                bot.getLocation().getWorld().playSound(bot.getLocation(), Sound.ENTITY_PLAYER_BIG_FALL, 0.3f, 1.6f);
+                launch(bot, state, toTarget);
                 return 0;
             }
             case AIRBORNE: {
                 int airborneTicks = state.tickPhase();
-                // Track the target on the way down; accelerate harder during a fast dive.
                 Vector vel = bot.getVelocity();
+                logAirborneHeight(bot, state, airborneTicks, vel, distance);
+
                 if (vel.getY() < -0.2) {
                     Vector horiz = toTarget.clone();
                     horiz.setY(0);
@@ -114,18 +137,13 @@ public final class MaceBehavior implements WeaponBehavior {
                         bot.walk(horiz);
                     }
                 }
-                // Fire the smash WHILE STILL AIRBORNE so fallDistance > 0 when
-                // Player.attack() reads it — that's what makes the hit a crit
-                // AND what triggers the mace smash's density/fall-damage bonus.
-                // Waiting for bot.isBotOnGround() means fallDistance is already
-                // reset to 0 by then, downgrading the smash to a normal 6-dmg
-                // mace swing.
+
                 if (distance <= ATTACK_RANGE && !bot.isBotOnGround() && vel.getY() < -0.3) {
                     boolean iframes = BotCombatTiming.targetHasIFrames(target);
                     CombatDebugger.maceSmash(bot, vel.getY(), iframes, bot.isBotOnGround());
                     if (!BotCombatTiming.canSwingMaceSmash(bot)) {
                         CombatDebugger.log(bot, "mace-smash-wait",
-                                "reason=charge scale=" + String.format("%.2f", bot.getAttackStrengthScale(0.0f)));
+                                "reason=charge charge=" + fmt(bot.getAttackStrengthScale(0.0f)));
                         return 0;
                     }
                     if (!iframes) {
@@ -135,11 +153,7 @@ public final class MaceBehavior implements WeaponBehavior {
                     state.reset();
                     return 0;
                 }
-                // Safety reset: if the bot has landed without firing (target
-                // ran out of range, grazed the ground, etc.), drop back to
-                // IDLE so the pipeline can try a different weapon. Without
-                // this the bot ticks forever in AIRBORNE swinging with stale
-                // items in hand.
+
                 if (bot.isBotOnGround()) {
                     CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.IDLE);
                     state.reset();
@@ -156,35 +170,87 @@ public final class MaceBehavior implements WeaponBehavior {
         }
     }
 
+    private void launch(Bot bot, CombatState state, Vector toTarget) {
+        Vector horiz = toTarget.clone();
+        horiz.setY(0);
+        if (horiz.lengthSquared() > 1.0e-6) {
+            horiz.normalize().multiply(JUMP_XZ);
+        } else {
+            horiz.setX(0).setZ(0);
+        }
+
+        Vector launch = new Vector(horiz.getX(), LAUNCH_Y, horiz.getZ());
+        double startY = bot.getLocation().getY();
+
+        throwWindChargeAtFeet(bot);
+        bot.setVelocity(launch);
+
+        CombatDebugger.log(bot, "mace-jump",
+                "src=behavior vel=" + fmtVec(launch)
+                        + " y0=" + fmt(startY)
+                        + " charge=" + fmt(bot.getAttackStrengthScale(0.0f))
+                        + " held=" + heldType(bot));
+        bot.getBotCooldowns().set(COOLDOWN_KEY, JUMP_COOLDOWN, bot.getAliveTicks());
+        bot.getBotCooldowns().set(WindChargeBehavior.COOLDOWN_KEY, 55, bot.getAliveTicks());
+        CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.AIRBORNE);
+        state.setPhase(CombatState.Phase.AIRBORNE);
+        state.setPhaseStartY(startY);
+        bot.getLocation().getWorld().playSound(bot.getLocation(), Sound.ENTITY_PLAYER_BIG_FALL, 0.3f, 1.6f);
+    }
+
+    private static void logAirborneHeight(Bot bot, CombatState state, int airborneTicks, Vector vel, double distance) {
+        if (!CombatDebugger.isOn(bot) || airborneTicks > HEIGHT_LOG_TICKS) return;
+        double y = bot.getLocation().getY();
+        double startY = state.getPhaseStartY();
+        double height = Double.isNaN(startY) ? 0.0 : y - startY;
+        CombatDebugger.log(bot, "mace-air",
+                "airTick=" + airborneTicks
+                        + " y=" + fmt(y)
+                        + " height=" + fmt(height)
+                        + " vy=" + fmt(vel.getY())
+                        + " dist=" + fmt(distance)
+                        + " charge=" + fmt(bot.getAttackStrengthScale(0.0f))
+                        + " held=" + heldType(bot)
+                        + " ground=" + bot.isBotOnGround()
+                        + " fall=" + fmt(bot.fallDistance));
+    }
+
     private void doAttack(Bot bot, LivingEntity target) {
+        boolean crit = BotCombatTiming.isCritWindow(bot);
+        float charge = bot.getAttackStrengthScale(0.0f);
+        double before = target.getHealth();
+        boolean targetBlocking = targetBlocking(target);
+        if (CombatDebugger.isOn(bot)) {
+            CombatDebugger.log(bot, "mace-attack",
+                    "crit=" + crit
+                            + " charge=" + fmt(charge)
+                            + " fall=" + fmt(bot.fallDistance)
+                            + " vy=" + fmt(bot.getVelocity().getY())
+                            + " targetBlocking=" + targetBlocking
+                            + " targetHp=" + fmt(before)
+                            + " held=" + heldType(bot));
+        }
+
         bot.punch();
         if (bot.getBukkitEntity() instanceof Player attacker) {
-            // Use vanilla attack so 1.21 mace fall-damage scaling + density bonuses apply.
             attacker.attack(target);
         } else {
             bot.attack(target);
         }
+
+        if (CombatDebugger.isOn(bot)) {
+            double after = Math.max(0.0, target.getHealth());
+            CombatDebugger.log(bot, "mace-damage",
+                    "crit=" + crit
+                            + " hp=" + fmt(before) + "->" + fmt(after)
+                            + " delta=" + fmt(before - after)
+                            + " targetBlocking=" + targetBlocking);
+        }
     }
 
-    /**
-     * Spawn a wind-charge entity at the bot's eye level aimed straight down at
-     * its own feet, consume one wind charge from inventory, and play the throw
-     * sound. Visual only — the actual vertical impulse is driven by
-     * {@link Bot#jump(Vector)} below.
-     *
-     * <p>Spawning at eye height + 0.5 blocks forward, with a solid downward
-     * velocity, means the wind charge is visible to spectators for ~2 ticks
-     * before it bursts at ground level next to the bot's feet. Spawning
-     * directly at feet level caused the wind charge to intersect the ground
-     * block on spawn, which vanilla handles by silently deleting the entity
-     * (no burst, no sound).
-     */
     private static void throwWindChargeAtFeet(Bot bot) {
         BotInventory inv = bot.getBotInventory();
         if (!inv.hasWindCharge()) {
-            // No wind charge available — the mace smash still fires below, just
-            // without the visual. Use the existing big-fall sound as a fallback
-            // audio cue so there's still a cause-and-effect read for spectators.
             return;
         }
 
@@ -200,12 +266,24 @@ public final class MaceBehavior implements WeaponBehavior {
         consumeOneWindCharge(inv);
     }
 
-    /**
-     * Pull one wind charge from the bot's inventory. Mace loadouts store the
-     * wind-charge stack in the offhand (see {@code BotInventory.autoEquip}),
-     * so we check offhand first; otherwise scan the hotbar + storage.
-     */
     private static void consumeOneWindCharge(BotInventory inv) {
         inv.decrementMaterialOrOffhand(Material.WIND_CHARGE);
+    }
+
+    private static boolean targetBlocking(LivingEntity target) {
+        return target instanceof Player player && player.isBlocking();
+    }
+
+    private static String heldType(Bot bot) {
+        ItemStack held = bot.getBukkitEntity().getInventory().getItemInMainHand();
+        return held == null ? "AIR" : held.getType().name();
+    }
+
+    private static String fmt(double value) {
+        return String.format("%.2f", value);
+    }
+
+    private static String fmtVec(Vector vec) {
+        return fmt(vec.getX()) + "," + fmt(vec.getY()) + "," + fmt(vec.getZ());
     }
 }
