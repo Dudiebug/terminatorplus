@@ -68,6 +68,7 @@ public final class CombatDirector {
 
         if (combo.inProgress(bot)) {
             CombatDebugger.log(bot, "combo-in-progress");
+            logSweepBranchSkip(bot, target, distance, "higherPriority", "combo");
             return true;
         }
 
@@ -76,6 +77,7 @@ public final class CombatDirector {
             CombatDebugger.weaponPick(bot, "MACE(charging)", distance, true);
             selectType(inv, Material.MACE);
             mace.ticksFor(bot, target, distance);
+            logSweepBranchSkip(bot, target, distance, "higherPriority", "maceCharging");
             return true;
         }
 
@@ -84,6 +86,7 @@ public final class CombatDirector {
             CombatDebugger.weaponPick(bot, "MACE(airborne-commit)", distance, true);
             selectType(inv, Material.MACE);
             mace.ticksFor(bot, target, distance);
+            logSweepBranchSkip(bot, target, distance, "higherPriority", "airborneMace");
             return true;
         }
 
@@ -103,6 +106,7 @@ public final class CombatDirector {
                 CombatDebugger.weaponPick(bot, "MACE(aerial-dive)", distance, true);
                 selectType(inv, Material.MACE);
                 mace.ticksFor(bot, target, distance);
+                logSweepBranchSkip(bot, target, distance, "higherPriority", "aerialDive");
                 return true;
             }
         }
@@ -112,6 +116,7 @@ public final class CombatDirector {
             CombatDebugger.weaponPick(bot, "TRIDENT(charging)", distance, true);
             selectType(inv, Material.TRIDENT);
             trident.ticksFor(bot, target, distance);
+            logSweepBranchSkip(bot, target, distance, "higherPriority", "tridentCharging");
             return true;
         }
 
@@ -134,6 +139,7 @@ public final class CombatDirector {
         lastBranch = "scanner";
         if (scanner.scan(bot, target, snapshot, combo)) {
             CombatDebugger.log(bot, "scanner-hit");
+            logSweepBranchSkip(bot, target, distance, "higherPriority", "scanner");
             return true;
         }
         if (CombatDebugger.isOn(bot)) {
@@ -153,9 +159,11 @@ public final class CombatDirector {
                 CombatDebugger.log(bot, "opp-skip",
                         "name=DIRECTOR_SHIELD_MELEE reason=charge charge="
                                 + String.format("%.3f", BotCombatTiming.charge(bot)));
+                BotCombatTiming.logSweepCheck(bot, target, distance);
                 return false;
             }
             melee.ticksFor(bot, target, distance);
+            logSweepBranchSkip(bot, target, distance, "higherPriority", "shieldAxe");
             return true;
         }
 
@@ -167,6 +175,7 @@ public final class CombatDirector {
             CombatDebugger.weaponPick(bot, "END_CRYSTAL", distance, true);
             selectType(inv, Material.END_CRYSTAL);
             crystal.ticksFor(bot, target, distance);
+            logSweepBranchSkip(bot, target, distance, "higherPriority", "crystal");
             return true;
         }
 
@@ -177,6 +186,7 @@ public final class CombatDirector {
             CombatDebugger.weaponPick(bot, "RESPAWN_ANCHOR", distance, true);
             selectType(inv, Material.RESPAWN_ANCHOR);
             anchor.ticksFor(bot, target, distance);
+            logSweepBranchSkip(bot, target, distance, "higherPriority", "anchor");
             return true;
         }
 
@@ -196,9 +206,11 @@ public final class CombatDirector {
                     CombatDebugger.log(bot, "opp-skip",
                             "name=DIRECTOR_MELEE_SHIELD reason=charge charge="
                                     + String.format("%.3f", BotCombatTiming.charge(bot)));
+                    BotCombatTiming.logSweepCheck(bot, target, distance);
                     return false;
                 }
                 melee.ticksFor(bot, target, distance);
+                logSweepBranchSkip(bot, target, distance, "higherPriority", "shieldAxe");
                 return true;
             }
 
@@ -213,6 +225,7 @@ public final class CombatDirector {
                 CombatDebugger.weaponPick(bot, "MACE(smash)", distance, true);
                 selectType(inv, Material.MACE);
                 mace.ticksFor(bot, target, distance);
+                logSweepBranchSkip(bot, target, distance, "higherPriority", "maceSmash");
                 return true;
             }
 
@@ -232,6 +245,7 @@ public final class CombatDirector {
                 CombatDebugger.log(bot, "opp-skip",
                         "name=DIRECTOR_MELEE reason=charge charge="
                                 + String.format("%.3f", BotCombatTiming.charge(bot)));
+                BotCombatTiming.logSweepCheck(bot, target, distance);
                 return false;
             }
             melee.ticksFor(bot, target, distance);
@@ -244,6 +258,7 @@ public final class CombatDirector {
             CombatDebugger.weaponPick(bot, "TRIDENT", distance, true);
             selectType(inv, Material.TRIDENT);
             trident.ticksFor(bot, target, distance);
+            logSweepBranchSkip(bot, target, distance, "higherPriority", "trident");
             return true;
         }
 
@@ -252,6 +267,7 @@ public final class CombatDirector {
                 && bot.getBotCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, alive)) {
             CombatDebugger.weaponPick(bot, "ENDER_PEARL", distance, true);
             pearl.ticksFor(bot, target, distance);
+            logSweepBranchSkip(bot, target, distance, "higherPriority", "pearl");
             return true;
         }
 
@@ -260,15 +276,21 @@ public final class CombatDirector {
                 && bot.getBotCooldowns().ready(UtilityBehavior.COOLDOWN_KEY, alive)) {
             if (utility.ticksFor(bot, target, distance) > 0) {
                 CombatDebugger.weaponPick(bot, "COBWEB", distance, true);
+                logSweepBranchSkip(bot, target, distance, "higherPriority", "cobweb");
                 return true;
             }
         }
 
+        logSweepBranchSkip(bot, target, distance, "branchLost", lastBranch);
         CombatDebugger.dirNoop(bot, distance, "no-branch-matched", lastBranch);
         return false;
     }
 
     private void selectType(BotInventory inv, Material type) {
         inv.selectMaterial(type);
+    }
+
+    private void logSweepBranchSkip(Bot bot, LivingEntity target, double distance, String reason, String branch) {
+        BotCombatTiming.logSweepSkipIfRelevant(bot, target, distance, reason, branch);
     }
 }

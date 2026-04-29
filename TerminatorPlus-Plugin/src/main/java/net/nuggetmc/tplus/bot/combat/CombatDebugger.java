@@ -338,7 +338,7 @@ public final class CombatDebugger {
             case "dir-entry", "dir-ready", "snapshot", "scanner-miss" -> 100;
             case "dir-noop" -> 40;
             case "weapon-pick", "mace-cd" -> 20;
-            case "melee-try", "swing-gate" -> 10;
+            case "melee-try", "swing-gate", "sweep-check", "sweep-skip" -> 10;
             default -> 0;
         };
     }

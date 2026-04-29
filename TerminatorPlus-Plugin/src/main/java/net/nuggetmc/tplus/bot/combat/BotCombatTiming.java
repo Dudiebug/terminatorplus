@@ -3,7 +3,9 @@ package net.nuggetmc.tplus.bot.combat;
 import net.nuggetmc.tplus.bot.Bot;
 import org.bukkit.Material;
 import org.bukkit.craftbukkit.entity.CraftLivingEntity;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Vector;
 
 /**
@@ -41,6 +43,9 @@ public final class BotCombatTiming {
     private static final double MACE_IMPACT_DESCENT_VELOCITY = -0.3;
     private static final double MACE_VERTICAL_IMPACT_RANGE = 3.5;
     private static final int MACE_AIRTIME_SEARCH_TICKS = 90;
+    private static final double SWEEP_TARGET_RADIUS_XZ = 1.0;
+    private static final double SWEEP_TARGET_RADIUS_Y = 0.25;
+    private static final double SWEEP_MAX_HORIZONTAL_SPEED = 0.9;
 
     private BotCombatTiming() {}
 
@@ -216,5 +221,108 @@ public final class BotCombatTiming {
 
     public static boolean shouldPlanSprintReset(Bot bot, LivingEntity target) {
         return readyForVanillaSpecial(bot) && targetCanTakeFullHit(target);
+    }
+
+    public static void logSweepCheck(Bot bot, LivingEntity target, double distance) {
+        if (!CombatDebugger.isOn(bot)) return;
+        SweepDiagnostic diag = sweepDiagnostic(bot, target, distance);
+        CombatDebugger.log(bot, "sweep-check", diag.details());
+    }
+
+    public static void logSweepSkipIfRelevant(Bot bot, LivingEntity target, double distance, String reason, String branch) {
+        if (!CombatDebugger.isOn(bot)) return;
+        if (bot.getBotInventory().findSword() < 0 || distance > MeleeBehavior.ATTACK_RANGE) return;
+        SweepDiagnostic diag = sweepDiagnostic(bot, target, distance);
+        CombatDebugger.log(bot, "sweep-skip",
+                "reason=" + reason
+                        + " branch=" + branch
+                        + " charge=" + fmt3(diag.charge)
+                        + " range=" + fmt2(distance)
+                        + " eligible=" + diag.eligible
+                        + " targets=" + diag.targets);
+    }
+
+    private static SweepDiagnostic sweepDiagnostic(Bot bot, LivingEntity target, double distance) {
+        float charge = charge(bot);
+        boolean range = distance <= MeleeBehavior.ATTACK_RANGE;
+        boolean chargeReady = charge >= READY_CHARGE;
+        boolean targetHittable = !targetHasIFrames(target);
+        boolean geometry = sweepGeometryReady(bot);
+        int targets = countSweepTargets(bot, target);
+
+        String reason = "ready";
+        if (!range) {
+            reason = "range";
+        } else if (!chargeReady) {
+            reason = "charge";
+        } else if (!targetHittable) {
+            reason = "iframes";
+        } else if (!geometry) {
+            reason = "geometry";
+        } else if (targets <= 0) {
+            reason = "noTargets";
+        }
+        boolean eligible = reason.equals("ready");
+        return new SweepDiagnostic(eligible, reason, charge, distance, targets);
+    }
+
+    private static boolean sweepGeometryReady(Bot bot) {
+        ItemStack held = bot.getBotInventory().getSelected();
+        if (!isSword(held)) return false;
+        if (!bot.isBotOnGround()) return false;
+        if (bot.isSprinting()) return false;
+        if (isCritWindow(bot)) return false;
+        Vector velocity = bot.getVelocity();
+        double horizontalSpeed = Math.hypot(velocity.getX(), velocity.getZ());
+        return horizontalSpeed < SWEEP_MAX_HORIZONTAL_SPEED;
+    }
+
+    private static int countSweepTargets(Bot bot, LivingEntity target) {
+        int count = 0;
+        Entity botEntity = bot.getBukkitEntity();
+        for (Entity entity : target.getNearbyEntities(SWEEP_TARGET_RADIUS_XZ, SWEEP_TARGET_RADIUS_Y, SWEEP_TARGET_RADIUS_XZ)) {
+            if (!(entity instanceof LivingEntity living)) continue;
+            if (!living.isValid()) continue;
+            if (living.getUniqueId().equals(target.getUniqueId())) continue;
+            if (living.getUniqueId().equals(botEntity.getUniqueId())) continue;
+            count++;
+        }
+        return count;
+    }
+
+    private static boolean isSword(ItemStack stack) {
+        return stack != null && stack.getType().name().endsWith("_SWORD");
+    }
+
+    private static String fmt2(double value) {
+        return String.format("%.2f", value);
+    }
+
+    private static String fmt3(double value) {
+        return String.format("%.3f", value);
+    }
+
+    private static final class SweepDiagnostic {
+        final boolean eligible;
+        final String reason;
+        final float charge;
+        final double distance;
+        final int targets;
+
+        SweepDiagnostic(boolean eligible, String reason, float charge, double distance, int targets) {
+            this.eligible = eligible;
+            this.reason = reason;
+            this.charge = charge;
+            this.distance = distance;
+            this.targets = targets;
+        }
+
+        String details() {
+            return "eligible=" + eligible
+                    + " reason=" + reason
+                    + " charge=" + fmt3(charge)
+                    + " range=" + fmt2(distance)
+                    + " targets=" + targets;
+        }
     }
 }
