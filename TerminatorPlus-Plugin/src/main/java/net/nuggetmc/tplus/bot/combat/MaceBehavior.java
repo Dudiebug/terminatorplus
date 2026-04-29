@@ -26,9 +26,19 @@ public final class MaceBehavior implements WeaponBehavior {
     private static final int PRE_JUMP_MIN_HOLD_TICKS = 10;
     private static final int PRE_JUMP_TIMEOUT_TICKS = 45;
     private static final int HEIGHT_LOG_TICKS = 10;
+    private static final int AIRBORNE_GROUND_CLIP_TOLERANCE_TICKS = 2;
+    private static final int AIRBORNE_MIN_TICKS_BEFORE_GROUND_RESET = 6;
 
     static final double LAUNCH_Y = 2.0;
     private static final double JUMP_XZ = 0.25;
+    private static final double AIRBORNE_TRACK_DESCENT_VELOCITY = -0.2;
+    private static final double AIRBORNE_FAST_DESCENT_VELOCITY = -0.6;
+    private static final double AIRBORNE_FAST_CORRECTION = 0.20;
+    private static final double AIRBORNE_SLOW_CORRECTION = 0.10;
+    private static final double AIRBORNE_MAX_CLOSING_SPEED = 0.30;
+    private static final double AIRBORNE_CLOSING_GAIN = 0.18;
+    private static final double AIRBORNE_DAMPING_DISTANCE = 1.25;
+    private static final double AIRBORNE_DEADZONE = 0.35;
 
     @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
@@ -36,7 +46,7 @@ public final class MaceBehavior implements WeaponBehavior {
         Location targetLoc = target.getLocation();
         bot.faceLocation(targetLoc);
 
-        if (distance < MIN_DISTANCE) {
+        if (distance < MIN_DISTANCE && state.getPhase() != CombatState.Phase.AIRBORNE) {
             state.reset();
             return 0;
         }
@@ -128,14 +138,15 @@ public final class MaceBehavior implements WeaponBehavior {
                 Vector vel = bot.getVelocity();
                 logAirborneHeight(bot, state, airborneTicks, vel, distance);
 
-                if (vel.getY() < -0.2) {
-                    Vector horiz = toTarget.clone();
-                    horiz.setY(0);
-                    if (horiz.lengthSquared() > 1.0e-6) {
-                        double speed = vel.getY() < -0.6 ? 0.28 : 0.15;
-                        horiz.normalize().multiply(speed);
-                        bot.walk(horiz);
-                    }
+                if (shouldResetAirborneForGround(bot, state, airborneTicks)) {
+                    CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.IDLE);
+                    state.reset();
+                    return 0;
+                }
+
+                if (!bot.isBotOnGround()) {
+                    trackAirborne(bot, toTarget, vel);
+                    vel = bot.getVelocity();
                 }
 
                 if (distance <= ATTACK_RANGE && !bot.isBotOnGround() && vel.getY() < -0.3) {
@@ -154,10 +165,6 @@ public final class MaceBehavior implements WeaponBehavior {
                     return 0;
                 }
 
-                if (bot.isBotOnGround()) {
-                    CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.IDLE);
-                    state.reset();
-                }
                 if (airborneTicks > 80) {
                     CombatDebugger.log(bot, "mace-reset", "reason=airborne-timeout");
                     CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.IDLE);
@@ -195,7 +202,92 @@ public final class MaceBehavior implements WeaponBehavior {
         CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.AIRBORNE);
         state.setPhase(CombatState.Phase.AIRBORNE);
         state.setPhaseStartY(startY);
+        state.clearMaceAirborneGroundTicks();
         bot.getLocation().getWorld().playSound(bot.getLocation(), Sound.ENTITY_PLAYER_BIG_FALL, 0.3f, 1.6f);
+    }
+
+    private static boolean shouldResetAirborneForGround(Bot bot, CombatState state, int airborneTicks) {
+        if (!bot.isBotOnGround()) {
+            state.clearMaceAirborneGroundTicks();
+            return false;
+        }
+
+        int groundTicks = state.tickMaceAirborneGroundTicks();
+        if (airborneTicks <= AIRBORNE_MIN_TICKS_BEFORE_GROUND_RESET
+                || groundTicks <= AIRBORNE_GROUND_CLIP_TOLERANCE_TICKS) {
+            CombatDebugger.log(bot, "mace-air",
+                    "reset=groundClip grace=" + Math.max(0, AIRBORNE_GROUND_CLIP_TOLERANCE_TICKS - groundTicks + 1)
+                            + " airTick=" + airborneTicks);
+            return false;
+        }
+
+        CombatDebugger.log(bot, "mace-reset",
+                "reason=grounded airTick=" + airborneTicks + " groundTicks=" + groundTicks);
+        return true;
+    }
+
+    private static void trackAirborne(Bot bot, Vector toTarget, Vector vel) {
+        if (vel.getY() >= AIRBORNE_TRACK_DESCENT_VELOCITY) return;
+
+        Vector horiz = toTarget.clone();
+        horiz.setY(0);
+        double distance = horiz.length();
+        if (distance <= AIRBORNE_DEADZONE) {
+            dampHorizontalOvershoot(bot, vel, horiz, distance);
+            return;
+        }
+
+        Vector dir = horiz.multiply(1.0 / distance);
+        double currentClosing = horizontalClosingSpeed(vel, dir);
+        double desiredClosing = desiredClosingSpeed(distance);
+        dampHorizontalOvershoot(bot, vel, dir, distance);
+
+        vel = bot.getVelocity();
+        currentClosing = horizontalClosingSpeed(vel, dir);
+        double correction = desiredClosing - currentClosing;
+        if (correction <= 0.0) return;
+
+        double correctionCap = vel.getY() < AIRBORNE_FAST_DESCENT_VELOCITY
+                ? AIRBORNE_FAST_CORRECTION
+                : AIRBORNE_SLOW_CORRECTION;
+        double applied = Math.min(correction, correctionCap);
+        if (applied <= 1.0e-4) return;
+
+        if (CombatDebugger.isOn(bot) && applied + 1.0e-4 < correctionCap) {
+            CombatDebugger.log(bot, "mace-air",
+                    "clamp dx=" + fmt(distance)
+                            + " before=" + fmt(currentClosing)
+                            + " after=" + fmt(currentClosing + applied));
+        }
+        bot.walk(dir.multiply(applied));
+    }
+
+    private static void dampHorizontalOvershoot(Bot bot, Vector vel, Vector towardTarget, double distance) {
+        if (distance > AIRBORNE_DAMPING_DISTANCE) return;
+        if (towardTarget.lengthSquared() <= 1.0e-6) return;
+
+        Vector dir = towardTarget.clone().setY(0).normalize();
+        double currentClosing = horizontalClosingSpeed(vel, dir);
+        double desiredClosing = desiredClosingSpeed(distance);
+        if (currentClosing <= desiredClosing) return;
+
+        double excess = currentClosing - desiredClosing;
+        Vector next = vel.clone();
+        next.setX(next.getX() - dir.getX() * excess);
+        next.setZ(next.getZ() - dir.getZ() * excess);
+        bot.setVelocity(next);
+        CombatDebugger.log(bot, "mace-air",
+                "clamp dx=" + fmt(distance)
+                        + " before=" + fmt(currentClosing)
+                        + " after=" + fmt(desiredClosing));
+    }
+
+    private static double desiredClosingSpeed(double distance) {
+        return Math.min(AIRBORNE_MAX_CLOSING_SPEED, distance * AIRBORNE_CLOSING_GAIN);
+    }
+
+    private static double horizontalClosingSpeed(Vector velocity, Vector towardTarget) {
+        return velocity.getX() * towardTarget.getX() + velocity.getZ() * towardTarget.getZ();
     }
 
     private static void logAirborneHeight(Bot bot, CombatState state, int airborneTicks, Vector vel, double distance) {
