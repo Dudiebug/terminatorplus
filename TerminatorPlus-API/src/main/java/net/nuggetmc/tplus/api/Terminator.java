@@ -161,6 +161,10 @@ public interface Terminator {
         return MovementTrainingSnapshot.unavailable();
     }
 
+    default boolean applyTrainingLoadout(String loadoutName) {
+        return false;
+    }
+
     /**
      * Vanilla-safe swing gate: true only when the bot's attack-strength charge is
      * fully recharged AND the target isn't deep in an i-frame window. Callers

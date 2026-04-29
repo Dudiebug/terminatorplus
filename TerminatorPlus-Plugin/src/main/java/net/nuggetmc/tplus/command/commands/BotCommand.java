@@ -973,6 +973,18 @@ public class BotCommand extends CommandInstance {
         }
     }
 
+    public static boolean applyNamedLoadoutToBot(Bot bot, String name) {
+        String key = name == null ? "" : name.toLowerCase();
+        ItemStack[] kit = buildLoadout(key);
+        if (kit == null) return false;
+        applyLoadoutToBot(bot, kit, !"clear".equals(key));
+        return true;
+    }
+
+    public static boolean isNamedLoadout(String name) {
+        return buildLoadout(name == null ? "" : name.toLowerCase()) != null;
+    }
+
     @Autofill
     public List<String> loadoutAutofill(CommandSender sender, String[] args) {
         if (args.length == 2) return new ArrayList<>(Arrays.asList(LOADOUT_NAMES));

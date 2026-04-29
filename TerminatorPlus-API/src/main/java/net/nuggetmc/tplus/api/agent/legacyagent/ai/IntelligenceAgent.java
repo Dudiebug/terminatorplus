@@ -6,6 +6,7 @@ import net.nuggetmc.tplus.api.Terminator;
 import net.nuggetmc.tplus.api.agent.legacyagent.EnumTargetGoal;
 import net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent;
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementNetwork;
+import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementTrainingConfig;
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementNetworkGenetics;
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementTrainingSnapshot;
 import net.nuggetmc.tplus.api.utils.ChatUtils;
@@ -49,6 +50,7 @@ public class IntelligenceAgent {
     private final String botSkin;
     private final int cutoff;
     private final TrainingMode trainingMode;
+    private final MovementTrainingConfig movementConfig;
 
     private final Map<String, Terminator> bots;
 
@@ -79,13 +81,17 @@ public class IntelligenceAgent {
         this.users = new HashSet<>(Collections.singletonList(Bukkit.getConsoleSender()));
         this.cutoff = 5;
         this.trainingMode = trainingMode == null ? TrainingMode.MOVEMENT_CONTROLLER : trainingMode;
+        this.movementConfig = MovementTrainingConfig.load(plugin);
         this.genProfiles = new HashMap<>();
         this.movementGenerations = new HashMap<>();
         this.movementFitness = new HashMap<>();
         this.populationSize = this.trainingMode == TrainingMode.MOVEMENT_CONTROLLER
-                ? MovementNetworkGenetics.normalizePopulationSize(populationSize)
+                ? MovementNetworkGenetics.normalizePopulationSize(populationSize > 0 ? populationSize : movementConfig.populationSize())
                 : populationSize;
-        this.random = new Random(Objects.hash(this.name, this.botName, this.trainingMode.name()));
+        long seed = movementConfig.randomSeed() != 0L
+                ? movementConfig.randomSeed()
+                : Objects.hash(this.name, this.botName, this.trainingMode.name());
+        this.random = new Random(seed);
         this.active = true;
 
         scheduler.runTaskAsynchronously(plugin, () -> {
@@ -134,6 +140,15 @@ public class IntelligenceAgent {
                 + (botSkin == null ? "" : ChatColor.RESET + " and skin " + ChatColor.GREEN + botSkin)
                 + ChatColor.RESET + " using " + ChatColor.YELLOW + trainingMode.label()
                 + ChatColor.RESET + "...");
+        if (trainingMode == TrainingMode.MOVEMENT_CONTROLLER) {
+            print("Movement GA: pop=" + ChatColor.RED + populationSize
+                    + ChatColor.RESET + " tournament=" + ChatColor.YELLOW + movementConfig.tournamentSize()
+                    + ChatColor.RESET + " elite=" + ChatColor.YELLOW + movementConfig.eliteCount()
+                    + ChatColor.RESET + " mutation=" + ChatColor.YELLOW + MathUtils.round2Dec(movementConfig.mutationRate())
+                    + ChatColor.RESET + "/" + ChatColor.YELLOW + MathUtils.round2Dec(movementConfig.mutationStrength())
+                    + ChatColor.RESET + ".");
+            print("Training loadouts: " + ChatColor.YELLOW + movementConfig.loadoutSummary());
+        }
 
         Set<Map<BotNode, Map<BotDataType, Double>>> loadedProfiles = genProfiles.get(generation);
         List<MovementNetwork> loadedMovementNetworks = movementGenerations.get(generation);
@@ -144,11 +159,11 @@ public class IntelligenceAgent {
 
             if (trainingMode == TrainingMode.MOVEMENT_CONTROLLER) {
                 List<MovementNetwork> movementNetworks = loadedMovementNetworks == null
-                        ? MovementNetworkGenetics.randomPopulation(populationSize, random)
+                        ? MovementNetworkGenetics.randomPopulation(populationSize, movementConfig.movementLayerShape(), random)
                         : loadedMovementNetworks;
                 if (movementNetworks.size() != populationSize) {
                     print("Stored movement population size did not match; regenerating this generation safely.");
-                    movementNetworks = MovementNetworkGenetics.randomPopulation(populationSize, random);
+                    movementNetworks = MovementNetworkGenetics.randomPopulation(populationSize, movementConfig.movementLayerShape(), random);
                 }
                 List<NeuralNetwork> networks = new ArrayList<>();
                 for (MovementNetwork movementNetwork : movementNetworks) {
@@ -159,6 +174,7 @@ public class IntelligenceAgent {
                 }
 
                 bots = manager.createBots(loc, botName, skinData, networks);
+                assignTrainingLoadouts(bots);
             } else if (loadedProfiles == null) {
                 bots = manager.createBots(loc, botName, skinData, populationSize, NeuralNetwork.RANDOM);
             } else {
@@ -195,10 +211,17 @@ public class IntelligenceAgent {
 
         agent.setTargetType(EnumTargetGoal.NEAREST_BOT);
         movementFitness.clear();
+        int startedAtTick = Bukkit.getCurrentTick();
 
         while (aliveCount() > 1) {
             if (trainingMode == TrainingMode.MOVEMENT_CONTROLLER) {
                 sampleMovementFitness();
+                if (movementConfig.maxTrainingTicks() > 0
+                        && Bukkit.getCurrentTick() - startedAtTick >= movementConfig.maxTrainingTicks()) {
+                    print("Movement round hit max-training-ticks=" + ChatColor.RED + movementConfig.maxTrainingTicks()
+                            + ChatColor.RESET + "; ending generation.");
+                    break;
+                }
             }
             sleep(1000);
         }
@@ -219,6 +242,12 @@ public class IntelligenceAgent {
         clearBots();
 
         agent.setTargetType(EnumTargetGoal.NONE);
+        if (trainingMode == TrainingMode.MOVEMENT_CONTROLLER
+                && movementConfig.generations() > 0
+                && generation >= movementConfig.generations()) {
+            print("Configured generation limit reached.");
+            active = false;
+        }
     }
 
     private void finishLegacyGeneration() throws InterruptedException {
@@ -331,7 +360,26 @@ public class IntelligenceAgent {
         }
 
         movementGenerations.put(generation + 1,
-                MovementNetworkGenetics.nextGeneration(scored, populationSize, generation, random));
+                MovementNetworkGenetics.nextGeneration(scored, populationSize, generation, movementConfig, random));
+    }
+
+    private void assignTrainingLoadouts(Set<Terminator> spawnedBots) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (Terminator bot : spawnedBots) {
+            boolean applied = false;
+            for (int attempt = 0; attempt < Math.max(1, movementConfig.loadouts().size()); attempt++) {
+                String loadout = movementConfig.pickLoadout(random);
+                if (bot.applyTrainingLoadout(loadout)) {
+                    counts.merge(loadout, 1, Integer::sum);
+                    applied = true;
+                    break;
+                }
+            }
+            if (!applied && bot.applyTrainingLoadout("sword")) {
+                counts.merge("sword", 1, Integer::sum);
+            }
+        }
+        print("Assigned training loadouts: " + ChatColor.YELLOW + describeCounts(counts));
     }
 
     private void sampleMovementFitness() {
@@ -363,16 +411,29 @@ public class IntelligenceAgent {
 
     private double movementFitness(Terminator bot) {
         MovementFitness stats = movementFitness.get(bot);
-        double fitness = bot.getAliveTicks() * 0.25
-                + bot.getKills() * 275.0
+        MovementTrainingConfig.FitnessWeights weights = movementConfig.fitnessWeights();
+        double fitness = bot.getAliveTicks() * weights.survival()
+                + bot.getKills() * weights.damageDealt()
                 + bot.getBotHealth() * 12.0;
         if (stats != null) {
-            fitness += stats.score();
+            fitness += stats.score(weights);
         }
         if (bot.getBotMaxHealth() > 0.0f) {
-            fitness -= Math.max(0.0, bot.getBotMaxHealth() - bot.getBotHealth()) * 4.0;
+            fitness -= Math.max(0.0, bot.getBotMaxHealth() - bot.getBotHealth()) * weights.damageTakenPenalty();
         }
         return fitness;
+    }
+
+    private static String describeCounts(Map<String, Integer> counts) {
+        if (counts.isEmpty()) return "none";
+        StringBuilder out = new StringBuilder();
+        boolean first = true;
+        for (Map.Entry<String, Integer> entry : counts.entrySet()) {
+            if (!first) out.append(", ");
+            first = false;
+            out.append(entry.getKey()).append('=').append(entry.getValue());
+        }
+        return out.toString();
     }
 
     private int aliveCount() {
@@ -572,24 +633,24 @@ public class IntelligenceAgent {
             previousLocation = now.clone();
         }
 
-        double score() {
+        double score(MovementTrainingConfig.FitnessWeights weights) {
             if (samples == 0) return 0.0;
             double score = 0.0;
-            score += (rangeScore / samples) * 300.0;
-            score += (urgencyScore / samples) * 220.0;
-            score += (circlingScore / samples) * 90.0;
-            score += (retreatScore / samples) * 70.0;
-            score += critSetups * 75.0;
-            score += sprintSetups * 45.0;
-            score += holdCompliant * 35.0;
-            score -= holdViolations * 85.0;
-            score -= fallbackSamples * 35.0;
-            score -= stuckSamples * 45.0;
-            score -= oscillations * 12.0;
+            score += (rangeScore / samples) * weights.rangeControl();
+            score += (urgencyScore / samples) * weights.rangeUrgency();
+            score += (circlingScore / samples) * weights.circling();
+            score += (retreatScore / samples) * weights.retreat();
+            score += critSetups * weights.critSetup();
+            score += sprintSetups * weights.sprintHit();
+            score += holdCompliant * weights.holdPosition();
+            score -= holdViolations * weights.holdViolationPenalty();
+            score -= fallbackSamples * weights.fallbackPenalty();
+            score -= stuckSamples * weights.stuckPenalty();
+            score -= oscillations * weights.oscillationPenalty();
             double jumpRate = jumpSamples / (double) samples;
             double sprintRate = sprintSamples / (double) samples;
-            if (jumpRate > 0.45 && critSetups == 0) score -= (jumpRate - 0.45) * 180.0;
-            if (sprintRate > 0.8 && sprintSetups == 0) score -= (sprintRate - 0.8) * 120.0;
+            if (jumpRate > 0.45 && critSetups == 0) score -= (jumpRate - 0.45) * weights.jumpSpamPenalty();
+            if (sprintRate > 0.8 && sprintSetups == 0) score -= (sprintRate - 0.8) * weights.sprintSpamPenalty();
             return score;
         }
     }

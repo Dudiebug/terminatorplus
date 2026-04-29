@@ -30,11 +30,15 @@ public final class MovementNetworkGenetics {
     }
 
     public static List<MovementNetwork> randomPopulation(int size, Random random) {
+        return randomPopulation(size, MovementNetworkShape.defaultLayers(), random);
+    }
+
+    public static List<MovementNetwork> randomPopulation(int size, int[] layerShape, Random random) {
         Objects.requireNonNull(random, "random");
         int count = normalizePopulationSize(size);
         List<MovementNetwork> networks = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
-            networks.add(MovementNetwork.random(MovementNetworkShape.defaultLayers(), random));
+            networks.add(MovementNetwork.random(layerShape, random));
         }
         return networks;
     }
@@ -45,34 +49,47 @@ public final class MovementNetworkGenetics {
             int generation,
             Random random
     ) {
+        return nextGeneration(scored, targetSize, generation, MovementTrainingConfig.load(null), random);
+    }
+
+    public static List<MovementNetwork> nextGeneration(
+            List<ScoredNetwork> scored,
+            int targetSize,
+            int generation,
+            MovementTrainingConfig config,
+            Random random
+    ) {
         Objects.requireNonNull(scored, "scored");
         Objects.requireNonNull(random, "random");
+        MovementTrainingConfig safeConfig = config == null ? MovementTrainingConfig.load(null) : config;
         int size = normalizePopulationSize(targetSize);
-        if (scored.isEmpty()) return randomPopulation(size, random);
+        if (scored.isEmpty()) return randomPopulation(size, safeConfig.movementLayerShape(), random);
 
         List<ScoredNetwork> ranked = scored.stream()
                 .filter(entry -> isValid(entry.network()))
                 .sorted(Comparator.comparingDouble(ScoredNetwork::fitness).reversed())
                 .toList();
-        if (ranked.isEmpty()) return randomPopulation(size, random);
+        if (ranked.isEmpty()) return randomPopulation(size, safeConfig.movementLayerShape(), random);
 
         List<MovementNetwork> next = new ArrayList<>(size);
-        int elites = Math.min(Math.min(ELITE_COUNT, ranked.size()), size);
+        int elites = Math.min(Math.min(safeConfig.eliteCount(), ranked.size()), size);
         for (int i = 0; i < elites; i++) {
             next.add(copy(ranked.get(i).network()));
         }
 
-        double mutationRate = mutationRate(generation);
-        double mutationStrength = mutationStrength(generation);
+        double mutationRate = mutationRate(generation, safeConfig);
+        double mutationStrength = mutationStrength(generation, safeConfig);
         while (next.size() < size) {
-            MovementNetwork parentA = tournament(ranked, random).network();
-            MovementNetwork parentB = tournament(ranked, random).network();
-            MovementNetwork child = crossover(parentA, parentB, random);
+            MovementNetwork parentA = tournament(ranked, safeConfig.tournamentSize(), random).network();
+            MovementNetwork parentB = tournament(ranked, safeConfig.tournamentSize(), random).network();
+            MovementNetwork child = random.nextDouble() <= safeConfig.crossoverRate()
+                    ? crossover(parentA, parentB, random)
+                    : copy(parentA);
             child = mutate(child, mutationRate, mutationStrength, random);
             if (isValid(child)) {
                 next.add(child);
             } else {
-                next.add(MovementNetwork.random(MovementNetworkShape.defaultLayers(), random));
+                next.add(MovementNetwork.random(safeConfig.movementLayerShape(), random));
             }
         }
         return next;
@@ -90,9 +107,9 @@ public final class MovementNetworkGenetics {
                 && network.validate(MovementNetworkShape.INPUT_COUNT, MovementNetworkShape.OUTPUT_COUNT).valid();
     }
 
-    private static ScoredNetwork tournament(List<ScoredNetwork> ranked, Random random) {
+    private static ScoredNetwork tournament(List<ScoredNetwork> ranked, int tournamentSize, Random random) {
         ScoredNetwork best = null;
-        for (int i = 0; i < Math.min(TOURNAMENT_SIZE, ranked.size()); i++) {
+        for (int i = 0; i < Math.min(tournamentSize, ranked.size()); i++) {
             ScoredNetwork candidate = ranked.get(random.nextInt(ranked.size()));
             if (best == null || candidate.fitness() > best.fitness()) {
                 best = candidate;
@@ -154,14 +171,16 @@ public final class MovementNetworkGenetics {
         return Math.max(-PARAMETER_LIMIT, Math.min(PARAMETER_LIMIT, mutated));
     }
 
-    private static double mutationRate(int generation) {
+    private static double mutationRate(int generation, MovementTrainingConfig config) {
+        if (!config.adaptiveMutation()) return config.mutationRate();
         double cooling = Math.max(0.55, 1.0 - Math.min(0.45, generation * 0.01));
-        return BASE_MUTATION_RATE * cooling;
+        return config.mutationRate() * cooling;
     }
 
-    private static double mutationStrength(int generation) {
+    private static double mutationStrength(int generation, MovementTrainingConfig config) {
+        if (!config.adaptiveMutation()) return config.mutationStrength();
         double cooling = Math.max(0.45, 1.0 - Math.min(0.55, generation * 0.012));
-        return BASE_MUTATION_STRENGTH * cooling;
+        return config.mutationStrength() * cooling;
     }
 
     private static boolean isCompatible(MovementNetwork a, MovementNetwork b) {

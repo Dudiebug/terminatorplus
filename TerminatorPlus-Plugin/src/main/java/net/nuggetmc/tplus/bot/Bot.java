@@ -44,6 +44,7 @@ import net.nuggetmc.tplus.bot.combat.WindChargeMovePlan;
 import net.nuggetmc.tplus.bot.loadout.BotInventory;
 import net.nuggetmc.tplus.bot.loadout.Cooldowns;
 import net.nuggetmc.tplus.bot.movement.MovementOutputApplier;
+import net.nuggetmc.tplus.command.commands.BotCommand;
 import net.nuggetmc.tplus.nms.MockConnection;
 import net.nuggetmc.tplus.utils.NMSUtils;
 import org.bukkit.*;
@@ -399,6 +400,11 @@ public class Bot extends ServerPlayer implements Terminator {
                 holdCompliant,
                 lastMovementControllerFallback
         );
+    }
+
+    @Override
+    public boolean applyTrainingLoadout(String loadoutName) {
+        return BotCommand.applyNamedLoadoutToBot(this, loadoutName);
     }
 
     @Override

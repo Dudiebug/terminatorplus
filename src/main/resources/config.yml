@@ -1,0 +1,77 @@
+ai:
+  movement-network:
+    # Disabled by default for normal spawned bots; /ai reinforcement intentionally
+    # starts movement-controller training unless legacy mode is requested.
+    enabled: false
+    mode: movement-controller
+    tick-rate: 1
+    input-size: 30
+    hidden-layers: [32, 24]
+    output-size: 8
+    fallback-to-legacy-movement: true
+    legacy-full-replacement-mode: false
+    movement-output-scaling: 1.0
+    hold-position-behavior: true
+    debug: false
+
+  training:
+    population-size: 120
+    generations: 0
+    tournament-size: 5
+    elite-count: 6
+    crossover-rate: 1.0
+    mutation-rate: 0.035
+    mutation-strength: 0.12
+    adaptive-mutation: true
+    random-seed: 0
+    max-training-ticks: 0
+
+    fitness-weights:
+      range-control: 300.0
+      range-urgency: 220.0
+      crit-setup: 75.0
+      sprint-hit: 45.0
+      hold-position: 35.0
+      strafing-circling: 90.0
+      circling: 90.0
+      retreat: 70.0
+      survival: 0.25
+      damage-dealt: 275.0
+      damage-taken-penalty: 4.0
+      stuck-penalty: 45.0
+      fallback-penalty: 35.0
+      invalid-output-penalty: 35.0
+      oscillation-penalty: 12.0
+      jump-spam-penalty: 180.0
+      sprint-spam-penalty: 120.0
+      hold-violation-penalty: 85.0
+
+    loadouts:
+      pool:
+        - sword
+        - mace
+        - trident
+        - windcharge
+        - skydiver
+        - hybrid
+        - crystalpvp
+        - anchorbomb
+        - pvp
+        - axe
+        - smp
+        - pot
+        - spear
+      weights:
+        sword: 1
+        mace: 1
+        trident: 1
+        windcharge: 1
+        skydiver: 1
+        hybrid: 1
+        crystalpvp: 1
+        anchorbomb: 1
+        pvp: 1
+        axe: 1
+        smp: 1
+        pot: 1
+        spear: 1
