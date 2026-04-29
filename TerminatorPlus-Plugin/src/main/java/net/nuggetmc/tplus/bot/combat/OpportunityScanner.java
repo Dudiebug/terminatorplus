@@ -215,6 +215,9 @@ public final class OpportunityScanner {
         if (snap.targetBlocking && snap.distance <= MELEE_RANGE
                 && hasAxe(inv) && snap.botOnGround
                 && bot.getBotCooldowns().ready(STUN_SLAM_CD, alive)) {
+            if (!BotCombatTiming.shouldPlanNormalMelee(bot, target)) {
+                chargeSkip(bot, "STUN_SLAM");
+            } else
             if (executeStunSlam(bot, target)) {
                 bot.getBotCooldowns().set(STUN_SLAM_CD, 20, alive);
                 return true;
@@ -257,6 +260,9 @@ public final class OpportunityScanner {
                 && snap.distance >= 1.5 && snap.distance <= MELEE_RANGE
                 && inv.hasCrystalKit() && hasKnockbackSword(inv)
                 && bot.getBotCooldowns().ready(HIT_CRYSTAL_CD, alive)) {
+            if (!BotCombatTiming.shouldPlanSprintReset(bot, target)) {
+                chargeSkip(bot, "HIT_CRYSTAL");
+            } else
             if (executeHitCrystal(bot, target)) {
                 bot.getBotCooldowns().set(HIT_CRYSTAL_CD, 50, alive);
                 return true;
@@ -281,6 +287,9 @@ public final class OpportunityScanner {
         if (snap.targetBlocking && snap.distance <= MELEE_RANGE
                 && hasAxe(inv) && snap.botOnGround
                 && bot.getBotCooldowns().ready(STUN_SLAM_CD, alive)) {
+            if (!BotCombatTiming.shouldPlanNormalMelee(bot, target)) {
+                chargeSkip(bot, "STUN_SLAM");
+            } else
             if (executeStunSlam(bot, target)) {
                 bot.getBotCooldowns().set(STUN_SLAM_CD, 20, alive);
                 return true;
@@ -1242,6 +1251,10 @@ public final class OpportunityScanner {
 
     private boolean executeSwordCritSetup(Bot bot, LivingEntity target) {
         CombatDebugger.log(bot, "opp-attempt", "name=SWORD_CRIT_SETUP");
+        if (!BotCombatTiming.shouldPlanSprintReset(bot, target)) {
+            chargeSkip(bot, "SWORD_CRIT_SETUP");
+            return false;
+        }
         int slot = findSwordAxeSlot(bot.getBotInventory());
         if (slot < 0 || selectSlot(bot, slot) < 0) return false;
         bot.faceLocation(target.getLocation());
@@ -1254,6 +1267,10 @@ public final class OpportunityScanner {
 
     private boolean executeSprintReset(Bot bot, LivingEntity target) {
         CombatDebugger.log(bot, "opp-attempt", "name=SPRINT_RESET");
+        if (!BotCombatTiming.shouldPlanSprintReset(bot, target)) {
+            chargeSkip(bot, "SPRINT_RESET");
+            return false;
+        }
         int slot = findSwordAxeSlot(bot.getBotInventory());
         if (slot < 0 || selectSlot(bot, slot) < 0) return false;
         bot.faceLocation(target.getLocation());
@@ -1309,6 +1326,10 @@ public final class OpportunityScanner {
             return executeFinisherPearl(bot, target);
         }
         if (snap.distance <= MeleeBehavior.ATTACK_RANGE) {
+            if (!BotCombatTiming.shouldPlanNormalMelee(bot, target)) {
+                chargeSkip(bot, "FINISHER_MELEE");
+                return false;
+            }
             int slot = findSwordAxeSlot(inv);
             if (slot < 0) slot = inv.findHotbar(Material.TRIDENT);
             if (slot >= 0 && selectSlot(bot, slot) >= 0) {
@@ -1657,6 +1678,11 @@ public final class OpportunityScanner {
         if (!BotCombatTiming.canSwing(bot, target)) return false;
         bot.attack(target);
         return true;
+    }
+
+    private static void chargeSkip(Bot bot, String branch) {
+        CombatDebugger.log(bot, "opp-skip",
+                "name=" + branch + " reason=charge charge=" + String.format("%.3f", BotCombatTiming.charge(bot)));
     }
 
     private static boolean canPlaceBlockAt(Bot bot, Block block, String source) {

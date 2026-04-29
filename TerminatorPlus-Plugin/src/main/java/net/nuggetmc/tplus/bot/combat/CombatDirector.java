@@ -148,6 +148,12 @@ public final class CombatDirector {
         if (snapshot.targetBlocking && shieldAxe >= 0 && distance <= MeleeBehavior.ATTACK_RANGE) {
             inv.selectMainInventorySlot(shieldAxe);
             CombatDebugger.weaponPick(bot, "AXE(shield)", distance, true);
+            if (!BotCombatTiming.shouldPlanNormalMelee(bot, target)) {
+                CombatDebugger.log(bot, "opp-skip",
+                        "name=DIRECTOR_SHIELD_MELEE reason=charge charge="
+                                + String.format("%.3f", BotCombatTiming.charge(bot)));
+                return false;
+            }
             melee.ticksFor(bot, target, distance);
             return true;
         }
@@ -185,6 +191,12 @@ public final class CombatDirector {
             if (snapshot.targetBlocking && axe >= 0) {
                 inv.selectMainInventorySlot(axe);
                 CombatDebugger.weaponPick(bot, "AXE(shield)", distance, true);
+                if (!BotCombatTiming.shouldPlanNormalMelee(bot, target)) {
+                    CombatDebugger.log(bot, "opp-skip",
+                            "name=DIRECTOR_MELEE_SHIELD reason=charge charge="
+                                    + String.format("%.3f", BotCombatTiming.charge(bot)));
+                    return false;
+                }
                 melee.ticksFor(bot, target, distance);
                 return true;
             }
@@ -213,6 +225,12 @@ public final class CombatDirector {
                 CombatDebugger.weaponPick(bot, pickLabel, distance, true);
             } else {
                 CombatDebugger.weaponPick(bot, "MELEE(empty)", distance, true);
+            }
+            if (!BotCombatTiming.shouldPlanNormalMelee(bot, target)) {
+                CombatDebugger.log(bot, "opp-skip",
+                        "name=DIRECTOR_MELEE reason=charge charge="
+                                + String.format("%.3f", BotCombatTiming.charge(bot)));
+                return false;
             }
             melee.ticksFor(bot, target, distance);
             return true;

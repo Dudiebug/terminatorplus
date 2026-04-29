@@ -42,7 +42,7 @@ public final class BotCombatTiming {
     }
 
     public static boolean canSwing(Bot bot, LivingEntity target, float minCharge) {
-        float charge = bot.getAttackStrengthScale(0.0f);
+        float charge = charge(bot);
         int iframes = ((CraftLivingEntity) target).getHandle().invulnerableTime;
         if (!bot.getBotInventory().isSelectedMeleeWeapon()) {
             CombatDebugger.swingGate(bot, charge, minCharge, iframes, false, "held");
@@ -96,7 +96,7 @@ public final class BotCombatTiming {
 
     /** Attack-strength charge scaled to [0, 1]; 1.0 means fully recharged. */
     public static boolean chargeReady(Bot bot) {
-        return bot.getAttackStrengthScale(0.0f) >= READY_CHARGE;
+        return charge(bot) >= READY_CHARGE;
     }
 
     /**
@@ -115,11 +115,38 @@ public final class BotCombatTiming {
      * residual is still a meaningful hit inside the i-frame window.
      */
     public static boolean canSwingMaceSmash(Bot bot) {
-        return bot.getAttackStrengthScale(0.0f) > SMASH_READY_CHARGE;
+        return charge(bot) > SMASH_READY_CHARGE;
     }
 
     /** True if hitting the target now would be wasted on its i-frame window. */
     public static boolean targetHasIFrames(LivingEntity target) {
         return ((CraftLivingEntity) target).getHandle().invulnerableTime > IFRAME_BLOCK_THRESHOLD;
+    }
+
+    /** Raw vanilla attack-strength charge in [0, 1]. */
+    public static float charge(Bot bot) {
+        return bot.getAttackStrengthScale(0.0f);
+    }
+
+    /** Planning guard: a full melee hit can execute right now. */
+    public static boolean readyForFullMelee(Bot bot) {
+        return bot.getBotInventory().isSelectedMeleeWeapon() && chargeReady(bot);
+    }
+
+    /** Planning guard for vanilla special-hit branches (crit/sprint-kb windows). */
+    public static boolean readyForVanillaSpecial(Bot bot) {
+        return bot.getBotInventory().isSelectedMeleeWeapon() && charge(bot) > SMASH_READY_CHARGE;
+    }
+
+    public static boolean targetCanTakeFullHit(LivingEntity target) {
+        return !targetHasIFrames(target);
+    }
+
+    public static boolean shouldPlanNormalMelee(Bot bot, LivingEntity target) {
+        return readyForFullMelee(bot) && targetCanTakeFullHit(target);
+    }
+
+    public static boolean shouldPlanSprintReset(Bot bot, LivingEntity target) {
+        return readyForVanillaSpecial(bot) && targetCanTakeFullHit(target);
     }
 }
