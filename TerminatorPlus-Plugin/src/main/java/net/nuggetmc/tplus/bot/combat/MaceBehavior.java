@@ -27,7 +27,7 @@ public final class MaceBehavior implements WeaponBehavior {
     private static final int PRE_JUMP_TIMEOUT_TICKS = 45;
     private static final int HEIGHT_LOG_TICKS = 10;
 
-    private static final double JUMP_Y = 2.0;
+    static final double LAUNCH_Y = 2.0;
     private static final double JUMP_XZ = 0.25;
 
     @Override
@@ -84,10 +84,12 @@ public final class MaceBehavior implements WeaponBehavior {
                 int chargeTicks = state.tickPhase();
                 float charge = bot.getAttackStrengthScale(0.0f);
                 boolean ready = BotCombatTiming.smashChargeReady(bot);
+                boolean planReady = BotCombatTiming.shouldLaunchMaceSmash(bot, target, LAUNCH_Y);
                 CombatDebugger.log(bot, "mace-charge",
                         "ticks=" + chargeTicks
                                 + " charge=" + fmt(charge)
                                 + " ready=" + ready
+                                + " airReady=" + planReady
                                 + " held=" + heldType(bot)
                                 + " ground=" + bot.isBotOnGround());
 
@@ -105,15 +107,16 @@ public final class MaceBehavior implements WeaponBehavior {
                     state.reset();
                     return 0;
                 }
-                if (chargeTicks >= PRE_JUMP_TIMEOUT_TICKS && !ready) {
+                if (chargeTicks >= PRE_JUMP_TIMEOUT_TICKS && (!ready || !planReady)) {
                     CombatDebugger.log(bot, "mace-reset",
                             "reason=prejump-timeout charge=" + fmt(charge)
+                                    + " airReady=" + planReady
                                     + " held=" + heldType(bot));
                     CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.IDLE);
                     state.reset();
                     return 0;
                 }
-                if (chargeTicks < PRE_JUMP_MIN_HOLD_TICKS || !ready) {
+                if (chargeTicks < PRE_JUMP_MIN_HOLD_TICKS || !ready || !planReady) {
                     return 0;
                 }
 
@@ -176,7 +179,7 @@ public final class MaceBehavior implements WeaponBehavior {
             horiz.setX(0).setZ(0);
         }
 
-        Vector launch = new Vector(horiz.getX(), JUMP_Y, horiz.getZ());
+        Vector launch = new Vector(horiz.getX(), LAUNCH_Y, horiz.getZ());
         double startY = bot.getLocation().getY();
 
         throwWindChargeAtFeet(bot);

@@ -1,6 +1,7 @@
 package net.nuggetmc.tplus.bot.combat;
 
 import net.nuggetmc.tplus.bot.Bot;
+import org.bukkit.Material;
 import org.bukkit.craftbukkit.entity.CraftLivingEntity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.util.Vector;
@@ -32,7 +33,14 @@ public final class BotCombatTiming {
     public static final float READY_CHARGE = 0.95f;
     public static final float SMASH_READY_CHARGE = 0.848f;
     public static final int IFRAME_BLOCK_THRESHOLD = 10;
+    /** Mace attack speed is 0.6, so vanilla needs ceil(20 / 0.6) ticks to fully recharge. */
+    public static final int MACE_FULL_RECHARGE_TICKS = 34;
     private static final double CRIT_DESCENT_VELOCITY = -0.06;
+    private static final double BOT_AIR_GRAVITY_PER_TICK = 0.08;
+    private static final double BOT_TERMINAL_FALL_SPEED = -3.5;
+    private static final double MACE_IMPACT_DESCENT_VELOCITY = -0.3;
+    private static final double MACE_VERTICAL_IMPACT_RANGE = 3.5;
+    private static final int MACE_AIRTIME_SEARCH_TICKS = 90;
 
     private BotCombatTiming() {}
 
@@ -116,6 +124,66 @@ public final class BotCombatTiming {
      */
     public static boolean canSwingMaceSmash(Bot bot) {
         return charge(bot) > SMASH_READY_CHARGE;
+    }
+
+    /**
+     * Ground-launch planning guard for mace smash branches. Selecting the mace
+     * can reset attack charge, so this profiles the planned launch against the
+     * bot's custom gravity instead of assuming the old vanilla-airtime comment.
+     */
+    public static boolean shouldPlanGroundMaceSmash(Bot bot, LivingEntity target, double launchVelocityY) {
+        float startingCharge = selectedMace(bot) ? charge(bot) : 0.0f;
+        return macePlanReady(bot, target, launchVelocityY, startingCharge);
+    }
+
+    /** Planning guard for opportunistic midair mace dives from the bot's current velocity. */
+    public static boolean shouldPlanCurrentMaceDive(Bot bot, LivingEntity target) {
+        float startingCharge = selectedMace(bot) ? charge(bot) : 0.0f;
+        return macePlanReady(bot, target, bot.getVelocity().getY(), startingCharge);
+    }
+
+    /** Launch-time guard after the mace has been held through MACE_CHARGING. */
+    public static boolean shouldLaunchMaceSmash(Bot bot, LivingEntity target, double launchVelocityY) {
+        return macePlanReady(bot, target, launchVelocityY, charge(bot));
+    }
+
+    private static boolean macePlanReady(Bot bot, LivingEntity target, double initialVy, float startingCharge) {
+        int airtime = estimateMaceImpactTicks(bot, target, initialVy);
+        int recharge = ticksUntilMaceFullRecharge(startingCharge);
+        boolean ready = airtime > 0 && airtime >= recharge;
+        if (CombatDebugger.isOn(bot)) {
+            CombatDebugger.log(bot, "mace-plan",
+                    "airtime=" + airtime
+                            + " recharge=" + recharge
+                            + " ready=" + ready
+                            + " vy=" + String.format("%.2f", initialVy));
+        }
+        return ready;
+    }
+
+    private static int ticksUntilMaceFullRecharge(float startingCharge) {
+        float clamped = Math.max(0.0f, Math.min(1.0f, startingCharge));
+        return (int) Math.ceil((1.0f - clamped) * MACE_FULL_RECHARGE_TICKS);
+    }
+
+    private static int estimateMaceImpactTicks(Bot bot, LivingEntity target, double initialVy) {
+        double y = bot.getLocation().getY();
+        double targetY = target.getLocation().getY();
+        double vy = initialVy;
+
+        for (int tick = 1; tick <= MACE_AIRTIME_SEARCH_TICKS; tick++) {
+            y += vy;
+            vy = Math.max(vy - BOT_AIR_GRAVITY_PER_TICK, BOT_TERMINAL_FALL_SPEED);
+            if (vy < MACE_IMPACT_DESCENT_VELOCITY
+                    && Math.abs(y - targetY) <= MACE_VERTICAL_IMPACT_RANGE) {
+                return tick;
+            }
+        }
+        return 0;
+    }
+
+    private static boolean selectedMace(Bot bot) {
+        return bot.getBotInventory().getSelected().getType() == Material.MACE;
     }
 
     /** True if hitting the target now would be wasted on its i-frame window. */
