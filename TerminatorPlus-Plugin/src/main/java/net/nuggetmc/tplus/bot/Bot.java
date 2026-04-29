@@ -41,6 +41,7 @@ import net.nuggetmc.tplus.bot.combat.MovementState;
 import net.nuggetmc.tplus.bot.combat.WindChargeMovePlan;
 import net.nuggetmc.tplus.bot.loadout.BotInventory;
 import net.nuggetmc.tplus.bot.loadout.Cooldowns;
+import net.nuggetmc.tplus.bot.movement.MovementOutputApplier;
 import net.nuggetmc.tplus.nms.MockConnection;
 import net.nuggetmc.tplus.utils.NMSUtils;
 import org.bukkit.*;
@@ -90,6 +91,7 @@ public class Bot extends ServerPlayer implements Terminator {
     private CombatIntent combatIntent;
     private MovementState movementState;
     private boolean jumpedThisTick;
+    private final MovementOutputApplier movementOutputApplier;
     /** Pending wind-charge self-boost (aim + fire tick). Null when not planning a throw. */
     public WindChargeMovePlan pendingWindChargePlan;
 
@@ -110,6 +112,7 @@ public class Bot extends ServerPlayer implements Terminator {
         this.combatState = new CombatState();
         this.combatIntent = CombatIntent.DEFAULT;
         this.movementState = MovementState.DEFAULT;
+        this.movementOutputApplier = new MovementOutputApplier();
         if (addToPlayerList) {
             minecraftServer.getPlayerList().getPlayers().add(this);
             inPlayerList = true;
@@ -319,6 +322,32 @@ public class Bot extends ServerPlayer implements Terminator {
         CombatDirector director = plugin.getCombatDirector();
         if (director == null) return false;
         return director.tick(this, target);
+    }
+
+    @Override
+    public boolean usesMovementController() {
+        return network != null && network.usesMovementController();
+    }
+
+    @Override
+    public void planCombat(org.bukkit.entity.LivingEntity target) {
+        CombatDirector director = plugin.getCombatDirector();
+        if (director == null) return;
+        director.plan(this, target, getCombatIntent());
+    }
+
+    @Override
+    public boolean tryMovementControllerMove(org.bukkit.entity.LivingEntity target) {
+        if (!usesMovementController()) return false;
+        MovementOutputApplier.ApplyResult result = movementOutputApplier.tryApply(this, target, network.movementNetwork());
+        return !result.fallback();
+    }
+
+    @Override
+    public boolean executePlannedCombat(org.bukkit.entity.LivingEntity target) {
+        CombatDirector director = plugin.getCombatDirector();
+        if (director == null) return false;
+        return director.execute(this, target, getMovementState());
     }
 
     @Override

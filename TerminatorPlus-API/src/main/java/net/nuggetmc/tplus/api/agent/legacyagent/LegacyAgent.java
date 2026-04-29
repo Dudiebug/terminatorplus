@@ -165,11 +165,12 @@ public class LegacyAgent extends Agent {
         LivingEntity botPlayer = bot.getBukkitEntity();
         Location target = offsets ? livingTarget.getLocation().add(bot.getOffset()) : livingTarget.getLocation();
 
-        boolean ai = bot.hasNeuralNetwork();
+        MovementMode movementMode = movementMode(bot);
+        boolean ai = movementMode != MovementMode.LEGACY;
 
         NeuralNetwork network = ai ? bot.getNeuralNetwork() : null;
 
-        if (ai) {
+        if (movementMode == MovementMode.FULL_REPLACEMENT_NN) {
             network.feed(BotData.generate(bot, livingTarget));
         }
 
@@ -178,8 +179,8 @@ public class LegacyAgent extends Agent {
         // tick so CombatDirector can react at 20 Hz — canSwing() gates the
         // actual damage event on the vanilla attack-strength charge, so this
         // does not over-swing.
-        boolean combatTickReady = ai ? bot.tickDelay(3) : true;
-        if (combatTickReady) {
+        boolean combatTickReady = movementMode == MovementMode.FULL_REPLACEMENT_NN ? bot.tickDelay(3) : true;
+        if (movementMode != MovementMode.MOVEMENT_CONTROLLER_NN && combatTickReady) {
             Location botEyeLoc = botPlayer.getEyeLocation();
             Location playerEyeLoc = livingTarget.getEyeLocation();
             Location playerLoc = livingTarget.getLocation();
@@ -240,18 +241,39 @@ public class LegacyAgent extends Agent {
             switch (sideResult) {
                 case 1:
                     resetHand(bot, livingTarget, botPlayer);
-                    if (!noJump.contains(botPlayer) && !waterGround) move(bot, livingTarget, loc, target, ai);
+                    if (movementMode == MovementMode.MOVEMENT_CONTROLLER_NN) {
+                        move(bot, livingTarget, loc, target, movementMode, !noJump.contains(botPlayer) && !waterGround);
+                    } else if (!noJump.contains(botPlayer) && !waterGround) {
+                        move(bot, livingTarget, loc, target, movementMode, true);
+                    }
                     return;
 
                 case 2:
-                    if (!waterGround) move(bot, livingTarget, loc, target, ai);
+                    if (movementMode == MovementMode.MOVEMENT_CONTROLLER_NN) {
+                        move(bot, livingTarget, loc, target, movementMode, !waterGround);
+                    } else if (!waterGround) {
+                        move(bot, livingTarget, loc, target, movementMode, true);
+                    }
             }
         } else if (LegacyMats.WATER.contains(loc.getBlock().getType())) {
             swim(bot, target, botPlayer, livingTarget, LegacyMats.WATER.contains(loc.clone().add(0, -1, 0).getBlock().getType()));
         }
     }
 
-    private void move(Terminator bot, LivingEntity livingTarget, Location loc, Location target, boolean ai) {
+    private void move(Terminator bot, LivingEntity livingTarget, Location loc, Location target, MovementMode movementMode, boolean allowMovement) {
+        if (movementMode == MovementMode.MOVEMENT_CONTROLLER_NN) {
+            bot.planCombat(livingTarget);
+            if (allowMovement && !bot.tryMovementControllerMove(livingTarget)) {
+                moveLegacy(bot, livingTarget, loc, target, false);
+            }
+            bot.executePlannedCombat(livingTarget);
+            return;
+        }
+
+        moveLegacy(bot, livingTarget, loc, target, movementMode == MovementMode.FULL_REPLACEMENT_NN);
+    }
+
+    private void moveLegacy(Terminator bot, LivingEntity livingTarget, Location loc, Location target, boolean ai) {
         Vector position = loc.toVector();
         Vector vel = target.toVector().subtract(position).normalize();
 
@@ -348,6 +370,17 @@ public class LegacyAgent extends Agent {
         }
 
         bot.jump(vel);
+    }
+
+    private MovementMode movementMode(Terminator bot) {
+        if (!bot.hasNeuralNetwork()) return MovementMode.LEGACY;
+        return bot.usesMovementController() ? MovementMode.MOVEMENT_CONTROLLER_NN : MovementMode.FULL_REPLACEMENT_NN;
+    }
+
+    private enum MovementMode {
+        LEGACY,
+        FULL_REPLACEMENT_NN,
+        MOVEMENT_CONTROLLER_NN
     }
 
     private void fallDamageCheck(Terminator bot) {

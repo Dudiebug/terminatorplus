@@ -141,6 +141,21 @@ public interface Terminator {
         return false;
     }
 
+    default boolean usesMovementController() {
+        return false;
+    }
+
+    default void planCombat(LivingEntity target) {
+    }
+
+    default boolean tryMovementControllerMove(LivingEntity target) {
+        return false;
+    }
+
+    default boolean executePlannedCombat(LivingEntity target) {
+        return combatTick(target);
+    }
+
     /**
      * Vanilla-safe swing gate: true only when the bot's attack-strength charge is
      * fully recharged AND the target isn't deep in an i-frame window. Callers

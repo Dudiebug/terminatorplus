@@ -1,6 +1,7 @@
 package net.nuggetmc.tplus.api.agent.legacyagent.ai;
 
 import net.md_5.bungee.api.ChatColor;
+import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementNetwork;
 import net.nuggetmc.tplus.api.utils.ChatUtils;
 import net.nuggetmc.tplus.api.utils.MathUtils;
 
@@ -18,6 +19,8 @@ public class NeuralNetwork {
     private final Map<BotNode, NodeConnections> nodes;
 
     private final boolean dynamicLR;
+    private MovementNetwork movementNetwork;
+    private boolean movementController;
 
     public static final NeuralNetwork RANDOM = new NeuralNetwork(new HashMap<>());
 
@@ -38,6 +41,12 @@ public class NeuralNetwork {
 
     public static NeuralNetwork generateRandomNetwork() {
         return new NeuralNetwork(null);
+    }
+
+    public static NeuralNetwork generateRandomMovementControllerNetwork() {
+        NeuralNetwork network = new NeuralNetwork(new HashMap<>());
+        network.setMovementNetwork(MovementNetwork.randomDefault());
+        return network;
     }
 
     public NodeConnections fetch(BotNode node) {
@@ -62,6 +71,24 @@ public class NeuralNetwork {
 
     public boolean dynamicLR() {
         return dynamicLR;
+    }
+
+    public boolean usesMovementController() {
+        return movementController && movementNetwork != null;
+    }
+
+    public MovementNetwork movementNetwork() {
+        return movementNetwork;
+    }
+
+    public void setMovementNetwork(MovementNetwork movementNetwork) {
+        this.movementNetwork = movementNetwork;
+        this.movementController = movementNetwork != null;
+    }
+
+    public void clearMovementController() {
+        this.movementNetwork = null;
+        this.movementController = false;
     }
 
     public Map<BotNode, Map<BotDataType, Double>> values() {
