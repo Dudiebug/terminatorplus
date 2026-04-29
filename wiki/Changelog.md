@@ -1,5 +1,26 @@
 # Changelog
 
+## 5.1.0 - Neural Network Movement Controller
+
+### Added
+
+- Movement-controller neural network mode for movement decisions only.
+- `CombatIntent` and `MovementState` coupling between `CombatDirector` and movement AI.
+- JVM-only layered `MovementNetwork` with stable movement input/output schemas.
+- Movement-controller tick flow through `plan -> movement -> execute`.
+- Movement-aware GA training with tournament selection, uniform crossover, adaptive mutation, and cooperation-focused fitness.
+- Randomized training loadout mixing across supported presets.
+- Movement NN config defaults, GA training settings, fitness weights, and loadout pool settings.
+- Movement brain persistence at `plugins/TerminatorPlus/ai/brain.json` by default.
+- `/ai brain` save/load/reset/status behavior and `/ai movement` movement-controller spawn support.
+
+### Compatibility
+
+- `CombatDirector` remains responsible for weapon selection, opportunity selection, attack timing, `BotCombatTiming` gates, mace/trident actions, consumables, passive combat behaviors, and `bot.attack(...)` execution.
+- `MovementState` and `MovementTrainingSnapshot` remain observational.
+- Non-NN bots, legacy movement, and the old four-node full-replacement NN mode remain available.
+- Invalid, missing, or corrupt movement brain files fail safely.
+
 ## Unreleased — Combat + Inventory + Presets Overhaul
 
 ### Added

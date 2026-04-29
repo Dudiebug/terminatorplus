@@ -790,29 +790,35 @@ public class Bot extends ServerPlayer implements Terminator {
                         "reason=non-melee-held held=" + botInventory.getSelected().getType().name());
                 return;
             }
-            boolean crit = BotCombatTiming.isCritWindow(this);
-            float charge = getAttackStrengthScale(0.0f);
+            boolean critPred = BotCombatTiming.isCritWindow(this);
+            float chargeBefore = getAttackStrengthScale(0.0f);
             double before = entityHealth(entity);
             boolean targetBlocking = entity instanceof org.bukkit.entity.Player player && player.isBlocking();
+            float chargeAtVanillaAttack = getAttackStrengthScale(0.0f);
             if (CombatDebugger.isOn(this)) {
                 CombatDebugger.log(this, "attack-try",
                         "mode=vanilla held=" + mainhandType()
-                                + " charge=" + fmt(charge)
-                                + " crit=" + crit
+                                + " chargeBefore=" + fmt(chargeBefore)
+                                + " chargeAtVanillaAttack=" + fmt(chargeAtVanillaAttack)
+                                + " critPred=" + critPred
                                 + " fall=" + fmt(fallDistance)
                                 + " vy=" + fmt(velocity.getY())
                                 + " sprint=" + isSprinting()
                                 + " targetBlocking=" + targetBlocking
                                 + " targetHp=" + fmt(before));
             }
-            punch();
             getBukkitEntity().attack(entity);
+            float chargeAfterVanillaAttack = getAttackStrengthScale(0.0f);
+            punch();
             if (CombatDebugger.isOn(this)) {
                 double after = entityHealth(entity);
                 CombatDebugger.log(this, "attack-result",
-                        "mode=vanilla crit=" + crit
-                                + " hp=" + fmt(before) + "->" + fmt(after)
-                                + " delta=" + fmt(before - after)
+                        "mode=vanilla critPred=" + critPred
+                                + " chargeBefore=" + fmt(chargeBefore)
+                                + " chargeAtVanillaAttack=" + fmt(chargeAtVanillaAttack)
+                                + " chargeAfterVanillaAttack=" + fmt(chargeAfterVanillaAttack)
+                                + " targetHp=" + fmt(before) + "->" + fmt(after)
+                                + " targetHpDelta=" + fmt(before - after)
                                 + " targetBlocking=" + targetBlocking
                                 + " held=" + mainhandType());
             }
