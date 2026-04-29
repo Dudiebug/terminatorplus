@@ -6,6 +6,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.attribute.Attribute;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.inventory.ItemStack;
@@ -141,6 +142,23 @@ public final class CombatDebugger {
     public static void swingBlock(Bot bot, String reason, float value) {
         if (!isOn(bot)) return;
         emit(bot, "swing-block", "reason=" + reason + " val=" + fmt(value));
+    }
+
+    public static void blockPlace(Bot bot, String source, Material material, Block block, Material previous) {
+        if (!isOn(bot)) return;
+        Block below = block.getRelative(0, -1, 0);
+        Material belowType = below.getType();
+        boolean belowSolid = belowType.isSolid();
+        boolean floating = !belowSolid && block.getY() > block.getWorld().getMinHeight();
+        Location loc = block.getLocation();
+        emit(bot, "block-place",
+                "src=" + sanitizeToken(source)
+                        + " mat=" + material.name()
+                        + " loc=" + loc.getBlockX() + "," + loc.getBlockY() + "," + loc.getBlockZ()
+                        + " prev=" + previous.name()
+                        + " below=" + belowType.name()
+                        + " belowSolid=" + belowSolid
+                        + " floating=" + floating);
     }
 
     /**
