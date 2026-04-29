@@ -1,4 +1,4 @@
-# Release Notes — 5.1.0
+# Release Notes — 5.1.1
 
 ## Combat Reliability (Issue #6)
 
@@ -103,4 +103,4 @@ See [Configuration](Configuration) for the full reference.
 
 - Training spawns many bots fighting simultaneously. Monitor server TPS and reduce population if needed.
 - Changing `hidden-layers` after training invalidates saved brains. Reset and retrain.
-- The movement NN is disabled by default for normal bots. Enable via `ai.movement-network.enabled: true` in config.
+- `/bot create` bots do not use the movement NN. Use `/ai movement` to spawn bots with the trained brain.

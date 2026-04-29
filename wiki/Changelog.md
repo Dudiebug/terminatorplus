@@ -1,8 +1,8 @@
 # Changelog
 
-## 5.1.0 — Combat Reliability + Movement Neural Network
+## 5.1.1 — Combat Reliability + Movement Neural Network
 
-See [Release Notes 5.1.0](Release-Notes-5.1.0) for full details.
+See [Release Notes 5.1.1](Release-Notes-5.1.1) for full details.
 
 ### Added
 
@@ -59,7 +59,7 @@ See [Release Notes 5.1.0](Release-Notes-5.1.0) for full details.
 
 ---
 
-## Unreleased (pre-5.1.0) — Combat + Inventory + Presets Overhaul
+## Unreleased (pre-5.1.1) — Combat + Inventory + Presets Overhaul
 
 ### Added
 

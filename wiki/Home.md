@@ -18,9 +18,9 @@ TerminatorPlus is a Paper plugin that spawns server-side player bots with combat
 - [API](API)
 - [Troubleshooting](Troubleshooting)
 - [Changelog](Changelog)
-- [Release Notes 5.1.0](Release-Notes-5.1.0)
+- [Release Notes 5.1.1](Release-Notes-5.1.1)
 
-## What's New in 5.1.0
+## What's New in 5.1.1
 
 **Combat reliability (Issue #6)**
 - Vanilla attack ordering fix — `Bot.attack()` calls `getBukkitEntity().attack(entity)` before swing/punch to prevent charge reset before damage.

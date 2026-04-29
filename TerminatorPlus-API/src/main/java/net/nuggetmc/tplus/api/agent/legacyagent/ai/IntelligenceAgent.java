@@ -52,6 +52,7 @@ public class IntelligenceAgent {
     private final int cutoff;
     private final TrainingMode trainingMode;
     private final MovementTrainingConfig movementConfig;
+    private final int maxRoundTicks;
     private final MovementNetwork seedMovementBrain;
     private final MovementBrainSaveSink movementBrainSaveSink;
 
@@ -69,11 +70,11 @@ public class IntelligenceAgent {
     private final Random random;
 
     public IntelligenceAgent(AIManager aiManager, int populationSize, String name, String skin, Plugin plugin, BotManager manager) {
-        this(aiManager, populationSize, name, skin, plugin, manager, TrainingMode.MOVEMENT_CONTROLLER);
+        this(aiManager, populationSize, name, skin, plugin, manager, TrainingMode.MOVEMENT_CONTROLLER, null, null, 0);
     }
 
     public IntelligenceAgent(AIManager aiManager, int populationSize, String name, String skin, Plugin plugin, BotManager manager, TrainingMode trainingMode) {
-        this(aiManager, populationSize, name, skin, plugin, manager, trainingMode, null, null);
+        this(aiManager, populationSize, name, skin, plugin, manager, trainingMode, null, null, 0);
     }
 
     public IntelligenceAgent(
@@ -85,7 +86,8 @@ public class IntelligenceAgent {
             BotManager manager,
             TrainingMode trainingMode,
             MovementNetwork seedMovementBrain,
-            MovementBrainSaveSink movementBrainSaveSink
+            MovementBrainSaveSink movementBrainSaveSink,
+            int maxRoundTicks
     ) {
         this.plugin = plugin;
         this.manager = manager;
@@ -102,6 +104,7 @@ public class IntelligenceAgent {
         this.seedMovementBrain = MovementNetworkGenetics.isValid(seedMovementBrain)
                 ? MovementNetworkGenetics.copy(seedMovementBrain)
                 : null;
+        this.maxRoundTicks = maxRoundTicks > 0 ? maxRoundTicks : movementConfig.maxTrainingTicks();
         this.movementBrainSaveSink = movementBrainSaveSink;
         this.genProfiles = new HashMap<>();
         this.movementGenerations = new HashMap<>();
@@ -162,11 +165,15 @@ public class IntelligenceAgent {
                 + ChatColor.RESET + " using " + ChatColor.YELLOW + trainingMode.label()
                 + ChatColor.RESET + "...");
         if (trainingMode == TrainingMode.MOVEMENT_CONTROLLER) {
+            String roundLabel = maxRoundTicks > 0
+                    ? MathUtils.round2Dec(maxRoundTicks / 1200.0) + "min"
+                    : "unlimited";
             print("Movement GA: pop=" + ChatColor.RED + populationSize
                     + ChatColor.RESET + " tournament=" + ChatColor.YELLOW + movementConfig.tournamentSize()
                     + ChatColor.RESET + " elite=" + ChatColor.YELLOW + movementConfig.eliteCount()
                     + ChatColor.RESET + " mutation=" + ChatColor.YELLOW + MathUtils.round2Dec(movementConfig.mutationRate())
                     + ChatColor.RESET + "/" + ChatColor.YELLOW + MathUtils.round2Dec(movementConfig.mutationStrength())
+                    + ChatColor.RESET + " round=" + ChatColor.YELLOW + roundLabel
                     + ChatColor.RESET + ".");
             print("Training loadouts: " + ChatColor.YELLOW + movementConfig.loadoutSummary());
             if (seedMovementBrain != null) {
@@ -241,9 +248,9 @@ public class IntelligenceAgent {
         while (aliveCount() > 1) {
             if (trainingMode == TrainingMode.MOVEMENT_CONTROLLER) {
                 sampleMovementFitness();
-                if (movementConfig.maxTrainingTicks() > 0
-                        && Bukkit.getCurrentTick() - startedAtTick >= movementConfig.maxTrainingTicks()) {
-                    print("Movement round hit max-training-ticks=" + ChatColor.RED + movementConfig.maxTrainingTicks()
+                if (maxRoundTicks > 0
+                        && Bukkit.getCurrentTick() - startedAtTick >= maxRoundTicks) {
+                    print("Movement round hit max-training-ticks=" + ChatColor.RED + maxRoundTicks
                             + ChatColor.RESET + "; ending generation.");
                     break;
                 }

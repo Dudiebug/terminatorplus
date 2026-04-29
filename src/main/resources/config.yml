@@ -27,7 +27,7 @@ ai:
     mutation-strength: 0.12
     adaptive-mutation: true
     random-seed: 0
-    max-training-ticks: 0
+    max-training-ticks: 6000
 
     fitness-weights:
       range-control: 300.0

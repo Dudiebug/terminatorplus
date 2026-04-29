@@ -152,7 +152,7 @@ public final class MovementTrainingConfig {
                 getDouble(training, "mutation-strength", MovementNetworkGenetics.BASE_MUTATION_STRENGTH, 0.0, 2.0),
                 getBoolean(training, "adaptive-mutation", true),
                 getLong(training, "random-seed", 0L),
-                getInt(training, "max-training-ticks", 0, 0, 72_000),
+                getInt(training, "max-training-ticks", 6_000, 0, 72_000),
                 weights,
                 getLoadouts(loadouts)
         );

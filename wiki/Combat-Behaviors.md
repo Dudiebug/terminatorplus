@@ -23,7 +23,7 @@ Passive (not in priority — always run): **Elytra Glide**, **Totem Swap**.
 
 Cooldowns are measured in server ticks (1t = 50ms).
 
-## Combat Reliability (5.1.0)
+## Combat Reliability (5.1.1)
 
 ### Charge-aware attack planning
 
