@@ -4,9 +4,12 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Random;
 
 /**
@@ -29,6 +32,9 @@ public final class MovementTrainingConfig {
     private final double movementOutputScale;
     private final boolean holdPositionRespected;
     private final boolean debug;
+    private final String brainPath;
+    private final boolean autosaveBestBrain;
+    private final boolean saveOnlyImprovedBrain;
     private final int populationSize;
     private final int generations;
     private final int tournamentSize;
@@ -52,6 +58,9 @@ public final class MovementTrainingConfig {
             double movementOutputScale,
             boolean holdPositionRespected,
             boolean debug,
+            String brainPath,
+            boolean autosaveBestBrain,
+            boolean saveOnlyImprovedBrain,
             int populationSize,
             int generations,
             int tournamentSize,
@@ -74,6 +83,9 @@ public final class MovementTrainingConfig {
         this.movementOutputScale = movementOutputScale;
         this.holdPositionRespected = holdPositionRespected;
         this.debug = debug;
+        this.brainPath = brainPath;
+        this.autosaveBestBrain = autosaveBestBrain;
+        this.saveOnlyImprovedBrain = saveOnlyImprovedBrain;
         this.populationSize = populationSize;
         this.generations = generations;
         this.tournamentSize = tournamentSize;
@@ -127,6 +139,9 @@ public final class MovementTrainingConfig {
                 getDouble(network, "movement-output-scaling", 1.0, 0.1, 4.0),
                 getBoolean(network, "hold-position-behavior", true),
                 getBoolean(network, "debug", false),
+                getString(network, "brain-path", "ai/brain.json"),
+                getBoolean(network, "autosave-best-brain", true),
+                getBoolean(network, "save-only-improved-brain", true),
                 getInt(training, "population-size", MovementNetworkGenetics.DEFAULT_POPULATION,
                         MovementNetworkGenetics.MIN_POPULATION, MovementNetworkGenetics.MAX_POPULATION),
                 getInt(training, "generations", 0, 0, 10_000),
@@ -173,6 +188,37 @@ public final class MovementTrainingConfig {
         return out.toString();
     }
 
+    public Path brainPath(Plugin plugin) {
+        Path configured = Path.of(brainPath);
+        if (configured.isAbsolute()) return configured;
+        if (plugin == null) return configured;
+        return plugin.getDataFolder().toPath().resolve(configured).normalize();
+    }
+
+    public String configHash() {
+        return Integer.toHexString(Objects.hash(
+                enabled,
+                mode,
+                tickRate,
+                Arrays.hashCode(movementLayerShape()),
+                fallbackToLegacyMovement,
+                legacyFullReplacementMode,
+                movementOutputScale,
+                holdPositionRespected,
+                populationSize,
+                generations,
+                tournamentSize,
+                eliteCount,
+                crossoverRate,
+                mutationRate,
+                mutationStrength,
+                adaptiveMutation,
+                maxTrainingTicks,
+                fitnessWeights,
+                loadouts
+        ));
+    }
+
     public boolean enabled() { return enabled; }
     public String mode() { return mode; }
     public int tickRate() { return tickRate; }
@@ -181,6 +227,9 @@ public final class MovementTrainingConfig {
     public double movementOutputScale() { return movementOutputScale; }
     public boolean holdPositionRespected() { return holdPositionRespected; }
     public boolean debug() { return debug; }
+    public String brainPath() { return brainPath; }
+    public boolean autosaveBestBrain() { return autosaveBestBrain; }
+    public boolean saveOnlyImprovedBrain() { return saveOnlyImprovedBrain; }
     public int populationSize() { return populationSize; }
     public int generations() { return generations; }
     public int tournamentSize() { return tournamentSize; }

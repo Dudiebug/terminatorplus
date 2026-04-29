@@ -12,6 +12,9 @@ ai:
     legacy-full-replacement-mode: false
     movement-output-scaling: 1.0
     hold-position-behavior: true
+    brain-path: ai/brain.json
+    autosave-best-brain: true
+    save-only-improved-brain: true
     debug: false
 
   training:

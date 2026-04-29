@@ -5,6 +5,7 @@ import net.nuggetmc.tplus.api.BotManager;
 import net.nuggetmc.tplus.api.Terminator;
 import net.nuggetmc.tplus.api.agent.legacyagent.EnumTargetGoal;
 import net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent;
+import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementBrainPersistence;
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementNetwork;
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementTrainingConfig;
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementNetworkGenetics;
@@ -51,6 +52,8 @@ public class IntelligenceAgent {
     private final int cutoff;
     private final TrainingMode trainingMode;
     private final MovementTrainingConfig movementConfig;
+    private final MovementNetwork seedMovementBrain;
+    private final MovementBrainSaveSink movementBrainSaveSink;
 
     private final Map<String, Terminator> bots;
 
@@ -70,6 +73,20 @@ public class IntelligenceAgent {
     }
 
     public IntelligenceAgent(AIManager aiManager, int populationSize, String name, String skin, Plugin plugin, BotManager manager, TrainingMode trainingMode) {
+        this(aiManager, populationSize, name, skin, plugin, manager, trainingMode, null, null);
+    }
+
+    public IntelligenceAgent(
+            AIManager aiManager,
+            int populationSize,
+            String name,
+            String skin,
+            Plugin plugin,
+            BotManager manager,
+            TrainingMode trainingMode,
+            MovementNetwork seedMovementBrain,
+            MovementBrainSaveSink movementBrainSaveSink
+    ) {
         this.plugin = plugin;
         this.manager = manager;
         this.aiManager = aiManager;
@@ -82,6 +99,10 @@ public class IntelligenceAgent {
         this.cutoff = 5;
         this.trainingMode = trainingMode == null ? TrainingMode.MOVEMENT_CONTROLLER : trainingMode;
         this.movementConfig = MovementTrainingConfig.load(plugin);
+        this.seedMovementBrain = MovementNetworkGenetics.isValid(seedMovementBrain)
+                ? MovementNetworkGenetics.copy(seedMovementBrain)
+                : null;
+        this.movementBrainSaveSink = movementBrainSaveSink;
         this.genProfiles = new HashMap<>();
         this.movementGenerations = new HashMap<>();
         this.movementFitness = new HashMap<>();
@@ -148,6 +169,10 @@ public class IntelligenceAgent {
                     + ChatColor.RESET + "/" + ChatColor.YELLOW + MathUtils.round2Dec(movementConfig.mutationStrength())
                     + ChatColor.RESET + ".");
             print("Training loadouts: " + ChatColor.YELLOW + movementConfig.loadoutSummary());
+            if (seedMovementBrain != null) {
+                print("Seeding movement population from loaded brain shape "
+                        + ChatColor.YELLOW + Arrays.toString(seedMovementBrain.layerSizes()) + ChatColor.RESET + ".");
+            }
         }
 
         Set<Map<BotNode, Map<BotDataType, Double>>> loadedProfiles = genProfiles.get(generation);
@@ -159,11 +184,11 @@ public class IntelligenceAgent {
 
             if (trainingMode == TrainingMode.MOVEMENT_CONTROLLER) {
                 List<MovementNetwork> movementNetworks = loadedMovementNetworks == null
-                        ? MovementNetworkGenetics.randomPopulation(populationSize, movementConfig.movementLayerShape(), random)
+                        ? freshMovementPopulation()
                         : loadedMovementNetworks;
                 if (movementNetworks.size() != populationSize) {
                     print("Stored movement population size did not match; regenerating this generation safely.");
-                    movementNetworks = MovementNetworkGenetics.randomPopulation(populationSize, movementConfig.movementLayerShape(), random);
+                    movementNetworks = freshMovementPopulation();
                 }
                 List<NeuralNetwork> networks = new ArrayList<>();
                 for (MovementNetwork movementNetwork : movementNetworks) {
@@ -357,10 +382,36 @@ public class IntelligenceAgent {
                     + " best=" + ChatColor.YELLOW + MathUtils.round2Dec(best)
                     + ChatColor.RESET + " avg=" + ChatColor.YELLOW + MathUtils.round2Dec(average)
                     + ChatColor.RESET + ".");
+            if (movementBrainSaveSink != null) {
+                MovementNetworkGenetics.ScoredNetwork winner = scored.stream()
+                        .max(Comparator.comparingDouble(MovementNetworkGenetics.ScoredNetwork::fitness))
+                        .orElse(null);
+                if (winner != null) {
+                    MovementBrainPersistence.SaveFeedback feedback = movementBrainSaveSink.save(
+                            MovementNetworkGenetics.copy(winner.network()),
+                            MovementBrainPersistence.TrainingMetadata.training(generation, best, average, movementConfig)
+                    );
+                    if (feedback != null && feedback.message() != null && !feedback.message().isBlank()) {
+                        print(feedback.message());
+                    }
+                }
+            }
         }
 
         movementGenerations.put(generation + 1,
                 MovementNetworkGenetics.nextGeneration(scored, populationSize, generation, movementConfig, random));
+    }
+
+    private List<MovementNetwork> freshMovementPopulation() {
+        List<MovementNetwork> movementNetworks = MovementNetworkGenetics.randomPopulation(
+                populationSize,
+                movementConfig.movementLayerShape(),
+                random
+        );
+        if (seedMovementBrain != null && !movementNetworks.isEmpty()) {
+            movementNetworks.set(0, MovementNetworkGenetics.copy(seedMovementBrain));
+        }
+        return movementNetworks;
     }
 
     private void assignTrainingLoadouts(Set<Terminator> spawnedBots) {
@@ -564,6 +615,13 @@ public class IntelligenceAgent {
             }
             return MOVEMENT_CONTROLLER;
         }
+    }
+
+    public interface MovementBrainSaveSink {
+        MovementBrainPersistence.SaveFeedback save(
+                MovementNetwork network,
+                MovementBrainPersistence.TrainingMetadata metadata
+        );
     }
 
     private static final class MovementFitness {
