@@ -14,6 +14,7 @@ public final class CombatState {
     private int phaseTicks = 0;
     private Vector chargeDirection;
     private double phaseStartY = Double.NaN;
+    private int maceAirborneGroundTicks = 0;
 
     public Phase getPhase() {
         return phase;
@@ -23,6 +24,7 @@ public final class CombatState {
         this.phase = phase;
         this.phaseTicks = 0;
         this.phaseStartY = Double.NaN;
+        this.maceAirborneGroundTicks = 0;
     }
 
     public int tickPhase() {
@@ -49,10 +51,19 @@ public final class CombatState {
         this.phaseStartY = phaseStartY;
     }
 
+    public int tickMaceAirborneGroundTicks() {
+        return ++maceAirborneGroundTicks;
+    }
+
+    public void clearMaceAirborneGroundTicks() {
+        maceAirborneGroundTicks = 0;
+    }
+
     public void reset() {
         phase = Phase.IDLE;
         phaseTicks = 0;
         chargeDirection = null;
         phaseStartY = Double.NaN;
+        maceAirborneGroundTicks = 0;
     }
 }
