@@ -1,7 +1,5 @@
 ai:
   movement-network:
-    # Disabled by default for normal spawned bots; /ai reinforcement intentionally
-    # starts movement-controller training unless legacy mode is requested.
     enabled: false
     mode: movement-controller
     tick-rate: 1
@@ -30,64 +28,61 @@ ai:
     max-training-ticks: 6000
 
     fitness-weights:
-      # Combat outcome weights. "kill" preserves the old damage-dealt behavior;
-      # damage-dealt-per-health is actual HP removed during the round.
-      kill: 275.0
-      damage-dealt-per-health: 18.0
-      health-remaining: 12.0
-      sword-damage: 2.0
-      axe-damage: 5.0
-      mace-damage: 8.0
-      trident-damage: 4.0
-      spear-damage: 6.0
-      projectile-damage: 3.0
-      explosive-damage: 1.0
+      kill: 45.0
+      damage-dealt-per-health: 2.5
+      health-remaining: 2.0
+      sword-damage: 1.2
+      axe-damage: 1.5
+      mace-damage: 2.0
+      trident-damage: 1.2
+      spear-damage: 1.5
+      projectile-damage: 0.6
+      explosive-damage: 0.0
 
-      # Movement cooperation weights.
-      range-control: 300.0
-      range-urgency: 220.0
-      crit-setup: 75.0
-      sprint-hit: 45.0
-      hold-position: 35.0
-      strafing-circling: 90.0
-      circling: 90.0
-      retreat: 70.0
-      survival: 0.25
-      damage-taken-penalty: 4.0
-      stuck-penalty: 45.0
-      fallback-penalty: 35.0
-      invalid-output-penalty: 35.0
-      oscillation-penalty: 12.0
-      jump-spam-penalty: 180.0
-      sprint-spam-penalty: 120.0
-      hold-violation-penalty: 85.0
+      range-control: 280.0
+      range-urgency: 210.0
+      crit-setup: 85.0
+      sprint-hit: 55.0
+      hold-position: 25.0
+      circling: 125.0
+      retreat: 75.0
+      survival: 0.08
+      damage-taken-penalty: 4.5
+      stuck-penalty: 75.0
+      fallback-penalty: 60.0
+      oscillation-penalty: 20.0
+      jump-spam-penalty: 210.0
+      sprint-spam-penalty: 140.0
+      hold-violation-penalty: 105.0
 
     loadouts:
       pool:
         - sword
+        - axe
+        - smp
+        - pot
         - mace
+        - spear
         - trident
         - windcharge
         - skydiver
         - hybrid
+        - vanilla
         - crystalpvp
-        - anchorbomb
         - pvp
-        - axe
-        - smp
-        - pot
-        - spear
+        - anchorbomb
       weights:
-        sword: 1
-        mace: 1
-        trident: 1
-        windcharge: 1
-        skydiver: 1
-        hybrid: 1
-        crystalpvp: 1
-        anchorbomb: 1
-        pvp: 1
-        axe: 1
-        smp: 1
-        pot: 1
-        spear: 1
+        sword: 12
+        axe: 12
+        smp: 12
+        pot: 10
+        mace: 10
+        spear: 8
+        trident: 8
+        windcharge: 5
+        skydiver: 4
+        hybrid: 5
+        vanilla: 4
+        crystalpvp: 4
+        pvp: 3
+        anchorbomb: 3
