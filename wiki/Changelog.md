@@ -47,107 +47,80 @@
 
 ### Notes
 
-- Mixed movement training records per-family telemetry but updates
-  `general_fallback`.
+- Initial mixed movement training recorded per-family telemetry but updated `general_fallback`; this was superseded by 5.2.2, which trains eligible specialist families from the mixed loadout population.
 - Curriculum mode updates the configured `ai.training.curriculum-family` brain.
-- Live evaluation metrics require an arena runner; the current evaluation export
-  initializes and reports route/fallback/schema state.
+- Live evaluation metrics require an arena runner; the current evaluation export initializes and reports route/fallback/schema state.
 
-## 5.1.1 — Combat Reliability + Movement Neural Network
+## 5.1.1 - Combat Reliability + Movement Neural Network
 
 See [Release Notes 5.1.1](Release-Notes-5.1.1) for full details.
 
 ### Added
 
-**Combat Reliability (Issue #6)**
-- Vanilla attack ordering fix — `Bot.attack()` calls vanilla attack before swing/punch to prevent charge reset.
-- Charge-aware planning — CombatDirector waits for full attack charge before committing to attacks.
+Combat reliability:
+
+- Vanilla attack ordering fix: `Bot.attack()` calls vanilla attack before swing/punch to prevent charge reset.
+- Charge-aware planning: CombatDirector waits for full attack charge before committing to attacks.
 - Mace recharge planning with gravity-aware airtime tracking.
 - Mace airborne tracking with ground clip tolerance and velocity-aware horizontal damping.
-- Sweep instrumentation and telemetry (sweep-check, sweep-skip).
+- Sweep instrumentation and telemetry.
 - Combat telemetry fields: `critPred`, `sweepPred`, `chargeAtVanillaAttack`, `chargeAfterVanillaAttack`, `targetHp`, `targetHpDelta`.
 - `/bot combatdebug` command for per-bot combat trace logging.
 
-**Movement Neural Network (Issue #7)**
-- Movement-only neural network — controls footwork (strafing, spacing, sprint/jump timing, approach/retreat). Does **not** control combat.
-- CombatDirector.plan() / execute() split with CombatIntent / MovementState coupling.
-- 37-value MovementInput schema, 8-value MovementOutput schema.
+Movement neural network:
+
+- Movement-only neural network controlling footwork. It does **not** control combat.
+- `CombatDirector.plan()` / `execute()` split with `CombatIntent` / `MovementState` coupling.
+- 37-value `MovementInput` schema and 8-value `MovementOutput` schema.
 - MovementOutputApplier with threshold-based movement decisions.
-- In-JVM genetic algorithm: tournament selection, uniform crossover, adaptive Gaussian mutation, elite preservation.
-- Configurable fitness scoring with 17 weighted factors.
-- Training loadout mixing with weighted random pool.
-- Brain persistence: `brain.json` with schema validation, safe fallback, auto-backup on reset.
+- In-JVM genetic algorithm with tournament selection, uniform crossover, adaptive Gaussian mutation, and elite preservation.
+- Brain persistence with schema validation, safe fallback, and backups.
 - `/ai brain <status|load|save|reset>` commands.
 - `/ai movement` command for spawning movement-controller bots.
-- `/ai reinforcement` now accepts `movement-controller` (default) or `legacy` mode.
+- `/ai reinforcement` accepts movement-controller or `legacy` mode.
 
-**Loadouts**
+Loadouts:
+
 - New loadouts: `vanilla`, `axe`, `smp`, `pot`, `spear`.
-- `/bot loadoutmix` command for distributing loadouts across bots.
+- `/bot loadoutmix` command for distributing loadouts across live bots.
 - Loadout mix presets: `alltypes`, `core`, `problem`.
-
-**Configuration**
-- Full `ai.movement-network` config section (mode, shape, fallback, brain path, autosave, debug).
-- Full `ai.training` config section (population, generations, GA parameters, adaptive mutation).
-- `ai.training.fitness-weights` with 17 configurable factors.
-- `ai.training.loadouts` with weighted pool configuration.
-
-### Changed
-
-- Training mode defaults to `movement-controller` (NN handles movement, Director handles combat) instead of legacy full-replacement.
-- CombatDirector split into `plan()` and `execute()` phases for movement NN integration.
 
 ### Fixed
 
-- Bots no longer waste swings on uncharged attacks (charge-aware planning).
-- Vanilla attack damage calculation now runs before swing/punch animation (correct ordering).
+- Bots no longer waste swings on uncharged attacks.
+- Vanilla attack damage calculation now runs before swing/punch animation.
 - Mace smash no longer commits when airtime is insufficient for recharge.
 - Mace airborne tracking no longer overshoots on moving targets.
 
 ### Known limitations
 
-- Changing `hidden-layers` after training invalidates saved brains.
+- Changing the movement layer shape after training invalidates saved brains.
 - Training with large populations impacts server TPS.
-- Movement NN is disabled by default for normal bots.
+- Movement-bank bots must be spawned with `/ai movement`; normal `/bot create` bots use the legacy movement path.
 
----
-
-## Unreleased (pre-5.1.1) — Combat + Inventory + Presets Overhaul
+## Pre-5.1.1 - Combat + Inventory + Presets Overhaul
 
 ### Added
 
-**Combat AI**
-- Weapon-aware `CombatDirector` that picks the right behavior per tick based on inventory, distance, cooldowns, and dimension.
+- Weapon-aware `CombatDirector` that picks behavior by inventory, distance, cooldown, and dimension.
 - Melee, Mace Smash, Trident Momentum Throw, Wind Charge, Ender Pearl, Crystal PvP, Anchor Bomb, Cobweb, Elytra Glide, Totem Swap, and Heal behaviors.
-- Neural-network bots bypass the director to preserve deterministic fitness.
-
-**Inventory**
 - Full per-bot inventory: 9 hotbar + 27 storage + 4 armor + 1 offhand.
 - `/bot inventory <name>` GUI editor.
 - `/bot give`, `/bot armor`, `/bot weapons` commands.
-
-**Loadouts**
 - Built-in loadouts: `sword`, `mace`, `trident`, `windcharge`, `skydiver`, `hybrid`, `crystalpvp`, `anchorbomb`, `pvp`, `clear`.
-- `/bot loadout <name> [bot]`.
-
-**Presets**
 - YAML preset system with full NBT round-trip.
-- `/bot preset save`, `apply`, `list`, `delete`.
-
-**Permissions**
-- `terminatorplus.admin`, `terminatorplus.manage`, `terminatorplus.*`.
-
-**API**
-- `Terminator.combatTick(LivingEntity)`.
-- `Terminator.getDimension()`.
+- Permissions: `terminatorplus.admin`, `terminatorplus.manage`, `terminatorplus.*`.
+- API calls: `Terminator.combatTick(LivingEntity)` and `Terminator.getDimension()`.
 
 ### Changed
-- Normal bots use vanilla damage (real crits, shields, enchantments).
+
+- Normal bots use vanilla damage, including real crits, shields, and enchantments.
 - `/bot loadout` is per-bot when a name is passed.
 - `/bot give` accepts `[bot] [slot]` for targeted placement.
 
 ### Fixed
-- Hotbar slot sync when combat director switches weapons.
+
+- Hotbar slot sync when CombatDirector switches weapons.
 - Fall damage stacking on mace smash.
 
 ## Previous versions

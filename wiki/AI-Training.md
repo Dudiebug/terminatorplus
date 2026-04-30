@@ -21,7 +21,13 @@ Examples:
 
 If `[round-minutes]` is omitted, the command uses
 `ai.training.max-round-minutes` from `config.yml`. The default is `1`; set it to
-`0` for unlimited rounds.
+`0` for unlimited rounds. Optional command arguments are positional, so pass
+`movement` or an options string in the mode slot when you want to override only
+the minute cap:
+
+```text
+/ai reinforcement 120 TrainBot Steve movement 5
+```
 
 Modes:
 
@@ -74,8 +80,10 @@ Curriculum mixes are configured under `ai.training.loadout-mixes`, including
 `melee_curriculum`, `mace_curriculum`, `trident_curriculum`,
 `mobility_curriculum`, and `explosive_survival_curriculum`.
 
-Mixed training ranks candidates by assigned loadout family and updates every
-eligible specialist brain represented in the round. Curriculum mode forces all
+Mixed training seeds each candidate from its assigned loadout family, ranks
+results by the movement family that actually produced route samples, and updates
+every eligible specialist brain represented in the round. A family brain is not
+saved from unrelated survival or aggregate fitness. Curriculum mode forces all
 candidates to update the configured family brain.
 
 ## Reward Profiles

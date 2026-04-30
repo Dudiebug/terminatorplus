@@ -76,8 +76,9 @@ combat.
 
 `/ai reinforcement ...` defaults to movement-controller training, automatically
 samples weighted named loadouts for training bots, and records assigned
-loadout/family telemetry. Use `legacy` explicitly for the old full-replacement
-training pipeline.
+loadout/family telemetry. With the default config, each generation is capped at
+1 minute by `ai.training.max-round-minutes`. Use `legacy` explicitly for the old
+full-replacement training pipeline.
 
 ## Training Mixes
 
@@ -107,9 +108,11 @@ Curriculum mixes exist for `melee`, `mace`, `trident`, `mobility`, and
 `explosive_survival`. Set `ai.training.curriculum-family` to train a specialist
 family. Leave it as `general_fallback` for mixed training.
 
-Mixed training ranks candidates by assigned loadout family and updates every
-eligible specialist brain represented in the round. Curriculum mode forces all
-candidates to update the configured family brain.
+Mixed training seeds each bot from its assigned loadout family, scores the bot
+with the reward profile for the movement family it actually used, and updates
+every eligible specialist brain represented in the round. A specialist is saved
+only when matching route samples were captured for that family. Curriculum mode
+forces all candidates to update the configured family brain.
 
 ## Reward Profiles
 
@@ -196,6 +199,7 @@ ai:
       legacy-import-behavior: import-compatible-or-reset
       debug-logging: false
   training:
+    max-round-minutes: 1
     loadout-mix: movement_balanced
     curriculum-family: general_fallback
     loadout-mixes: {}

@@ -67,7 +67,10 @@ ai:
 
 `ai.training.max-round-minutes` caps each reinforcement generation round.
 The default is `1`; set it to `0` for no time limit. The optional
-`[round-minutes]` command argument overrides this value for one session.
+`[round-minutes]` command argument overrides this value for one session. Because
+the optional command arguments are positional, use `movement` or an options
+string in the mode slot when passing a minute override, such as
+`/ai reinforcement 120 TrainBot Steve movement 5`.
 
 `ai.training.loadout-mix` selects the automatic weighted loadout pool for
 movement training. The default keeps `pvp + crystalpvp + anchorbomb` at 8% total

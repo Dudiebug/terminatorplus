@@ -1,6 +1,6 @@
 # TerminatorPlus Wiki
 
-TerminatorPlus is a Paper plugin that spawns server-side player bots with combat
+TerminatorPlus 5.2.x is a Paper 26.1.2 plugin that spawns server-side player bots with combat
 AI, editable inventories, movement neural networks, a movement-brain bank, and a
 preset system. Each bot is an NMS `ServerPlayer` subclass: it takes and deals
 real damage, uses real items, and reacts through vanilla mechanics.
@@ -35,6 +35,10 @@ real damage, uses real items, and reacts through vanilla mechanics.
 - Legacy `ai/brain.json` imports as `general_fallback` when compatible.
 - `/ai reinforcement ...` defaults to movement training and automatically samples weighted loadouts from
   `movement_balanced` or curriculum mixes.
+- Mixed reinforcement trains eligible specialist brains from the same population
+  when those bots captured matching route samples.
+- Training rounds default to a 1-minute cap through
+  `ai.training.max-round-minutes`.
 - `/ai evaluate` exports repeatable seed/scenario reports with route/family
   distributions and fallback state.
 

@@ -19,9 +19,9 @@ The `BotManager` is the root object for spawning and registry.
 ```java
 Terminator bot = bots.createBot(
     location,              // Location
-    "MyBot",               // name (also the Mojang skin lookup)
-    null,                  // skin (null = look up by name)
-    null                   // signature (null = look up by name)
+    "MyBot",               // name and default skin lookup
+    null,                  // skin, null means look up by name
+    null                   // signature, null means look up by name
 );
 ```
 
@@ -31,10 +31,10 @@ Overloads accept custom skin/signature pairs, multi-spawn counts, and pre-built 
 
 ```java
 bots.remove(bot);
-bots.reset(); // wipe all
+bots.reset();
 ```
 
-## Inspecting a bot
+## Inspecting a Bot
 
 The `Terminator` interface exposes the subset of `ServerPlayer` behavior safe to call from the main thread:
 
@@ -61,7 +61,7 @@ bot.attemptBlockPlace(loc, Material.OBSIDIAN, false);
 bot.setShield(true);
 ```
 
-## Driving the combat director
+## Driving the Combat Director
 
 ```java
 boolean handled = bot.combatTick(target);
@@ -72,7 +72,7 @@ boolean handled = bot.combatTick(target);
 
 This mirrors the internal contract: use the return value to decide whether to skip your custom pipeline.
 
-## Inventory helpers
+## Inventory Helpers
 
 ```java
 bot.setItem(new ItemStack(Material.NETHERITE_SWORD), EquipmentSlot.HAND);
@@ -80,13 +80,13 @@ bot.setItemOffhand(new ItemStack(Material.SHIELD));
 bot.setDefaultItem(new ItemStack(Material.STICK));
 ```
 
-For full per-slot control (hotbar 0--8, storage 9--35, armor, offhand), cast to the implementation's `Bot` class and call `getBotInventory()`. This is an internal API and may change.
+For full per-slot control over hotbar, storage, armor, and offhand, cast to the implementation's `Bot` class and call `getBotInventory()`. This is an internal API and may change.
 
 ## Events
 
 | Event | Fires when |
 | --- | --- |
-| `BotFallDamageEvent` | A bot is about to take fall damage (cancellable) |
+| `BotFallDamageEvent` | A bot is about to take fall damage, cancellable |
 | `BotDamageByPlayerEvent` | A player attacks a bot |
 | `BotDeathEvent` | A bot dies from any source |
 | `BotKilledByPlayerEvent` | A bot is killed specifically by a player |
@@ -102,30 +102,34 @@ public void onBotKilled(BotKilledByPlayerEvent e) {
 }
 ```
 
-## AI training
+## AI Training
 
 The training pipeline is exposed via `AIManager`. In practice, most consumers use the `/ai` command surface. Scripting training sessions programmatically requires the plugin jar as a runtime dependency.
 
-## Movement network classes (API module)
+## Movement Network Classes
 
 The movement network architecture lives in the API module under `net.nuggetmc.tplus.api.agent.legacyagent.ai.movement`:
 
 | Class | Purpose |
 | --- | --- |
 | `MovementNetwork` | Feed-forward network with evaluate/validate/flatten methods |
-| `MovementNetworkShape` | Constants: INPUT_COUNT=30, OUTPUT_COUNT=8, DEFAULT_LAYERS |
+| `MovementNetworkShape` | Constants: INPUT_COUNT=37, OUTPUT_COUNT=8, DEFAULT_LAYERS |
 | `MovementNetworkGenetics` | GA operations: crossover, mutation, tournament selection |
 | `MovementTrainingConfig` | Config loading from plugin YAML |
-| `MovementTrainingSnapshot` | Read-only training signal for fitness |
-| `MovementBrainPersistence` | Save/load/reset brain JSON files |
+| `MovementTrainingSnapshot` | Read-only movement signal captured on the server thread for fitness |
+| `CombatTrainingSnapshot` | Read-only combat/loadout signal captured on the server thread for fitness |
+| `MovementLoadoutSampler` | Weighted training loadout sampler for named mixes |
+| `MovementRewardProfile` | Per-family reward scoring |
+| `MovementBrainBank` | Runtime family router and in-memory bank |
+| `MovementBrainPersistence` | Manifest plus per-family brain save/load/reset |
 
 These are public classes, but the movement system is still evolving. Pin to a specific version if you depend on them directly.
 
 ## Compatibility
 
-- API artifact is built against Paper 26.1.2 / Paper 1.21.11 with Java 25.
-- Internal changes happen behind the `Terminator` interface — breaking API changes are called out in the [Changelog](Changelog).
-- Bots are real `ServerPlayer`s, so standard Bukkit APIs (`bot.getBukkitEntity()`) mostly work. Prefer `Terminator` methods for stability.
+- Current 5.2.x jars are built for Paper 26.1.2 with Java 25.
+- Internal changes happen behind the `Terminator` interface; breaking API changes are called out in the [Changelog](Changelog).
+- Bots are real `ServerPlayer`s, so standard Bukkit APIs such as `bot.getBukkitEntity()` mostly work. Prefer `Terminator` methods for stability.
 
 ## Source
 

@@ -90,14 +90,16 @@ Toggle combat trace logging for specific bots or all bots. Shows telemetry field
 
 ## AI Training (`/ai`)
 
-### `/ai reinforcement <population-size> <name> [skin] [mode-or-options]`
+### `/ai reinforcement <population-size> <name> [skin] [mode-or-options] [round-minutes]`
 Begin a training session. Must be run as a player.
 
 - Empty mode defaults to **movement-controller** training.
-- `mode` may be `movement`, `movement-controller`, or `legacy`.
+- `mode` may be `movement`, `movement-controller`, `movement_controller`, or `legacy`.
 - In **movement-controller** mode, the NN controls movement only and the CombatDirector handles combat.
 - In **legacy** mode, the NN fully replaces both movement and combat (the original training pipeline).
 - Movement mode automatically samples weighted training loadouts from `ai.training.loadout-mix`.
+- With the default config, each generation round is capped at `1` minute. Pass `[round-minutes]` to override for one session, or set `ai.training.max-round-minutes: 0` for unlimited rounds. Optional arguments are positional, so use `movement` or an options string in the mode slot when passing a minute override.
+- Mixed movement training ranks bots by the family they actually produced route samples for and autosaves eligible specialist brains, subject to `save-only-improved-brain`.
 - Use options such as `family=mace:mix=mace_curriculum` or `movement:family=mace:mix=mace_curriculum` for curriculum runs.
 
 ### `/ai random <amount> <name> [skin] [loc]`

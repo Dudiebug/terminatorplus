@@ -1,106 +1,104 @@
-# Release Notes — 5.1.1
+# Release Notes - 5.1.1
 
-## Combat Reliability (Issue #6)
+This is the historical release note for the 5.1.1 combat reliability and first movement-network release. For the current 5.2.x movement brain-bank behavior, see [Movement Brain Bank](Movement-Brain-Bank), [AI Training](AI-Training), and [Configuration](Configuration).
 
-### Vanilla attack ordering fix
-`Bot.attack()` now calls `getBukkitEntity().attack(entity)` before punch/swing animations. Previously, swing/punch could reset the attack charge before the damage calculation, causing ghost hits where the animation plays but no damage lands.
+## Combat Reliability
 
-### Charge-aware planning
-The CombatDirector now checks `BotCombatTiming.chargeReady()` before committing to attack branches. Bots wait for full attack charge (0.95) before swinging, preventing low-damage spam and swing-block cycling.
+### Vanilla Attack Ordering Fix
 
-### Mace recharge planning
-The mace smash branch accounts for custom gravity and required airtime. The Director won't commit to a mace smash unless the bot can realistically complete the jump-fall cycle and reach smash-ready charge (0.848).
+`Bot.attack()` calls `getBukkitEntity().attack(entity)` before punch/swing animations. Previously, swing/punch could reset the attack charge before the damage calculation, causing ghost hits where the animation plays but no damage lands.
 
-### Mace airborne tracking
+### Charge-Aware Planning
+
+The CombatDirector checks `BotCombatTiming.chargeReady()` before committing to attack branches. Bots wait for full attack charge before swinging, preventing low-damage spam and swing-block cycling.
+
+### Mace Recharge Planning
+
+The mace smash branch accounts for custom gravity and required airtime. The Director does not commit to a mace smash unless the bot can realistically complete the jump-fall cycle and reach smash-ready charge.
+
+### Mace Airborne Tracking
+
 When mid-mace-fall, tracking uses:
+
 - Ground clip tolerance to avoid premature landing detection.
 - Velocity-aware horizontal damping to stay centered on moving targets without overshooting.
 
-### Sweep instrumentation
-Added sweep-check and sweep-skip telemetry to the combat trace system.
+### Sweep Instrumentation
 
-### Combat telemetry
-Preserved and documented debug fields: `critPred`, `sweepPred`, `chargeAtVanillaAttack`, `chargeAfterVanillaAttack`, `targetHp`, `targetHpDelta`. Enable with `/bot combatdebug`.
+Sweep-check and sweep-skip telemetry were added to the combat trace system.
 
----
+### Combat Telemetry
 
-## Movement Neural Network Overhaul (Issue #7)
+Debug fields include `critPred`, `sweepPred`, `chargeAtVanillaAttack`, `chargeAfterVanillaAttack`, `targetHp`, and `targetHpDelta`. Enable with `/bot combatdebug`.
 
-### Movement-only network
-The new movement-controller neural network handles footwork — strafing, spacing, sprint/jump timing, approach/retreat, facing adjustment, and hold-position cooperation. **It does not control combat.** The CombatDirector retains full authority over weapon selection, attack timing, and execution.
+## Movement Neural Network Overhaul
 
-### CombatIntent / MovementState coupling
-- **CombatDirector.plan()** produces a CombatIntent (desired range, urgency, crit/sprint/hold hints).
-- The current NN receives CombatIntent as part of its 37-value input.
+### Movement-Only Network
+
+The movement-controller neural network handles footwork: strafing, spacing, sprint/jump timing, approach/retreat, facing adjustment, and hold-position cooperation. **It does not control combat.** CombatDirector retains full authority over weapon selection, attack timing, and execution.
+
+### CombatIntent / MovementState Coupling
+
+- `CombatDirector.plan()` produces a CombatIntent.
+- The NN receives CombatIntent as part of its input.
 - After movement, MovementOutputApplier updates MovementState.
-- **CombatDirector.execute()** reads MovementState to validate timing windows before attacking.
+- `CombatDirector.execute()` reads MovementState to validate timing windows before attacking.
 
-### Network architecture
-- 37-value input (position, velocity, facing, combat intent, one-hot branch-family fields)
-- Configurable hidden layers (default: [32, 24])
-- 8-value output (forward, strafe, jump, sprint, retreat, facing, urgency, hold)
-- tanh activation
+### Network Architecture
 
-### In-JVM GA training
-- Tournament selection (size 5), uniform crossover, Gaussian mutation with adaptive cooling.
-- Elite preservation (top 6 networks per generation).
-- Configurable population (10--240, default 120).
-- All training runs in the JVM — no Python, ONNX, GPU, or external tooling.
+- 37-value input in current 5.2.x builds.
+- 8-value output: forward, strafe, jump, sprint, retreat, facing, urgency, hold.
+- Configurable hidden layers.
+- `tanh` activation.
 
-### Loadout mixing
-Each training generation draws from a weighted loadout pool (all 13 combat loadouts by default). This generalizes movement learning across weapon types.
+### In-JVM GA Training
 
-### Fitness scoring
-17 weighted fitness factors (configurable): range-control, range-urgency, crit-setup, sprint-hit, hold-position, circling, retreat, survival, damage-dealt, plus penalties for stuck movement, oscillation, jump/sprint spam, fallback activation, and hold violations.
+- Tournament selection, uniform crossover, Gaussian mutation, and elite preservation.
+- Configurable population.
+- All training runs in the JVM; no Python, ONNX, GPU, or external tooling.
 
-### Brain persistence
-- Trained networks save to `brain.json` with schema version, shape, weights, biases, and training metadata.
-- Commands: `/ai brain status`, `/ai brain save`, `/ai brain load`, `/ai brain reset`.
-- Shape and schema validation on load. Corrupt or incompatible files trigger safe fallback — no crash.
-- Auto-backup on reset.
+### Loadout Mixing
 
-### New commands
-- `/ai brain <status|load|save|reset>` — manage persisted movement brains.
-- `/ai movement <amount> <name>` — spawn bots using the saved movement brain.
-- `/ai reinforcement ... [movement-controller|legacy]` — choose training mode (movement-controller is default).
-- `/bot loadoutmix <mix>` — distribute loadouts across bots.
-- `/bot combatdebug <name|all> <on|off>` — toggle combat trace logging.
+The first version used a weighted loadout pool. In 5.2.x this became the movement brain-bank loadout mix under `ai.training.loadout-mix` and `ai.training.loadout-mixes`, with mixed rounds training eligible specialist families.
 
-### Legacy compatibility
-- Legacy full-replacement NN mode remains available via `/ai reinforcement ... legacy`.
-- Non-NN bots (spawned via `/bot create`) are unaffected.
-- Legacy movement fallback is enabled by default.
+### Brain Persistence
 
----
+The first version used a single `brain.json`. In 5.2.x this became the manifest plus per-family bank under `ai/movement/`. Legacy compatible `ai/brain.json` files import as `general_fallback`.
 
-## New loadouts
+### Commands Introduced
+
+- `/ai brain <status|load|save|reset>` manages movement brains.
+- `/ai movement <amount> <name>` spawns bots using the saved movement bank.
+- `/ai reinforcement ... [movement-controller|legacy]` chooses training mode. In 5.2.x, movement-controller is the default when mode is omitted.
+- `/bot loadoutmix <mix>` distributes loadouts across live spawned bots.
+- `/bot combatdebug <name|all> <on|off>` toggles combat trace logging.
+
+## New Loadouts
 
 Added: `vanilla`, `axe`, `smp`, `pot`, `spear`.
 
 See [Loadouts](Loadouts) for details.
 
----
+## Configuration Notes
 
-## Configuration additions
+The 5.2.x config uses:
 
-New config sections under `ai`:
-- `movement-network` — network shape, mode, fallback, brain path, autosave, debug.
-- `training` — population, generations, GA parameters, adaptive mutation.
-- `training.fitness-weights` — 17 weighted fitness factors.
-- `training.loadouts` — weighted loadout pool for training.
+- `ai.movement` for movement-bank runtime settings.
+- `ai.movement.bank` for manifest/per-brain persistence settings.
+- `ai.training.max-round-minutes` for the reinforcement round cap.
+- `ai.training.loadout-mix` and `ai.training.loadout-mixes` for weighted training loadout selection.
+- `ai.training.curriculum-family` for focused specialist training.
 
-See [Configuration](Configuration) for the full reference.
-
----
+See [Configuration](Configuration) for the current full reference.
 
 ## Compatibility
 
-- Built against Paper 26.1.2 and Paper 1.21.11.
+- Current 5.2.x release jars target Paper 26.1.2 only.
 - Java 25.
-- Brain files from earlier versions are not compatible (different schema). Use `/ai brain reset` to start fresh.
+- Brain files from earlier versions may be incompatible. Use `/ai brain reset` to start fresh if validation fails.
 
-## Known cautions
+## Known Cautions
 
 - Training spawns many bots fighting simultaneously. Monitor server TPS and reduce population if needed.
-- Changing `hidden-layers` after training invalidates saved brains. Reset and retrain.
-- `/bot create` bots do not use the movement NN. Use `/ai movement` to spawn bots with the trained brain.
+- Changing movement layer shape after training invalidates saved brains. Reset and retrain.
+- `/bot create` bots do not use the movement bank. Use `/ai movement` to spawn bots with the trained movement bank.

@@ -2,8 +2,8 @@
 
 ## Version Mismatch
 
-The jar must match the target Paper branch, such as 26.1.2 or 1.21.11. Spigot
-and CraftBukkit are not supported.
+Current 5.2.x release jars target Paper 26.1.2 only. Spigot and CraftBukkit are
+not supported.
 
 ## Movement-Bank Bot Does Not Move
 
@@ -47,8 +47,11 @@ trident hit rate remain `null` until an arena runner records them.
 
 ## Training Causes Lag
 
-Training spawns many real `ServerPlayer` bots. Reduce population size, use a
-time limit argument, and run in a pre-generated arena.
+Training spawns many real `ServerPlayer` bots. Reduce population size, run in a
+pre-generated arena, and keep a round cap. The default config uses
+`ai.training.max-round-minutes: 1`; the final `/ai reinforcement` argument can
+override that for one session. Set the config value to `0` only when you really
+want unlimited rounds.
 
 ## Commands Not Found
 

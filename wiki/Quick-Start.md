@@ -30,7 +30,18 @@ movement path unless it was spawned by `/ai movement`.
 
 Movement training assigns weighted loadouts automatically from
 `ai.training.loadout-mix`. The default `movement_balanced` mix keeps crystal,
-anchor, and all-chaos kits low-weight while still sampling them.
+anchor, and all-chaos kits low-weight while still sampling them. You do not
+need to put `movement` in the command; empty mode already means
+movement-controller training.
+
+By default each generation round is capped at 1 minute by
+`ai.training.max-round-minutes`. Add a final minute value to override it for one
+session. Because the optional arguments are positional, keep `movement` or an
+options string in the mode slot when you pass a minute override:
+
+```text
+/ai reinforcement 120 TrainBot Steve movement 5
+```
 
 To train a specialist:
 
@@ -38,8 +49,9 @@ To train a specialist:
 /ai reinforcement 120 TrainBot Steve family=mace:mix=mace_curriculum
 ```
 
-Mixed mode updates every eligible family represented in the loadout mix.
-Curriculum mode focuses all candidates on the configured family brain.
+Mixed mode updates every eligible family represented in the loadout mix, but
+only from bots that captured matching route samples for that family. Curriculum
+mode focuses all candidates on the configured family brain.
 
 ## Spawn Movement-Bank Bots
 
