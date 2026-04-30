@@ -93,6 +93,11 @@ public class Bot extends ServerPlayer implements Terminator {
     private double trainingSpearDamage;
     private double trainingProjectileDamage;
     private double trainingExplosiveDamage;
+    private int trainingDirectDamageClassifications;
+    private int trainingHeldItemDamageClassifications;
+    private int trainingLoadoutFallbackDamageClassifications;
+    private String lastTrainingDamageBucket = "none";
+    private String lastTrainingDamageClassificationSource = "none";
     private byte groundTicks;
     private byte jumpTicks;
     private byte noFallTicks;
@@ -425,6 +430,7 @@ public class Bot extends ServerPlayer implements Terminator {
         return new CombatTrainingSnapshot(
                 true,
                 trainingLoadout,
+                CombatTrainingSnapshot.familyForLoadout(trainingLoadout),
                 trainingDamageDealt,
                 trainingDamageTaken,
                 trainingSwordDamage,
@@ -433,7 +439,12 @@ public class Bot extends ServerPlayer implements Terminator {
                 trainingTridentDamage,
                 trainingSpearDamage,
                 trainingProjectileDamage,
-                trainingExplosiveDamage
+                trainingExplosiveDamage,
+                trainingDirectDamageClassifications,
+                trainingHeldItemDamageClassifications,
+                trainingLoadoutFallbackDamageClassifications,
+                lastTrainingDamageBucket,
+                lastTrainingDamageClassificationSource
         );
     }
 
@@ -1137,7 +1148,8 @@ public class Bot extends ServerPlayer implements Terminator {
 
     private void recordTrainingDamageDealt(DamageSource source, Entity attacker, double amount) {
         trainingDamageDealt += amount;
-        switch (classifyTrainingDamage(source, attacker)) {
+        TrainingDamageClassification classification = classifyTrainingDamage(source, attacker);
+        switch (classification.bucket()) {
             case "sword" -> trainingSwordDamage += amount;
             case "axe" -> trainingAxeDamage += amount;
             case "mace" -> trainingMaceDamage += amount;
@@ -1148,34 +1160,75 @@ public class Bot extends ServerPlayer implements Terminator {
             default -> {
             }
         }
+        switch (classification.classificationSource()) {
+            case "direct" -> trainingDirectDamageClassifications++;
+            case "held" -> trainingHeldItemDamageClassifications++;
+            case "loadout-fallback" -> trainingLoadoutFallbackDamageClassifications++;
+            default -> {
+            }
+        }
+        lastTrainingDamageBucket = classification.bucket();
+        lastTrainingDamageClassificationSource = classification.classificationSource();
+        if (CombatDebugger.isOn(this)) {
+            CombatDebugger.trainingDamage(this, amount, classification.bucket(), classification.classificationSource(),
+                    classification.directType(), classification.heldType(), trainingLoadout);
+        }
     }
 
-    private String classifyTrainingDamage(DamageSource source, Entity attacker) {
+    private TrainingDamageClassification classifyTrainingDamage(DamageSource source, Entity attacker) {
         Entity direct = source == null ? null : source.getDirectEntity();
         String directType = direct == null ? "" : direct.getBukkitEntity().getType().name();
-        if (directType.contains("TRIDENT")) return tridentTrainingType();
+        if (directType.contains("TRIDENT")) return trainingDamage("trident", "direct", directType, heldType(attacker));
         if (directType.contains("CRYSTAL") || directType.contains("TNT") || directType.contains("EXPLOSIVE")) {
-            return "explosive";
+            return trainingDamage("explosive", "direct", directType, heldType(attacker));
         }
         if (directType.contains("ARROW") || directType.contains("FIREBALL") || directType.contains("WIND_CHARGE")) {
-            return "projectile";
+            return trainingDamage("projectile", "direct", directType, heldType(attacker));
         }
 
-        Material held = Material.AIR;
-        if (attacker instanceof ServerPlayer player) {
-            held = player.getBukkitEntity().getInventory().getItemInMainHand().getType();
-        }
-        if (held == Material.MACE) return "mace";
-        if (held == Material.TRIDENT) return tridentTrainingType();
+        Material held = heldMaterial(attacker);
+        if (held == Material.MACE) return trainingDamage("mace", "held", directType, held.name());
+        if (held == Material.TRIDENT) return trainingDamage(tridentTrainingType(), tridentClassificationSource(), directType, held.name());
         String name = held.name();
-        if (name.endsWith("_SWORD")) return "sword";
-        if (name.endsWith("_AXE")) return "axe";
-        return "other";
+        if (name.endsWith("_SWORD")) return trainingDamage("sword", "held", directType, held.name());
+        if (name.endsWith("_AXE")) return trainingDamage("axe", "held", directType, held.name());
+        return trainingDamage("other", "unknown", directType, held.name());
     }
 
     private String tridentTrainingType() {
         return "spear".equals(trainingLoadout) ? "spear" : "trident";
     }
+
+    private String tridentClassificationSource() {
+        return "spear".equals(trainingLoadout) ? "loadout-fallback" : "held";
+    }
+
+    private static Material heldMaterial(Entity attacker) {
+        if (attacker instanceof ServerPlayer player) {
+            return player.getBukkitEntity().getInventory().getItemInMainHand().getType();
+        }
+        return Material.AIR;
+    }
+
+    private static String heldType(Entity attacker) {
+        return heldMaterial(attacker).name();
+    }
+
+    private static TrainingDamageClassification trainingDamage(String bucket, String classificationSource, String directType, String heldType) {
+        return new TrainingDamageClassification(
+                bucket == null || bucket.isBlank() ? "other" : bucket,
+                classificationSource == null || classificationSource.isBlank() ? "unknown" : classificationSource,
+                directType == null || directType.isBlank() ? "none" : directType,
+                heldType == null || heldType.isBlank() ? "AIR" : heldType
+        );
+    }
+
+    private record TrainingDamageClassification(
+            String bucket,
+            String classificationSource,
+            String directType,
+            String heldType
+    ) {}
 
     private void kb(Location loc1, Location loc2, Entity attacker) {
         Vector vel = loc1.toVector().subtract(loc2.toVector()).setY(0).normalize().multiply(0.3);

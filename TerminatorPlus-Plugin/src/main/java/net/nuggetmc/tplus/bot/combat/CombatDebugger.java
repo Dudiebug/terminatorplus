@@ -107,6 +107,25 @@ public final class CombatDebugger {
         emit(bot, "weapon-pick", "w=" + weapon + " dist=" + fmt(distance) + " cdReady=" + cdReady);
     }
 
+    public static void trainingDamage(
+            Bot bot,
+            double amount,
+            String bucket,
+            String classificationSource,
+            String directType,
+            String heldType,
+            String loadout
+    ) {
+        if (!isOn(bot)) return;
+        emit(bot, "training-damage",
+                "amount=" + fmt(amount)
+                        + " bucket=" + sanitizeToken(bucket)
+                        + " classSource=" + sanitizeToken(classificationSource)
+                        + " direct=" + sanitizeToken(directType)
+                        + " held=" + sanitizeToken(heldType)
+                        + " loadout=" + sanitizeToken(loadout));
+    }
+
     public static void dirNoop(Bot bot, double distance, String reason, String branchAttempted) {
         if (!isOn(bot)) return;
         emit(bot, "dir-noop",

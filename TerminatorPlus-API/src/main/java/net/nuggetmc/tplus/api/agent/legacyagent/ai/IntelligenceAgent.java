@@ -361,9 +361,11 @@ public class IntelligenceAgent {
     private void finishMovementGeneration() {
         List<MovementNetworkGenetics.ScoredNetwork> scored = new ArrayList<>();
         HashMap<Terminator, Integer> displayValues = new HashMap<>();
+        Map<Terminator, Double> fitnessValues = new HashMap<>();
 
         for (Terminator bot : bots.values()) {
             double fitness = movementFitness(bot);
+            fitnessValues.put(bot, fitness);
             displayValues.put(bot, (int) Math.round(fitness));
             NeuralNetwork network = bot.getNeuralNetwork();
             MovementNetwork movementNetwork = network == null ? null : network.movementNetwork();
@@ -389,10 +391,12 @@ public class IntelligenceAgent {
         if (!scored.isEmpty()) {
             double best = scored.stream().mapToDouble(MovementNetworkGenetics.ScoredNetwork::fitness).max().orElse(0.0);
             double average = scored.stream().mapToDouble(MovementNetworkGenetics.ScoredNetwork::fitness).average().orElse(0.0);
+            double worst = scored.stream().mapToDouble(MovementNetworkGenetics.ScoredNetwork::fitness).min().orElse(0.0);
             print("Movement generation " + ChatColor.RED + generation + ChatColor.RESET
                     + " best=" + ChatColor.YELLOW + MathUtils.round2Dec(best)
                     + ChatColor.RESET + " avg=" + ChatColor.YELLOW + MathUtils.round2Dec(average)
                     + ChatColor.RESET + ".");
+            printMovementGenerationTelemetry(fitnessValues, best, average, worst);
             if (movementBrainSaveSink != null) {
                 MovementNetworkGenetics.ScoredNetwork winner = scored.stream()
                         .max(Comparator.comparingDouble(MovementNetworkGenetics.ScoredNetwork::fitness))
@@ -497,6 +501,100 @@ public class IntelligenceAgent {
             fitness -= Math.max(0.0, bot.getBotMaxHealth() - bot.getBotHealth()) * weights.damageTakenPenalty();
         }
         return fitness;
+    }
+
+    private void printMovementGenerationTelemetry(
+            Map<Terminator, Double> fitnessValues,
+            double best,
+            double average,
+            double worst
+    ) {
+        List<Map.Entry<Terminator, Double>> ranked = new ArrayList<>(fitnessValues.entrySet());
+        ranked.sort(Map.Entry.<Terminator, Double>comparingByValue().reversed());
+
+        Map<String, Integer> topLoadouts = new LinkedHashMap<>();
+        Map<String, Integer> topFamilies = new LinkedHashMap<>();
+        int topLimit = Math.min(10, ranked.size());
+        int explosiveTop = 0;
+        for (int i = 0; i < topLimit; i++) {
+            CombatTrainingSnapshot combat = ranked.get(i).getKey().combatTrainingSnapshot();
+            String loadout = combat.loadout().isBlank() ? "unknown" : combat.loadout();
+            String family = combat.loadoutFamily().isBlank()
+                    ? CombatTrainingSnapshot.familyForLoadout(loadout)
+                    : combat.loadoutFamily();
+            topLoadouts.merge(loadout, 1, Integer::sum);
+            topFamilies.merge(family, 1, Integer::sum);
+            if ("explosive".equals(family)) explosiveTop++;
+        }
+
+        DamageTotals damage = new DamageTotals();
+        MovementTelemetryTotals movement = new MovementTelemetryTotals();
+        Map<String, Integer> lastBuckets = new LinkedHashMap<>();
+        for (Terminator bot : bots.values()) {
+            CombatTrainingSnapshot combat = bot.combatTrainingSnapshot();
+            damage.add(combat);
+            if (combat.available() && !combat.lastDamageBucket().isBlank() && !"none".equals(combat.lastDamageBucket())) {
+                lastBuckets.merge(combat.lastDamageBucket(), 1, Integer::sum);
+            }
+            MovementFitness stats = movementFitness.get(bot);
+            if (stats != null) {
+                movement.add(stats.diagnostics(movementConfig.fitnessWeights()));
+            }
+        }
+
+        String telemetry = "Movement telemetry: gen=" + generation
+                + " fitness[best=" + fmt(best)
+                + ",avg=" + fmt(average)
+                + ",worst=" + fmt(worst) + "]"
+                + " top10Loadouts[" + describeCompactCounts(topLoadouts) + "]"
+                + " top10Families[" + describeCompactCounts(topFamilies) + "]"
+                + " top10Explosive=" + explosiveTop + "/" + Math.max(1, topLimit)
+                + "(" + pct(topLimit == 0 ? 0.0 : explosiveTop / (double) topLimit) + ")"
+                + " damage[dealt=" + fmt(damage.dealt)
+                + ",taken=" + fmt(damage.taken)
+                + ",sword=" + fmt(damage.sword)
+                + ",axe=" + fmt(damage.axe)
+                + ",mace=" + fmt(damage.mace)
+                + ",trident=" + fmt(damage.trident)
+                + ",spear=" + fmt(damage.spear)
+                + ",projectile=" + fmt(damage.projectile)
+                + ",explosive=" + fmt(damage.explosive) + "]"
+                + " movement[samples=" + movement.samples
+                + ",score=" + fmt(movement.score)
+                + ",range=" + fmt(movement.range)
+                + ",urgency=" + fmt(movement.urgency)
+                + ",circling=" + fmt(movement.circling)
+                + ",retreat=" + fmt(movement.retreat)
+                + ",crit=" + fmt(movement.crit)
+                + ",sprintHit=" + fmt(movement.sprintHit)
+                + ",hold=" + fmt(movement.hold)
+                + ",penalty=" + fmt(movement.penalty)
+                + ",idle=" + pct(movement.rate(movement.idleSamples))
+                + ",jumpRate=" + pct(movement.rate(movement.jumpSamples))
+                + ",sprintRate=" + pct(movement.rate(movement.sprintSamples))
+                + ",fallback=" + movement.fallbackSamples
+                + ",stuck=" + movement.stuckSamples
+                + ",osc=" + movement.oscillations
+                + ",rawDirChanges=" + movement.rawDirectionChanges
+                + ",sprintToggles=" + movement.sprintToggles + "]"
+                + " classify[direct=" + damage.directClassifications
+                + ",held=" + damage.heldClassifications
+                + ",loadoutFallback=" + damage.loadoutFallbackClassifications
+                + ",lastBuckets=" + describeCompactCounts(lastBuckets) + "]";
+        print(telemetry);
+        plugin.getLogger().info(ChatColor.stripColor("[REINFORCEMENT] " + telemetry));
+    }
+
+    private static String describeCompactCounts(Map<String, Integer> counts) {
+        return describeCounts(counts).replace(", ", ",");
+    }
+
+    private static String fmt(double value) {
+        return String.format(Locale.US, "%.2f", value);
+    }
+
+    private static String pct(double value) {
+        return String.format(Locale.US, "%.1f%%", value * 100.0);
     }
 
     private static String describeCounts(Map<String, Integer> counts) {
@@ -652,6 +750,83 @@ public class IntelligenceAgent {
         );
     }
 
+    private static final class DamageTotals {
+        private double dealt;
+        private double taken;
+        private double sword;
+        private double axe;
+        private double mace;
+        private double trident;
+        private double spear;
+        private double projectile;
+        private double explosive;
+        private int directClassifications;
+        private int heldClassifications;
+        private int loadoutFallbackClassifications;
+
+        private void add(CombatTrainingSnapshot combat) {
+            if (combat == null || !combat.available()) return;
+            dealt += combat.damageDealt();
+            taken += combat.damageTaken();
+            sword += combat.swordDamage();
+            axe += combat.axeDamage();
+            mace += combat.maceDamage();
+            trident += combat.tridentDamage();
+            spear += combat.spearDamage();
+            projectile += combat.projectileDamage();
+            explosive += combat.explosiveDamage();
+            directClassifications += combat.directDamageClassifications();
+            heldClassifications += combat.heldItemDamageClassifications();
+            loadoutFallbackClassifications += combat.loadoutFallbackDamageClassifications();
+        }
+    }
+
+    private static final class MovementTelemetryTotals {
+        private int samples;
+        private int stuckSamples;
+        private int oscillations;
+        private int fallbackSamples;
+        private int idleSamples;
+        private int jumpSamples;
+        private int sprintSamples;
+        private int sprintToggles;
+        private int rawDirectionChanges;
+        private double score;
+        private double range;
+        private double urgency;
+        private double circling;
+        private double retreat;
+        private double crit;
+        private double sprintHit;
+        private double hold;
+        private double penalty;
+
+        private void add(MovementFitness.Diagnostics diagnostics) {
+            samples += diagnostics.samples();
+            stuckSamples += diagnostics.stuckSamples();
+            oscillations += diagnostics.oscillations();
+            fallbackSamples += diagnostics.fallbackSamples();
+            idleSamples += diagnostics.idleSamples();
+            jumpSamples += diagnostics.jumpSamples();
+            sprintSamples += diagnostics.sprintSamples();
+            sprintToggles += diagnostics.sprintToggles();
+            rawDirectionChanges += diagnostics.rawDirectionChanges();
+            score += diagnostics.score();
+            range += diagnostics.rangeComponent();
+            urgency += diagnostics.urgencyComponent();
+            circling += diagnostics.circlingComponent();
+            retreat += diagnostics.retreatComponent();
+            crit += diagnostics.critComponent();
+            sprintHit += diagnostics.sprintHitComponent();
+            hold += diagnostics.holdComponent();
+            penalty += diagnostics.penaltyComponent();
+        }
+
+        private double rate(int count) {
+            return samples == 0 ? 0.0 : count / (double) samples;
+        }
+    }
+
     private static final class MovementFitness {
         private int samples;
         private int stuckSamples;
@@ -663,11 +838,17 @@ public class IntelligenceAgent {
         private int fallbackSamples;
         private int jumpSamples;
         private int sprintSamples;
+        private int idleSamples;
+        private int sprintToggles;
+        private int rawDirectionChanges;
         private double rangeScore;
         private double urgencyScore;
         private double circlingScore;
         private double retreatScore;
         private double previousForwardSpeed;
+        private int previousRawDirection;
+        private boolean previousSprinting;
+        private boolean hasPreviousSprinting;
         private Location previousLocation;
 
         void sample(Terminator bot, org.bukkit.entity.LivingEntity target) {
@@ -704,11 +885,22 @@ public class IntelligenceAgent {
             if (snap.movementFallback()) fallbackSamples++;
             if (snap.justJumped()) jumpSamples++;
             if (snap.isSprinting()) sprintSamples++;
+            if (!snap.isRetreating() && !snap.isCircling() && snap.approachSpeed() < 0.03) idleSamples++;
+            if (hasPreviousSprinting && previousSprinting != snap.isSprinting()) sprintToggles++;
+            previousSprinting = snap.isSprinting();
+            hasPreviousSprinting = true;
 
             if (previousForwardSpeed != 0.0 && Math.signum(previousForwardSpeed) != Math.signum(snap.approachSpeed())) {
                 oscillations++;
             }
             previousForwardSpeed = snap.approachSpeed();
+            int rawDirection = snap.isRetreating() ? -1 : (snap.approachSpeed() > 0.03 ? 1 : 0);
+            if (previousRawDirection != 0 && rawDirection != 0 && previousRawDirection != rawDirection) {
+                rawDirectionChanges++;
+            }
+            if (rawDirection != 0) {
+                previousRawDirection = rawDirection;
+            }
 
             Location now = bot.getLocation();
             if (previousLocation != null && now.getWorld() == previousLocation.getWorld()
@@ -738,6 +930,74 @@ public class IntelligenceAgent {
             if (jumpRate > 0.45 && critSetups == 0) score -= (jumpRate - 0.45) * weights.jumpSpamPenalty();
             if (sprintRate > 0.8 && sprintSetups == 0) score -= (sprintRate - 0.8) * weights.sprintSpamPenalty();
             return score;
+        }
+
+        Diagnostics diagnostics(MovementTrainingConfig.FitnessWeights weights) {
+            if (samples == 0) return Diagnostics.empty();
+            double rangeComponent = (rangeScore / samples) * weights.rangeControl();
+            double urgencyComponent = (urgencyScore / samples) * weights.rangeUrgency();
+            double circlingComponent = (circlingScore / samples) * weights.circling();
+            double retreatComponent = (retreatScore / samples) * weights.retreat();
+            double critComponent = critSetups * weights.critSetup();
+            double sprintHitComponent = sprintSetups * weights.sprintHit();
+            double holdComponent = holdCompliant * weights.holdPosition();
+            double penaltyComponent = 0.0;
+            penaltyComponent -= holdViolations * weights.holdViolationPenalty();
+            penaltyComponent -= fallbackSamples * weights.fallbackPenalty();
+            penaltyComponent -= stuckSamples * weights.stuckPenalty();
+            penaltyComponent -= oscillations * weights.oscillationPenalty();
+            double jumpRate = jumpSamples / (double) samples;
+            double sprintRate = sprintSamples / (double) samples;
+            if (jumpRate > 0.45 && critSetups == 0) penaltyComponent -= (jumpRate - 0.45) * weights.jumpSpamPenalty();
+            if (sprintRate > 0.8 && sprintSetups == 0) penaltyComponent -= (sprintRate - 0.8) * weights.sprintSpamPenalty();
+            double score = rangeComponent + urgencyComponent + circlingComponent + retreatComponent
+                    + critComponent + sprintHitComponent + holdComponent + penaltyComponent;
+            return new Diagnostics(
+                    samples,
+                    stuckSamples,
+                    oscillations,
+                    fallbackSamples,
+                    idleSamples,
+                    jumpSamples,
+                    sprintSamples,
+                    sprintToggles,
+                    rawDirectionChanges,
+                    rangeComponent,
+                    urgencyComponent,
+                    circlingComponent,
+                    retreatComponent,
+                    critComponent,
+                    sprintHitComponent,
+                    holdComponent,
+                    penaltyComponent,
+                    score
+            );
+        }
+
+        private record Diagnostics(
+                int samples,
+                int stuckSamples,
+                int oscillations,
+                int fallbackSamples,
+                int idleSamples,
+                int jumpSamples,
+                int sprintSamples,
+                int sprintToggles,
+                int rawDirectionChanges,
+                double rangeComponent,
+                double urgencyComponent,
+                double circlingComponent,
+                double retreatComponent,
+                double critComponent,
+                double sprintHitComponent,
+                double holdComponent,
+                double penaltyComponent,
+                double score
+        ) {
+            private static Diagnostics empty() {
+                return new Diagnostics(0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+            }
         }
     }
 }
