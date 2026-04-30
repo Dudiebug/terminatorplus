@@ -44,6 +44,7 @@ ai:
 ```yaml
 ai:
   training:
+    max-round-minutes: 1
     loadout-mix: movement_balanced
     curriculum-family: general_fallback
     loadout-mixes:
@@ -63,6 +64,10 @@ ai:
         crystalpvp: 3
         anchorbomb: 2
 ```
+
+`ai.training.max-round-minutes` caps each reinforcement generation round.
+The default is `1`; set it to `0` for no time limit. The optional
+`[round-minutes]` command argument overrides this value for one session.
 
 `ai.training.loadout-mix` selects the automatic weighted loadout pool for
 movement training. The default keeps `pvp + crystalpvp + anchorbomb` at 8% total

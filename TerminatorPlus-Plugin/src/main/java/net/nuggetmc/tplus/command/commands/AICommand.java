@@ -120,11 +120,12 @@ public class AICommand extends CommandInstance implements AIManager {
             return;
         }
 
-        int maxRoundTicks = 0;
+        double defaultRoundMinutes = plugin.getConfig().getDouble("ai.training.max-round-minutes", 1.0);
+        int maxRoundTicks = roundMinutesToTicks(defaultRoundMinutes);
         if (roundMinutesStr != null && !roundMinutesStr.isBlank()) {
             try {
                 double minutes = Double.parseDouble(roundMinutesStr);
-                maxRoundTicks = (int) (minutes * 1200);
+                maxRoundTicks = roundMinutesToTicks(minutes);
             } catch (NumberFormatException e) {
                 sender.sendMessage(ChatColor.RED + "Round time must be a number (minutes).");
                 return;
@@ -145,9 +146,9 @@ public class AICommand extends CommandInstance implements AIManager {
                     + ChatColor.RESET + ", loadout mix: " + ChatColor.YELLOW + config.effectiveLoadoutMix()
                     + ChatColor.RESET + ", curriculum family: " + ChatColor.YELLOW
                     + config.curriculumFamily() + ChatColor.RESET + ".");
+            sender.sendMessage("Round limit: " + ChatColor.YELLOW + formatRoundLimit(maxRoundTicks) + ChatColor.RESET + ".");
             sender.sendMessage(ChatColor.GRAY + "Mixed default training records per-family telemetry and updates "
-                    + ChatColor.YELLOW + MovementBrainBank.FALLBACK_BRAIN_NAME + ChatColor.GRAY
-                    + "; set ai.training.curriculum-family to train a specialist.");
+                    + "eligible specialist brains; set ai.training.curriculum-family to train one specialist.");
         }
         agent = new IntelligenceAgent(this, populationSize, name, skin, plugin, plugin.getManager(),
                 trainingMode, seedBank, config, this::saveTrainingBrain, maxRoundTicks);
@@ -752,6 +753,16 @@ public class AICommand extends CommandInstance implements AIManager {
         return MovementBrainBank.FALLBACK_BRAIN_NAME.equals(family)
                 ? MovementBrainBank.FALLBACK_BRAIN_NAME
                 : family;
+    }
+
+    private static int roundMinutesToTicks(double minutes) {
+        if (!Double.isFinite(minutes) || minutes <= 0.0) return 0;
+        return (int) Math.max(1, Math.round(minutes * 1200.0));
+    }
+
+    private static String formatRoundLimit(int maxRoundTicks) {
+        if (maxRoundTicks <= 0) return "unlimited";
+        return MathUtils.round2Dec(maxRoundTicks / 1200.0) + " minute(s)";
     }
 
     private static MovementTrainingRequest parseTrainingRequest(String modeText) {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.2.5 - Reinforcement Round Limit Config
+
+### Added
+
+- `ai.training.max-round-minutes`, defaulting to `1`, controls the per-generation `/ai reinforcement` round cap. The command's `[round-minutes]` argument still overrides the config value for one session.
+
 ## 5.2.4 - Mace Fall Velocity Fix
 
 ### Fixed

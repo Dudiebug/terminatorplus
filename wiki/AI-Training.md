@@ -19,6 +19,10 @@ Examples:
 /ai reinforcement 80 TrainBot Steve legacy
 ```
 
+If `[round-minutes]` is omitted, the command uses
+`ai.training.max-round-minutes` from `config.yml`. The default is `1`; set it to
+`0` for unlimited rounds.
+
 Modes:
 
 - Empty mode: train the movement brain bank.
