@@ -820,8 +820,10 @@ public class Bot extends ServerPlayer implements Terminator {
     public void walk(Vector vel) {
         double max = 0.4;
 
-        Vector sum = velocity.clone().add(vel);
+        double y = velocity.getY();
+        Vector sum = velocity.clone().setY(0).add(vel.clone().setY(0));
         if (sum.length() > max) sum.normalize().multiply(max);
+        sum.setY(y);
 
         velocity = sum;
     }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.2.4 - Mace Fall Velocity Fix
+
+### Fixed
+
+- Bot walking now caps only horizontal movement and preserves vertical velocity, so mace dive bots no longer slow-fall while the movement controller is steering them midair.
+
 ## 5.2.3 - Training Sample Guard
 
 ### Fixed
