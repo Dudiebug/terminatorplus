@@ -21,8 +21,9 @@ genetic-algorithm training.
 - Movement brains output locomotion only. `CombatDirector` remains the sole owner
   of combat actions, item use, hotbar selection, crystals, anchors, projectiles,
   and behavior timing.
-- `/ai reinforcement ... movement` automatically assigns weighted training
-  loadouts and records per-family telemetry.
+- `/ai reinforcement ...` defaults to movement-controller training and
+  automatically assigns weighted training loadouts and records per-family
+  telemetry.
 - `/ai evaluate` exports repeatable seed/scenario reports with route/family
   distributions, fallback state, schema metadata, and reward components.
 
@@ -44,7 +45,7 @@ Built for the active Paper target branch, such as Paper 26.1.2 or Paper
 Train and deploy movement-bank bots:
 
 ```text
-/ai reinforcement 120 TrainBot Steve movement
+/ai reinforcement 120 TrainBot Steve
 /ai brain status
 /ai stop
 /ai movement 5 Soldier

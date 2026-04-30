@@ -756,13 +756,17 @@ public class AICommand extends CommandInstance implements AIManager {
 
     private static MovementTrainingRequest parseTrainingRequest(String modeText) {
         if (modeText == null || modeText.isBlank()) {
-            return new MovementTrainingRequest(IntelligenceAgent.TrainingMode.LEGACY, null, null);
+            return new MovementTrainingRequest(IntelligenceAgent.TrainingMode.MOVEMENT_CONTROLLER, null, null);
         }
         String[] parts = modeText.split(":");
-        IntelligenceAgent.TrainingMode mode = IntelligenceAgent.TrainingMode.from(parts[0]);
+        String first = parts[0].trim();
+        IntelligenceAgent.TrainingMode mode = isLegacyMode(first)
+                ? IntelligenceAgent.TrainingMode.LEGACY
+                : IntelligenceAgent.TrainingMode.MOVEMENT_CONTROLLER;
+        int start = isLegacyMode(first) || isMovementMode(first) ? 1 : 0;
         String mix = null;
         String family = null;
-        for (int i = 1; i < parts.length; i++) {
+        for (int i = start; i < parts.length; i++) {
             String token = parts[i].trim();
             if (token.isBlank()) continue;
             int eq = token.indexOf('=');
@@ -779,6 +783,18 @@ public class AICommand extends CommandInstance implements AIManager {
             }
         }
         return new MovementTrainingRequest(mode, mix, family);
+    }
+
+    private static boolean isMovementMode(String value) {
+        if (value == null) return false;
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        return normalized.equals("movement")
+                || normalized.equals("movement_controller")
+                || normalized.equals("movement-controller");
+    }
+
+    private static boolean isLegacyMode(String value) {
+        return value != null && value.trim().equalsIgnoreCase("legacy");
     }
 
     private static boolean looksLikeFamily(String value) {

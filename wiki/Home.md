@@ -33,7 +33,7 @@ real damage, uses real items, and reacts through vanilla mechanics.
 - Brain persistence uses `ai/movement/manifest.json` plus per-family files under
   `ai/movement/brains/`.
 - Legacy `ai/brain.json` imports as `general_fallback` when compatible.
-- `/ai reinforcement ... movement` automatically samples weighted loadouts from
+- `/ai reinforcement ...` defaults to movement training and automatically samples weighted loadouts from
   `movement_balanced` or curriculum mixes.
 - `/ai evaluate` exports repeatable seed/scenario reports with route/family
   distributions and fallback state.

@@ -74,8 +74,10 @@ safe fallback.
 loaded movement bank. They are not training bots; `CombatDirector` still handles
 combat.
 
-`/ai reinforcement ... movement` automatically samples weighted named loadouts
-for training bots and records assigned loadout/family telemetry.
+`/ai reinforcement ...` defaults to movement-controller training, automatically
+samples weighted named loadouts for training bots, and records assigned
+loadout/family telemetry. Use `legacy` explicitly for the old full-replacement
+training pipeline.
 
 ## Training Mixes
 

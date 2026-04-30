@@ -25,7 +25,7 @@ Fix options:
 
 - `/ai brain load`
 - `/ai brain reset`
-- retrain with `/ai reinforcement ... movement:family=<family>`
+- retrain with `/ai reinforcement ... family=<family>`
 
 ## Legacy Brain Import
 

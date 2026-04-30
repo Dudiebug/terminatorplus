@@ -23,7 +23,7 @@ movement path unless it was spawned by `/ai movement`.
 ## Train Movement
 
 ```text
-/ai reinforcement 120 TrainBot Steve movement
+/ai reinforcement 120 TrainBot Steve
 /ai brain status
 /ai stop
 ```
@@ -35,7 +35,7 @@ anchor, and all-chaos kits low-weight while still sampling them.
 To train a specialist:
 
 ```text
-/ai reinforcement 120 TrainBot Steve movement:family=mace:mix=mace_curriculum
+/ai reinforcement 120 TrainBot Steve family=mace:mix=mace_curriculum
 ```
 
 Mixed mode records per-family telemetry but updates `general_fallback`.

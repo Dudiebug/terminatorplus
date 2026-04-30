@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.2.1 - Movement Training Default
+
+### Changed
+
+- `/ai reinforcement <population-size> <name> [skin]` now defaults to the movement-controller trainer.
+- `legacy` remains available as an explicit mode for the old full-replacement training pipeline.
+- Movement-training option strings such as `family=mace:mix=mace_curriculum` are parsed as movement options even without a leading `movement:` prefix.
+
 ## 5.2.0 - Movement Brain Bank Evaluation Support
 
 ### Added

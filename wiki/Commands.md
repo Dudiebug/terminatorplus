@@ -90,14 +90,15 @@ Toggle combat trace logging for specific bots or all bots. Shows telemetry field
 
 ## AI Training (`/ai`)
 
-### `/ai reinforcement <population-size> <name> [skin] [mode]`
+### `/ai reinforcement <population-size> <name> [skin] [mode-or-options]`
 Begin a training session. Must be run as a player.
 
-- `mode` is `movement`, `movement-controller`, or `legacy`.
+- Empty mode defaults to **movement-controller** training.
+- `mode` may be `movement`, `movement-controller`, or `legacy`.
 - In **movement-controller** mode, the NN controls movement only and the CombatDirector handles combat.
 - In **legacy** mode, the NN fully replaces both movement and combat (the original training pipeline).
 - Movement mode automatically samples weighted training loadouts from `ai.training.loadout-mix`.
-- Use mode suffixes such as `movement:family=mace:mix=mace_curriculum` for curriculum runs.
+- Use options such as `family=mace:mix=mace_curriculum` or `movement:family=mace:mix=mace_curriculum` for curriculum runs.
 
 ### `/ai random <amount> <name> [skin] [loc]`
 Spawn bots with random neural networks.

@@ -7,19 +7,21 @@ combat actions and item decisions.
 ## Start Training
 
 ```text
-/ai reinforcement <population-size> <name> [skin] [mode] [round-minutes]
+/ai reinforcement <population-size> <name> [skin] [mode-or-options] [round-minutes]
 ```
 
 Examples:
 
 ```text
-/ai reinforcement 120 TrainBot Steve movement
+/ai reinforcement 120 TrainBot Steve
+/ai reinforcement 120 TrainBot Steve family=mace:mix=mace_curriculum 5
 /ai reinforcement 120 TrainBot Steve movement:family=mace:mix=mace_curriculum 5
 /ai reinforcement 80 TrainBot Steve legacy
 ```
 
 Modes:
 
+- Empty mode: train the movement brain bank.
 - `movement`, `movement_controller`, or `movement-controller`: train the
   movement brain bank.
 - `legacy`: original full-replacement neural-network training.
@@ -53,8 +55,8 @@ movement enough exposure without letting those kits dominate every generation.
 
 ## Curriculum Families
 
-Set `ai.training.curriculum-family` or pass `family=<name>` in the movement mode
-argument to train one specialist family:
+Set `ai.training.curriculum-family` or pass `family=<name>` in the training
+options argument to train one specialist family:
 
 - `melee`
 - `mace`
