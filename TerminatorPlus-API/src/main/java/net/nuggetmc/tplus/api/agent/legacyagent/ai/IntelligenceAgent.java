@@ -234,7 +234,8 @@ public class IntelligenceAgent {
         List<MovementCandidateScore> ranking = telemetry.rank(candidates);
         Map<String, List<MovementCandidateScore>> familyRankings = telemetry.rankByTrainingFamily(candidates);
         if (ranking.isEmpty() || familyRankings.isEmpty()) {
-            print(ChatColor.RED + "No movement samples were captured; keeping the current brain bank.");
+            print(ChatColor.RED + "No usable movement samples were captured for the configured training family; "
+                    + "keeping the current brain bank.");
             clearBots();
             callSyncVoid(() -> agent.setTargetType(EnumTargetGoal.NONE));
             return;
@@ -272,6 +273,12 @@ public class IntelligenceAgent {
                         + ChatUtils.BULLET_FORMATTED + "loadout=" + ChatColor.YELLOW
                         + familyBest.stats().loadoutSummary());
                 saveMovementFamilyResult(family, familyBest, familyAverage, telemetry);
+            }
+            for (String family : loadoutFamilyCounts.keySet()) {
+                if (!familyRankings.containsKey(MovementTrainingConfig.normalizeFamilyId(family))) {
+                    print(ChatColor.GRAY + "Skipped " + family
+                            + " autosave; no matching route samples were captured this generation.");
+                }
             }
         }
 
@@ -533,7 +540,10 @@ public class IntelligenceAgent {
             if (bot == null) continue;
 
             if (!bot.applyTrainingLoadout(candidate.loadout())) {
-                bot.applyTrainingLoadout("sword");
+                print(ChatColor.YELLOW + "Skipping " + bot.getBotName() + "; training loadout "
+                        + ChatColor.RED + candidate.loadout() + ChatColor.YELLOW + " is not registered.");
+                bot.removeBot();
+                continue;
             }
 
             String uniqueName = bot.getBotName();
@@ -802,6 +812,7 @@ public class IntelligenceAgent {
             for (MovementCandidate candidate : candidates) {
                 MovementCandidateStats stats = statsByBot.get(candidate.botName());
                 if (stats == null || stats.samples() == 0) continue;
+                if (curriculumMode && !stats.hasFamilySamples(trainingFamily)) continue;
                 scores.add(new MovementCandidateScore(candidate, stats, stats.fitness(trainingFamily, curriculumMode)));
             }
             scores.sort(Comparator.comparingDouble(MovementCandidateScore::fitness).reversed());
@@ -814,6 +825,7 @@ public class IntelligenceAgent {
                 MovementCandidateStats stats = statsByBot.get(candidate.botName());
                 if (stats == null || stats.samples() == 0) continue;
                 String family = MovementTrainingConfig.normalizeFamilyId(candidate.trainingFamily());
+                if (!stats.hasFamilySamples(family)) continue;
                 double fitness = stats.fitness(family, true);
                 grouped.computeIfAbsent(family, ignored -> new ArrayList<>())
                         .add(new MovementCandidateScore(candidate, stats, fitness));
@@ -907,10 +919,15 @@ public class IntelligenceAgent {
         double fitness(String trainingFamily, boolean curriculumMode) {
             String family = MovementTrainingConfig.normalizeFamilyId(trainingFamily);
             double familyFitness = familyTotals.getOrDefault(family, 0.0);
-            if (curriculumMode && familySamples.getOrDefault(family, 0) > 0) {
+            if (curriculumMode) {
+                if (!hasFamilySamples(family)) return Double.NEGATIVE_INFINITY;
                 return familyFitness + kills * 5.0 + aliveTicks / 160.0 + health * 0.08;
             }
             return aggregateFitness + kills * 5.0 + aliveTicks / 180.0 + health * 0.08;
+        }
+
+        boolean hasFamilySamples(String family) {
+            return familySamples.getOrDefault(MovementTrainingConfig.normalizeFamilyId(family), 0) > 0;
         }
 
         int samples() {

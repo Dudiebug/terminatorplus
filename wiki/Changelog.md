@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.2.3 - Training Sample Guard
+
+### Fixed
+
+- Mixed movement training now only ranks and saves a specialist family brain from bots that actually produced route samples for that same family, preventing unrelated aggregate survival fitness from replacing a specialist brain.
+
 ## 5.2.2 - Mixed Family Training
 
 ### Changed
