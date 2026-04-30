@@ -100,9 +100,9 @@ specialists fall back safely; bad files can be quarantined.
 The default `movement_balanced` mix keeps `pvp + crystalpvp + anchorbomb` at 8%
 total so explosive movement is represented without dominating training.
 
-Current limitation: mixed training records per-family telemetry but updates
-`general_fallback`. Curriculum mode updates the configured family brain via
-`ai.training.curriculum-family`.
+Mixed training ranks candidates by assigned loadout family and updates every
+eligible specialist brain represented in the round. Curriculum mode focuses all
+candidates on the configured family brain via `ai.training.curriculum-family`.
 
 ## Documentation
 

@@ -70,9 +70,9 @@ Curriculum mixes are configured under `ai.training.loadout-mixes`, including
 `melee_curriculum`, `mace_curriculum`, `trident_curriculum`,
 `mobility_curriculum`, and `explosive_survival_curriculum`.
 
-Current limitation: mixed training records per-family telemetry and reward
-components, but updates `general_fallback`. Curriculum mode updates the
-configured family brain.
+Mixed training ranks candidates by assigned loadout family and updates every
+eligible specialist brain represented in the round. Curriculum mode forces all
+candidates to update the configured family brain.
 
 ## Reward Profiles
 

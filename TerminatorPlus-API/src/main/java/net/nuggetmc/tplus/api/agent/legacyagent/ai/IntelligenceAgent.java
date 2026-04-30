@@ -173,20 +173,16 @@ public class IntelligenceAgent {
 
         String trainingFamily = MovementTrainingConfig.normalizeFamilyId(movementConfig.curriculumFamily());
         boolean curriculumMode = !MovementBrainBank.FALLBACK_BRAIN_NAME.equals(trainingFamily);
-        // Slice 3 trains one selected family brain per generation. Mixed mode
-        // still scores every active route, but deliberately updates fallback only.
-        String savedFamily = curriculumMode ? trainingFamily : MovementBrainBank.FALLBACK_BRAIN_NAME;
         MovementLoadoutSampler sampler = MovementLoadoutSampler.fromConfig(movementConfig, movementRandom);
 
         print("Starting movement-controller generation " + ChatColor.RED + generation + ChatColor.RESET + "...");
         print("Mode=" + ChatColor.YELLOW + (curriculumMode ? "curriculum" : "mixed")
                 + ChatColor.RESET + ", loadoutMix=" + ChatColor.YELLOW + sampler.mixName()
                 + ChatColor.RESET + ", curriculumFamily=" + ChatColor.YELLOW + trainingFamily
-                + ChatColor.RESET + ", savingFamily=" + ChatColor.YELLOW + savedFamily + ChatColor.RESET + ".");
+                + ChatColor.RESET + ", saving=" + ChatColor.YELLOW
+                + (curriculumMode ? trainingFamily : "per-loadout-family") + ChatColor.RESET + ".");
 
         MovementBrainBank baseBank = ensureMovementBank();
-        MovementNetwork seed = seedNetwork(baseBank, savedFamily);
-        List<MovementCandidate> candidates = buildMovementCandidates(baseBank, seed, savedFamily);
 
         sleep(1000);
 
@@ -207,7 +203,9 @@ public class IntelligenceAgent {
 
         Map<String, Integer> loadoutCounts = new LinkedHashMap<>();
         Map<String, Integer> loadoutFamilyCounts = new LinkedHashMap<>();
-        callSyncVoid(() -> spawnMovementCandidates(candidates, loc, skinData, sampler, loadoutCounts, loadoutFamilyCounts));
+        List<MovementCandidate> candidates = buildMovementCandidates(baseBank, sampler, trainingFamily,
+                curriculumMode, loadoutCounts, loadoutFamilyCounts);
+        callSyncVoid(() -> spawnMovementCandidates(candidates, loc, skinData));
 
         print("Assigned loadouts from " + ChatColor.YELLOW + sampler.mixName() + ChatColor.RESET + ": "
                 + ChatColor.YELLOW + MovementLoadoutSampler.describeCounts(loadoutCounts));
@@ -219,7 +217,7 @@ public class IntelligenceAgent {
         print("The movement bots will now attack each other.");
         callSyncVoid(() -> agent.setTargetType(EnumTargetGoal.NEAREST_BOT));
 
-        MovementGenerationTelemetry telemetry = new MovementGenerationTelemetry(savedFamily, curriculumMode);
+        MovementGenerationTelemetry telemetry = new MovementGenerationTelemetry(trainingFamily, curriculumMode);
         int elapsedTicks = 0;
         while (active && aliveCountSync() > 1 && (maxRoundTicks <= 0 || elapsedTicks < maxRoundTicks)) {
             sleep(1000);
@@ -234,7 +232,8 @@ public class IntelligenceAgent {
         }
 
         List<MovementCandidateScore> ranking = telemetry.rank(candidates);
-        if (ranking.isEmpty()) {
+        Map<String, List<MovementCandidateScore>> familyRankings = telemetry.rankByTrainingFamily(candidates);
+        if (ranking.isEmpty() || familyRankings.isEmpty()) {
             print(ChatColor.RED + "No movement samples were captured; keeping the current brain bank.");
             clearBots();
             callSyncVoid(() -> agent.setTargetType(EnumTargetGoal.NONE));
@@ -252,23 +251,27 @@ public class IntelligenceAgent {
                     + ChatUtils.BULLET_FORMATTED + "fitness=" + ChatColor.RED
                     + MathUtils.round2Dec(score.fitness())
                     + ChatUtils.BULLET_FORMATTED + "loadout=" + ChatColor.YELLOW
-                    + score.stats().loadoutSummary());
+                    + score.stats().loadoutSummary()
+                    + ChatUtils.BULLET_FORMATTED + "trainingFamily=" + ChatColor.YELLOW
+                    + score.candidate().trainingFamily());
         }
 
-        MovementBrainPersistence.TrainingMetadata metadata =
-                new MovementBrainPersistence.TrainingMetadata(generation, best.fitness(), average);
-        MovementBrainBank.RolloutStats rolloutStats = new MovementBrainBank.RolloutStats(telemetry.rolloutMetrics(best));
-        movementBank = bankWithCandidate(baseBank, savedFamily, best.candidate().network(), metadata,
-                rolloutStats, "training-generation");
-
-        if (movementBrainSaver != null) {
-            MovementBrainPersistence.SaveFeedback feedback = movementBrainSaver.save(savedFamily,
-                    best.candidate().network(), metadata, rolloutStats);
-            if (feedback.message() != null && !feedback.message().isBlank()) {
-                print(feedback.message());
-            } else if (!feedback.saved()) {
-                print(ChatColor.GRAY + "Autosave disabled; trained " + savedFamily
-                        + " remains in-session until manually saved.");
+        if (curriculumMode) {
+            saveMovementFamilyResult(trainingFamily, best, average, telemetry);
+        } else {
+            for (Map.Entry<String, List<MovementCandidateScore>> entry : familyRankings.entrySet()) {
+                String family = entry.getKey();
+                List<MovementCandidateScore> scores = entry.getValue();
+                if (scores.isEmpty()) continue;
+                MovementCandidateScore familyBest = scores.get(0);
+                double familyAverage = scores.stream().mapToDouble(MovementCandidateScore::fitness).average().orElse(0.0);
+                print("Family " + ChatColor.YELLOW + family + ChatColor.RESET
+                        + " winner " + ChatColor.GREEN + familyBest.candidate().botName()
+                        + ChatUtils.BULLET_FORMATTED + "fitness=" + ChatColor.RED
+                        + MathUtils.round2Dec(familyBest.fitness())
+                        + ChatUtils.BULLET_FORMATTED + "loadout=" + ChatColor.YELLOW
+                        + familyBest.stats().loadoutSummary());
+                saveMovementFamilyResult(family, familyBest, familyAverage, telemetry);
             }
         }
 
@@ -450,12 +453,21 @@ public class IntelligenceAgent {
 
     private List<MovementCandidate> buildMovementCandidates(
             MovementBrainBank baseBank,
-            MovementNetwork seed,
-            String familyId
+            MovementLoadoutSampler sampler,
+            String curriculumFamily,
+            boolean curriculumMode,
+            Map<String, Integer> loadoutCounts,
+            Map<String, Integer> loadoutFamilyCounts
     ) {
         List<MovementCandidate> candidates = new ArrayList<>();
         String botName = this.botName.endsWith("%") ? this.botName : this.botName + "%";
         for (int i = 0; i < populationSize; i++) {
+            MovementLoadoutSampler.LoadoutSelection selection = sampler.sample();
+            String loadoutFamily = MovementTrainingConfig.normalizeFamilyId(selection.family());
+            String trainingFamily = curriculumMode
+                    ? MovementTrainingConfig.normalizeFamilyId(curriculumFamily)
+                    : loadoutFamily;
+            MovementNetwork seed = seedNetwork(baseBank, trainingFamily);
             MovementNetwork network;
             if (i == 0) {
                 network = MovementNetworkGenetics.copy(seed);
@@ -466,10 +478,13 @@ public class IntelligenceAgent {
                 network = MovementNetworkGenetics.mutate(seed, scale, movementRandom);
             }
             String name = botName.replace("%", String.valueOf(i + 1));
-            MovementBrainBank candidateBank = bankWithCandidate(baseBank, familyId, network,
+            MovementBrainBank candidateBank = bankWithCandidate(baseBank, trainingFamily, network,
                     MovementBrainPersistence.TrainingMetadata.manual(),
                     MovementBrainBank.RolloutStats.empty(), "training-candidate");
-            candidates.add(new MovementCandidate(name, network, candidateBank));
+            candidates.add(new MovementCandidate(name, network, candidateBank, trainingFamily,
+                    selection.name(), loadoutFamily));
+            loadoutCounts.merge(selection.name(), 1, Integer::sum);
+            loadoutFamilyCounts.merge(loadoutFamily, 1, Integer::sum);
         }
         return candidates;
     }
@@ -509,10 +524,7 @@ public class IntelligenceAgent {
     private void spawnMovementCandidates(
             List<MovementCandidate> candidates,
             Location loc,
-            String[] skinData,
-            MovementLoadoutSampler sampler,
-            Map<String, Integer> loadoutCounts,
-            Map<String, Integer> loadoutFamilyCounts
+            String[] skinData
     ) {
         for (MovementCandidate candidate : candidates) {
             Set<Terminator> created = manager.createBots(loc, candidate.botName(), skinData, 1,
@@ -520,10 +532,8 @@ public class IntelligenceAgent {
             Terminator bot = created.stream().findFirst().orElse(null);
             if (bot == null) continue;
 
-            MovementLoadoutSampler.LoadoutSelection selection = sampler.sample();
-            if (!bot.applyTrainingLoadout(selection.name())) {
-                selection = new MovementLoadoutSampler.LoadoutSelection("sword", "melee");
-                bot.applyTrainingLoadout(selection.name());
+            if (!bot.applyTrainingLoadout(candidate.loadout())) {
+                bot.applyTrainingLoadout("sword");
             }
 
             String uniqueName = bot.getBotName();
@@ -531,9 +541,36 @@ public class IntelligenceAgent {
                 uniqueName += "_";
             }
             this.bots.put(uniqueName, bot);
-            loadoutCounts.merge(selection.name(), 1, Integer::sum);
-            loadoutFamilyCounts.merge(selection.family(), 1, Integer::sum);
         }
+    }
+
+    private void saveMovementFamilyResult(
+            String familyId,
+            MovementCandidateScore best,
+            double average,
+            MovementGenerationTelemetry telemetry
+    ) {
+        String family = MovementTrainingConfig.normalizeFamilyId(familyId);
+        MovementBrainPersistence.TrainingMetadata metadata =
+                new MovementBrainPersistence.TrainingMetadata(generation, best.fitness(), average);
+        MovementBrainBank.RolloutStats rolloutStats = new MovementBrainBank.RolloutStats(
+                telemetry.rolloutMetrics(best, family));
+
+        if (movementBrainSaver != null) {
+            MovementBrainPersistence.SaveFeedback feedback = movementBrainSaver.save(family,
+                    best.candidate().network(), metadata, rolloutStats);
+            if (feedback.message() != null && !feedback.message().isBlank()) {
+                print(feedback.message());
+            } else if (!feedback.saved()) {
+                print(ChatColor.GRAY + "Autosave disabled; trained " + family
+                        + " remains in-session until manually saved.");
+            }
+            return;
+        }
+
+        MovementBrainBank base = movementBank == null ? ensureMovementBank() : movementBank;
+        movementBank = bankWithCandidate(base, family, best.candidate().network(), metadata,
+                rolloutStats, "training-generation");
     }
 
     private void captureMovementSamples(MovementGenerationTelemetry telemetry) throws InterruptedException {
@@ -709,7 +746,19 @@ public class IntelligenceAgent {
         bots.clear();*/
     }
 
-    private record MovementCandidate(String botName, MovementNetwork network, MovementBrainBank bank) {
+    private record MovementCandidate(
+            String botName,
+            MovementNetwork network,
+            MovementBrainBank bank,
+            String trainingFamily,
+            String loadout,
+            String loadoutFamily
+    ) {
+        private MovementCandidate {
+            trainingFamily = MovementTrainingConfig.normalizeFamilyId(trainingFamily);
+            loadout = loadout == null || loadout.isBlank() ? "sword" : loadout.trim().toLowerCase(Locale.ROOT);
+            loadoutFamily = MovementTrainingConfig.normalizeFamilyId(loadoutFamily);
+        }
     }
 
     private record MovementCandidateScore(
@@ -759,6 +808,21 @@ public class IntelligenceAgent {
             return scores;
         }
 
+        Map<String, List<MovementCandidateScore>> rankByTrainingFamily(List<MovementCandidate> candidates) {
+            Map<String, List<MovementCandidateScore>> grouped = new LinkedHashMap<>();
+            for (MovementCandidate candidate : candidates) {
+                MovementCandidateStats stats = statsByBot.get(candidate.botName());
+                if (stats == null || stats.samples() == 0) continue;
+                String family = MovementTrainingConfig.normalizeFamilyId(candidate.trainingFamily());
+                double fitness = stats.fitness(family, true);
+                grouped.computeIfAbsent(family, ignored -> new ArrayList<>())
+                        .add(new MovementCandidateScore(candidate, stats, fitness));
+            }
+            grouped.values().forEach(scores ->
+                    scores.sort(Comparator.comparingDouble(MovementCandidateScore::fitness).reversed()));
+            return grouped;
+        }
+
         String describeFamilyAverages() {
             if (familyTotals.isEmpty()) return "none";
             StringBuilder out = new StringBuilder();
@@ -776,12 +840,15 @@ public class IntelligenceAgent {
             return out.toString();
         }
 
-        Map<String, Double> rolloutMetrics(MovementCandidateScore best) {
+        Map<String, Double> rolloutMetrics(MovementCandidateScore best, String savedFamily) {
             Map<String, Double> metrics = new LinkedHashMap<>();
             metrics.put("generationFitnessBest", best.fitness());
             metrics.put("generationSamples", (double) statsByBot.values().stream().mapToInt(MovementCandidateStats::samples).sum());
             metrics.put("curriculumMode", curriculumMode ? 1.0 : 0.0);
             metrics.put("trainingFamily." + trainingFamily, 1.0);
+            metrics.put("savedFamily." + MovementTrainingConfig.normalizeFamilyId(savedFamily), 1.0);
+            metrics.put("best.trainingFamily." + best.candidate().trainingFamily(), 1.0);
+            metrics.put("best.loadoutFamily." + best.candidate().loadoutFamily(), 1.0);
             familyTotals.forEach((family, total) -> {
                 int samples = Math.max(1, familySamples.getOrDefault(family, 1));
                 metrics.put("family." + family + ".total", total);

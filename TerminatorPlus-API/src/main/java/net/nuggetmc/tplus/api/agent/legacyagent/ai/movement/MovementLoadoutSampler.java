@@ -37,7 +37,7 @@ public final class MovementLoadoutSampler {
     public static MovementLoadoutSampler fromConfig(MovementTrainingConfig config, Random random) {
         MovementTrainingConfig safe = config == null
                 ? new MovementTrainingConfig(true, "movement_controller", MovementNetworkShape.DEFAULT_LAYERS,
-                false, true, "ai/brain.json", "ai/movement/manifest.json",
+                true, true, "ai/brain.json", "ai/movement/manifest.json",
                 "ai/movement/brains", MovementBrainBank.FALLBACK_BRAIN_NAME, true,
                 "import-compatible-or-reset", false, "movement_balanced",
                 MovementBrainBank.FALLBACK_BRAIN_NAME, MovementTrainingConfig.defaultLoadoutMixes())

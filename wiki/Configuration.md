@@ -17,7 +17,7 @@ ai:
       manifest-path: ai/movement/manifest.json
       brains-directory: ai/movement/brains
       fallback-brain-name: general_fallback
-      autosave-best-brain: false
+      autosave-best-brain: true
       save-only-improved-brain: true
       quarantine-bad-files: true
       legacy-import-behavior: import-compatible-or-reset
@@ -33,7 +33,7 @@ ai:
 | `ai.movement.bank.manifest-path` | `ai/movement/manifest.json` | Bank manifest path. |
 | `ai.movement.bank.brains-directory` | `ai/movement/brains` | Per-brain JSON directory. |
 | `ai.movement.bank.fallback-brain-name` | `general_fallback` | Safe default brain for missing specialists. |
-| `ai.movement.bank.autosave-best-brain` | `false` | Save training winners automatically. |
+| `ai.movement.bank.autosave-best-brain` | `true` | Save training winners automatically. |
 | `ai.movement.bank.save-only-improved-brain` | `true` | Autosave only when fitness improves. |
 | `ai.movement.bank.quarantine-bad-files` | `true` | Move bad manifests/brains aside instead of reusing them. |
 | `ai.movement.bank.legacy-import-behavior` | `import-compatible-or-reset` | Import compatible `ai/brain.json` as fallback, otherwise reset safely. |
@@ -68,12 +68,10 @@ ai:
 movement training. The default keeps `pvp + crystalpvp + anchorbomb` at 8% total
 so explosive movement is represented without dominating the population.
 
-`ai.training.curriculum-family` controls which family is updated. Leave it as
-`general_fallback` for mixed mode. Set it to a family such as `mace`, `mobility`,
-or `explosive_survival` to train that specialist.
-
-Current limitation: mixed mode records per-family telemetry but updates
-`general_fallback`; curriculum mode updates the configured family brain.
+`ai.training.curriculum-family` controls the training mode. Leave it as
+`general_fallback` for mixed mode, which trains eligible families from the
+loadout mix in one generation. Set it to a family such as `mace`, `mobility`, or
+`explosive_survival` to force a focused specialist curriculum.
 
 ## Evaluation
 

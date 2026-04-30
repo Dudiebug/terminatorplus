@@ -63,7 +63,7 @@ public record MovementTrainingConfig(
         int[] shape = shapeList.isEmpty()
                 ? MovementNetworkShape.DEFAULT_LAYERS
                 : shapeList.stream().mapToInt(Integer::intValue).toArray();
-        boolean autosave = getBoolean(config, false,
+        boolean autosave = getBoolean(config, true,
                 "ai.movement.bank.autosave-best-brain",
                 "ai.movement.autosave-best-brain",
                 "ai.movement-network.autosave-best-brain");

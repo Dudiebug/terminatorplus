@@ -13,7 +13,7 @@ ai:
       manifest-path: ai/movement/manifest.json
       brains-directory: ai/movement/brains
       fallback-brain-name: general_fallback
-      autosave-best-brain: false
+      autosave-best-brain: true
       save-only-improved-brain: true
       quarantine-bad-files: true
       legacy-import-behavior: import-compatible-or-reset
@@ -21,7 +21,7 @@ ai:
   training:
     # Normal movement training samples this weighted pool automatically.
     loadout-mix: movement_balanced
-    # general_fallback means mixed mode: record per-family telemetry, update fallback.
+    # general_fallback means mixed mode: train eligible families from the loadout mix.
     # Set to a family such as mace or mobility to train that specialist curriculum.
     curriculum-family: general_fallback
     loadout-mixes:

@@ -107,9 +107,9 @@ Curriculum mixes exist for `melee`, `mace`, `trident`, `mobility`, and
 `explosive_survival`. Set `ai.training.curriculum-family` to train a specialist
 family. Leave it as `general_fallback` for mixed training.
 
-Current limitation: mixed training records per-family telemetry and reward
-components, but updates `general_fallback`. Curriculum mode updates the configured
-family brain.
+Mixed training ranks candidates by assigned loadout family and updates every
+eligible specialist brain represented in the round. Curriculum mode forces all
+candidates to update the configured family brain.
 
 ## Reward Profiles
 
@@ -190,7 +190,7 @@ ai:
       manifest-path: ai/movement/manifest.json
       brains-directory: ai/movement/brains
       fallback-brain-name: general_fallback
-      autosave-best-brain: false
+      autosave-best-brain: true
       save-only-improved-brain: true
       quarantine-bad-files: true
       legacy-import-behavior: import-compatible-or-reset

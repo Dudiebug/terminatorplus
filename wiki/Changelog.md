@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.2.2 - Mixed Family Training
+
+### Changed
+
+- Mixed `/ai reinforcement` now samples the configured loadout mix, seeds each candidate from its assigned loadout family, ranks results per family, and updates every eligible specialist brain from one round.
+- Movement training autosave is enabled by default, while `save-only-improved-brain` still prevents worse brains from replacing better ones.
+
 ## 5.2.1 - Movement Training Default
 
 ### Changed

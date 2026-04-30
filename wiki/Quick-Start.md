@@ -38,8 +38,8 @@ To train a specialist:
 /ai reinforcement 120 TrainBot Steve family=mace:mix=mace_curriculum
 ```
 
-Mixed mode records per-family telemetry but updates `general_fallback`.
-Curriculum mode updates the configured family brain.
+Mixed mode updates every eligible family represented in the loadout mix.
+Curriculum mode focuses all candidates on the configured family brain.
 
 ## Spawn Movement-Bank Bots
 
