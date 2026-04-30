@@ -43,6 +43,34 @@ public final class CombatDirector {
     }
 
     /**
+     * Ticks only already-committed weapon phases. This is intentionally narrower
+     * than execute(): no scanner, consumables, idle melee, or utility branches.
+     */
+    public boolean tickCommitted(Bot bot, LivingEntity target) {
+        if (target == null || !target.isValid()) return false;
+        CombatState.Phase phase = bot.getCombatState().getPhase();
+        if (!isCommittedPhase(phase)) {
+            CombatDebugger.log(bot, "commit-skip", "reason=idle phase=" + phase);
+            return false;
+        }
+
+        BotInventory inv = bot.getBotInventory();
+        if (!hasCommittedWeapon(phase, inv)) {
+            CombatDebugger.log(bot, "commit-skip", "reason=missing-weapon phase=" + phase);
+            return false;
+        }
+
+        int alive = bot.getAliveTicks();
+        if (!bot.getCombatState().markExecuted(alive)) {
+            CombatDebugger.log(bot, "commit-skip", "reason=already-executed phase=" + phase + " source=early");
+            return true;
+        }
+
+        double distance = bot.getLocation().distance(target.getLocation());
+        return executeCommittedPhase(bot, target, distance, inv, "early", false);
+    }
+
+    /**
      * Writes Director -> MovementNetwork hints only. This method must not choose
      * attacks, mutate loadouts, or bypass CombatDirector execution gates.
      */
@@ -126,30 +154,18 @@ public final class CombatDirector {
         // idempotent — tickPhase() would double-advance and doAttack() could swing
         // twice on the same frame. Utility ticks above are safe to repeat.
         if (!bot.getCombatState().markExecuted(alive)) {
+            CombatDebugger.log(bot, "commit-skip",
+                    "reason=already-executed phase=" + bot.getCombatState().getPhase() + " source=normal");
+            return true;
+        }
+
+        if (executeCommittedPhase(bot, target, distance, inv, "normal", true)) {
             return true;
         }
 
         if (combo.inProgress(bot)) {
             CombatDebugger.log(bot, "combo-in-progress");
             logSweepBranchSkip(bot, target, distance, "higherPriority", "combo");
-            return true;
-        }
-
-        lastBranch = "mace-charging";
-        if (bot.getCombatState().getPhase() == CombatState.Phase.MACE_CHARGING && inv.hasMace()) {
-            CombatDebugger.weaponPick(bot, "MACE(charging)", distance, true);
-            selectType(inv, Material.MACE);
-            mace.ticksFor(bot, target, distance);
-            logSweepBranchSkip(bot, target, distance, "higherPriority", "maceCharging");
-            return true;
-        }
-
-        lastBranch = "airborne-mace";
-        if (bot.getCombatState().getPhase() == CombatState.Phase.AIRBORNE && inv.hasMace()) {
-            CombatDebugger.weaponPick(bot, "MACE(airborne-commit)", distance, true);
-            selectType(inv, Material.MACE);
-            mace.ticksFor(bot, target, distance);
-            logSweepBranchSkip(bot, target, distance, "higherPriority", "airborneMace");
             return true;
         }
 
@@ -172,15 +188,6 @@ public final class CombatDirector {
                 logSweepBranchSkip(bot, target, distance, "higherPriority", "aerialDive");
                 return true;
             }
-        }
-
-        lastBranch = "charging-trident";
-        if (bot.getCombatState().getPhase() == CombatState.Phase.CHARGING && inv.hasTrident()) {
-            CombatDebugger.weaponPick(bot, "TRIDENT(charging)", distance, true);
-            selectType(inv, Material.TRIDENT);
-            trident.ticksFor(bot, target, distance);
-            logSweepBranchSkip(bot, target, distance, "higherPriority", "tridentCharging");
-            return true;
         }
 
         snapshot.update(bot, target);
@@ -262,21 +269,6 @@ public final class CombatDirector {
 
         lastBranch = "melee";
         if (distance <= 3.5 || onlyTridentMelee) {
-            if (snapshot.targetBlocking && axe >= 0) {
-                inv.selectMainInventorySlot(axe);
-                CombatDebugger.weaponPick(bot, "AXE(shield)", distance, true);
-                if (!BotCombatTiming.shouldPlanNormalMelee(bot, target)) {
-                    CombatDebugger.log(bot, "opp-skip",
-                            "name=DIRECTOR_MELEE_SHIELD reason=charge charge="
-                                    + String.format("%.3f", BotCombatTiming.charge(bot)));
-                    BotCombatTiming.logSweepCheck(bot, target, distance);
-                    return false;
-                }
-                melee.ticksFor(bot, target, distance);
-                logSweepBranchSkip(bot, target, distance, "higherPriority", "shieldAxe");
-                return true;
-            }
-
             boolean hasSwordOrAxe = sword >= 0 || axe >= 0;
             boolean maceSmashReady = inv.hasMace() && !hasSwordOrAxe && !snapshot.targetBlocking
                     && snapshot.openSkyAboveBot && inv.hasWindCharge() && grounded
@@ -292,26 +284,38 @@ public final class CombatDirector {
                 return true;
             }
 
-            int slot = sword >= 0 ? sword : axe;
-            String pickLabel = sword >= 0 ? "SWORD" : axe >= 0 ? "AXE" : null;
-            if (slot < 0 && tridentMelee >= 0) {
-                slot = tridentMelee;
-                pickLabel = "TRIDENT(melee)";
-            }
-            if (slot >= 0) {
-                inv.selectMainInventorySlot(slot);
-                CombatDebugger.weaponPick(bot, pickLabel, distance, true);
+            MeleeChoice choice = chooseMelee(bot, target, inv, distance, snapshot.targetBlocking,
+                    sword, axe, tridentMelee);
+            if (choice.slot >= 0) {
+                boolean switched = inv.getSelectedHotbarSlot() != choice.slot;
+                inv.selectMainInventorySlot(choice.slot);
+                CombatDebugger.log(bot, "melee-choice",
+                        "chosen=" + choice.kind
+                                + " reason=" + choice.reason
+                                + " switched=" + switched
+                                + " charge=" + String.format("%.3f", BotCombatTiming.charge(bot))
+                                + " sweepPred=" + choice.sweepPred
+                                + " sweepVictimCount=" + choice.sweepVictimCount);
+                CombatDebugger.weaponPick(bot, choice.pickLabel, distance, true);
             } else {
+                CombatDebugger.log(bot, "melee-choice",
+                        "chosen=NONE reason=empty switched=false charge="
+                                + String.format("%.3f", BotCombatTiming.charge(bot))
+                                + " sweepPred=false sweepVictimCount=0");
                 CombatDebugger.weaponPick(bot, "MELEE(empty)", distance, true);
             }
             if (!BotCombatTiming.shouldPlanNormalMelee(bot, target)) {
                 CombatDebugger.log(bot, "opp-skip",
-                        "name=DIRECTOR_MELEE reason=charge charge="
+                        "name=" + ("shield".equals(choice.reason) ? "DIRECTOR_MELEE_SHIELD" : "DIRECTOR_MELEE")
+                                + " reason=charge charge="
                                 + String.format("%.3f", BotCombatTiming.charge(bot)));
                 BotCombatTiming.logSweepCheck(bot, target, distance);
                 return false;
             }
             melee.ticksFor(bot, target, distance);
+            if ("shield".equals(choice.reason)) {
+                logSweepBranchSkip(bot, target, distance, "higherPriority", "shieldAxe");
+            }
             return true;
         }
 
@@ -353,8 +357,117 @@ public final class CombatDirector {
         inv.selectMaterial(type);
     }
 
+    private boolean executeCommittedPhase(
+            Bot bot,
+            LivingEntity target,
+            double distance,
+            BotInventory inv,
+            String source,
+            boolean logSweepSkip
+    ) {
+        CombatState.Phase phase = bot.getCombatState().getPhase();
+        switch (phase) {
+            case MACE_CHARGING -> {
+                if (!inv.hasMace()) {
+                    CombatDebugger.log(bot, "commit-skip", "reason=missing-weapon phase=" + phase + " weapon=MACE");
+                    return false;
+                }
+                CombatDebugger.log(bot, "commit-tick", "phase=" + phase + " source=" + source);
+                CombatDebugger.weaponPick(bot, "MACE(charging)", distance, true);
+                selectType(inv, Material.MACE);
+                mace.ticksFor(bot, target, distance);
+                if (logSweepSkip) logSweepBranchSkip(bot, target, distance, "higherPriority", "maceCharging");
+                return true;
+            }
+            case AIRBORNE -> {
+                if (!inv.hasMace()) {
+                    CombatDebugger.log(bot, "commit-skip", "reason=missing-weapon phase=" + phase + " weapon=MACE");
+                    return false;
+                }
+                CombatDebugger.log(bot, "commit-tick", "phase=" + phase + " source=" + source);
+                CombatDebugger.weaponPick(bot, "MACE(airborne-commit)", distance, true);
+                selectType(inv, Material.MACE);
+                mace.ticksFor(bot, target, distance);
+                if (logSweepSkip) logSweepBranchSkip(bot, target, distance, "higherPriority", "airborneMace");
+                return true;
+            }
+            case CHARGING -> {
+                if (!inv.hasTrident()) {
+                    CombatDebugger.log(bot, "commit-skip", "reason=missing-weapon phase=" + phase + " weapon=TRIDENT");
+                    return false;
+                }
+                CombatDebugger.log(bot, "commit-tick", "phase=" + phase + " source=" + source);
+                CombatDebugger.weaponPick(bot, "TRIDENT(charging)", distance, true);
+                selectType(inv, Material.TRIDENT);
+                trident.ticksFor(bot, target, distance);
+                if (logSweepSkip) logSweepBranchSkip(bot, target, distance, "higherPriority", "tridentCharging");
+                return true;
+            }
+            default -> {
+                return false;
+            }
+        }
+    }
+
     private void logSweepBranchSkip(Bot bot, LivingEntity target, double distance, String reason, String branch) {
         BotCombatTiming.logSweepSkipIfRelevant(bot, target, distance, reason, branch);
+    }
+
+    private static boolean isCommittedPhase(CombatState.Phase phase) {
+        return phase == CombatState.Phase.MACE_CHARGING
+                || phase == CombatState.Phase.AIRBORNE
+                || phase == CombatState.Phase.CHARGING;
+    }
+
+    private static boolean hasCommittedWeapon(CombatState.Phase phase, BotInventory inv) {
+        return switch (phase) {
+            case MACE_CHARGING, AIRBORNE -> inv.hasMace();
+            case CHARGING -> inv.hasTrident();
+            default -> true;
+        };
+    }
+
+    private MeleeChoice chooseMelee(
+            Bot bot,
+            LivingEntity target,
+            BotInventory inv,
+            double distance,
+            boolean targetBlocking,
+            int sword,
+            int axe,
+            int tridentMelee
+    ) {
+        boolean sweepPred = false;
+        int sweepVictimCount = 0;
+        if (sword >= 0) {
+            sweepPred = BotCombatTiming.predictsSweepWithSword(bot, target, distance);
+            sweepVictimCount = BotCombatTiming.sweepVictimCount(bot, target);
+        }
+
+        if (targetBlocking && axe >= 0) {
+            return new MeleeChoice(axe, "AXE", "AXE(shield)", "shield", sweepPred, sweepVictimCount);
+        }
+        if (sweepPred && sweepVictimCount > 0 && sword >= 0) {
+            return new MeleeChoice(sword, "SWORD", "SWORD", "sweep", true, sweepVictimCount);
+        }
+        if (sword >= 0 && axe >= 0 && sweepVictimCount > 0 && selectedTypeEndsWith(inv, "_SWORD")
+                && BotCombatTiming.charge(bot) < BotCombatTiming.READY_CHARGE) {
+            return new MeleeChoice(sword, "SWORD", "SWORD", "sweep", false, sweepVictimCount);
+        }
+        if (axe >= 0) {
+            return new MeleeChoice(axe, "AXE", "AXE", "axe-heavy", sweepPred, sweepVictimCount);
+        }
+        if (sword >= 0) {
+            return new MeleeChoice(sword, "SWORD", "SWORD", "fallback", sweepPred, sweepVictimCount);
+        }
+        if (tridentMelee >= 0) {
+            return new MeleeChoice(tridentMelee, "TRIDENT", "TRIDENT(melee)", "fallback", false, 0);
+        }
+        return new MeleeChoice(-1, "NONE", "MELEE(empty)", "empty", false, 0);
+    }
+
+    private static boolean selectedTypeEndsWith(BotInventory inv, String suffix) {
+        return inv.getSelected().getType().name().endsWith(suffix);
     }
 
     private static String branchHint(
@@ -411,4 +524,13 @@ public final class CombatDirector {
         if (state.getPhase() == CombatState.Phase.IDLE) return 0.0;
         return Math.min(1.0, state.getPhaseTicks() / 40.0);
     }
+
+    private record MeleeChoice(
+            int slot,
+            String kind,
+            String pickLabel,
+            String reason,
+            boolean sweepPred,
+            int sweepVictimCount
+    ) {}
 }

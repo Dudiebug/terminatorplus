@@ -111,6 +111,16 @@ public final class MovementTrainingConfig {
         ConfigurationSection loadouts = section(training, "loadouts");
 
         FitnessWeights weights = new FitnessWeights(
+                getDouble(fitness, "kill", getDouble(fitness, "damage-dealt", 275.0, 0.0, 2_000.0), 0.0, 2_000.0),
+                getDouble(fitness, "damage-dealt-per-health", 18.0, 0.0, 500.0),
+                getDouble(fitness, "health-remaining", 12.0, 0.0, 100.0),
+                getDouble(fitness, "sword-damage", 2.0, 0.0, 200.0),
+                getDouble(fitness, "axe-damage", 5.0, 0.0, 200.0),
+                getDouble(fitness, "mace-damage", 8.0, 0.0, 200.0),
+                getDouble(fitness, "trident-damage", 4.0, 0.0, 200.0),
+                getDouble(fitness, "spear-damage", 6.0, 0.0, 200.0),
+                getDouble(fitness, "projectile-damage", 3.0, 0.0, 200.0),
+                getDouble(fitness, "explosive-damage", 1.0, 0.0, 200.0),
                 getDouble(fitness, "range-control", 300.0, 0.0, 2_000.0),
                 getDouble(fitness, "range-urgency", 220.0, 0.0, 2_000.0),
                 getDouble(fitness, "crit-setup", 75.0, 0.0, 1_000.0),
@@ -119,7 +129,6 @@ public final class MovementTrainingConfig {
                 getDouble(fitness, "circling", 90.0, 0.0, 1_000.0),
                 getDouble(fitness, "retreat", 70.0, 0.0, 1_000.0),
                 getDouble(fitness, "survival", 0.25, 0.0, 20.0),
-                getDouble(fitness, "damage-dealt", 275.0, 0.0, 2_000.0),
                 getDouble(fitness, "damage-taken-penalty", 4.0, 0.0, 500.0),
                 getDouble(fitness, "stuck-penalty", 45.0, 0.0, 1_000.0),
                 getDouble(fitness, "fallback-penalty", 35.0, 0.0, 1_000.0),
@@ -306,6 +315,16 @@ public final class MovementTrainingConfig {
     }
 
     public record FitnessWeights(
+            double kill,
+            double damageDealt,
+            double healthRemaining,
+            double swordDamage,
+            double axeDamage,
+            double maceDamage,
+            double tridentDamage,
+            double spearDamage,
+            double projectileDamage,
+            double explosiveDamage,
             double rangeControl,
             double rangeUrgency,
             double critSetup,
@@ -314,7 +333,6 @@ public final class MovementTrainingConfig {
             double circling,
             double retreat,
             double survival,
-            double damageDealt,
             double damageTakenPenalty,
             double stuckPenalty,
             double fallbackPenalty,

@@ -30,6 +30,20 @@ ai:
     max-training-ticks: 6000
 
     fitness-weights:
+      # Combat outcome weights. "kill" preserves the old damage-dealt behavior;
+      # damage-dealt-per-health is actual HP removed during the round.
+      kill: 275.0
+      damage-dealt-per-health: 18.0
+      health-remaining: 12.0
+      sword-damage: 2.0
+      axe-damage: 5.0
+      mace-damage: 8.0
+      trident-damage: 4.0
+      spear-damage: 6.0
+      projectile-damage: 3.0
+      explosive-damage: 1.0
+
+      # Movement cooperation weights.
       range-control: 300.0
       range-urgency: 220.0
       crit-setup: 75.0
@@ -39,7 +53,6 @@ ai:
       circling: 90.0
       retreat: 70.0
       survival: 0.25
-      damage-dealt: 275.0
       damage-taken-penalty: 4.0
       stuck-penalty: 45.0
       fallback-penalty: 35.0

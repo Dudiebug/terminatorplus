@@ -28,6 +28,7 @@ import net.nuggetmc.tplus.api.Terminator;
 import net.nuggetmc.tplus.api.agent.Agent;
 import net.nuggetmc.tplus.api.agent.legacyagent.LegacyMats;
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.NeuralNetwork;
+import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.CombatTrainingSnapshot;
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementTrainingSnapshot;
 import net.nuggetmc.tplus.api.event.BotDamageByPlayerEvent;
 import net.nuggetmc.tplus.api.event.BotFallDamageEvent;
@@ -82,6 +83,16 @@ public class Bot extends ServerPlayer implements Terminator {
     private boolean removeOnDeath;
     private int aliveTicks;
     private int kills;
+    private String trainingLoadout = "";
+    private double trainingDamageDealt;
+    private double trainingDamageTaken;
+    private double trainingSwordDamage;
+    private double trainingAxeDamage;
+    private double trainingMaceDamage;
+    private double trainingTridentDamage;
+    private double trainingSpearDamage;
+    private double trainingProjectileDamage;
+    private double trainingExplosiveDamage;
     private byte groundTicks;
     private byte jumpTicks;
     private byte noFallTicks;
@@ -330,6 +341,13 @@ public class Bot extends ServerPlayer implements Terminator {
     }
 
     @Override
+    public boolean tickCommittedCombat(org.bukkit.entity.LivingEntity target) {
+        CombatDirector director = plugin.getCombatDirector();
+        if (director == null) return false;
+        return director.tickCommitted(this, target);
+    }
+
+    @Override
     public boolean usesMovementController() {
         return network != null && network.usesMovementController();
     }
@@ -403,8 +421,29 @@ public class Bot extends ServerPlayer implements Terminator {
     }
 
     @Override
+    public CombatTrainingSnapshot combatTrainingSnapshot() {
+        return new CombatTrainingSnapshot(
+                true,
+                trainingLoadout,
+                trainingDamageDealt,
+                trainingDamageTaken,
+                trainingSwordDamage,
+                trainingAxeDamage,
+                trainingMaceDamage,
+                trainingTridentDamage,
+                trainingSpearDamage,
+                trainingProjectileDamage,
+                trainingExplosiveDamage
+        );
+    }
+
+    @Override
     public boolean applyTrainingLoadout(String loadoutName) {
-        return BotCommand.applyNamedLoadoutToBot(this, loadoutName);
+        boolean applied = BotCommand.applyNamedLoadoutToBot(this, loadoutName);
+        if (applied) {
+            trainingLoadout = loadoutName == null ? "" : loadoutName.trim().toLowerCase(Locale.ROOT);
+        }
+        return applied;
     }
 
     @Override
@@ -766,7 +805,7 @@ public class Bot extends ServerPlayer implements Terminator {
         // Neural-network training relies on the deterministic legacy damage table so fitness
         // scores are reproducible run-to-run. For everyone else, use the vanilla Bukkit attack
         // so sweep attacks, mace fall-damage scaling, enchantments and density bonuses apply.
-        if (network != null) {
+        if (network != null && !network.usesMovementController()) {
             double before = entityHealth(entity);
             punch();
             double damage = ItemUtils.getLegacyAttackDamage(
@@ -1052,6 +1091,13 @@ public class Bot extends ServerPlayer implements Terminator {
         float beforeHp = getHealth();
         boolean damaged = super.hurtServer(worldServer, damagesource, damage);
         float afterHp = getHealth();
+        if (damaged) {
+            double actualDamage = Math.max(0.0, beforeHp - afterHp);
+            if (actualDamage > 0.0) {
+                trainingDamageTaken += actualDamage;
+                recordAttackerTrainingDamage(damagesource, attacker, actualDamage);
+            }
+        }
 
         if (CombatDebugger.isOn(this)) {
             CombatDebugger.log(this, "damage",
@@ -1079,6 +1125,56 @@ public class Bot extends ServerPlayer implements Terminator {
         }
 
         return damaged;
+    }
+
+    private void recordAttackerTrainingDamage(DamageSource source, Entity attacker, double amount) {
+        if (!(attacker instanceof ServerPlayer player)) return;
+        Terminator terminator = plugin.getManager().getBot(player.getBukkitEntity());
+        if (terminator instanceof Bot bot && bot != this) {
+            bot.recordTrainingDamageDealt(source, attacker, amount);
+        }
+    }
+
+    private void recordTrainingDamageDealt(DamageSource source, Entity attacker, double amount) {
+        trainingDamageDealt += amount;
+        switch (classifyTrainingDamage(source, attacker)) {
+            case "sword" -> trainingSwordDamage += amount;
+            case "axe" -> trainingAxeDamage += amount;
+            case "mace" -> trainingMaceDamage += amount;
+            case "trident" -> trainingTridentDamage += amount;
+            case "spear" -> trainingSpearDamage += amount;
+            case "explosive" -> trainingExplosiveDamage += amount;
+            case "projectile" -> trainingProjectileDamage += amount;
+            default -> {
+            }
+        }
+    }
+
+    private String classifyTrainingDamage(DamageSource source, Entity attacker) {
+        Entity direct = source == null ? null : source.getDirectEntity();
+        String directType = direct == null ? "" : direct.getBukkitEntity().getType().name();
+        if (directType.contains("TRIDENT")) return tridentTrainingType();
+        if (directType.contains("CRYSTAL") || directType.contains("TNT") || directType.contains("EXPLOSIVE")) {
+            return "explosive";
+        }
+        if (directType.contains("ARROW") || directType.contains("FIREBALL") || directType.contains("WIND_CHARGE")) {
+            return "projectile";
+        }
+
+        Material held = Material.AIR;
+        if (attacker instanceof ServerPlayer player) {
+            held = player.getBukkitEntity().getInventory().getItemInMainHand().getType();
+        }
+        if (held == Material.MACE) return "mace";
+        if (held == Material.TRIDENT) return tridentTrainingType();
+        String name = held.name();
+        if (name.endsWith("_SWORD")) return "sword";
+        if (name.endsWith("_AXE")) return "axe";
+        return "other";
+    }
+
+    private String tridentTrainingType() {
+        return "spear".equals(trainingLoadout) ? "spear" : "trident";
     }
 
     private void kb(Location loc1, Location loc2, Entity attacker) {

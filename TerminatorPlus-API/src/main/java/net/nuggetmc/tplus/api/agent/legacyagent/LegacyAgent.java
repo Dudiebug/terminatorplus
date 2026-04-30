@@ -174,6 +174,8 @@ public class LegacyAgent extends Agent {
             network.feed(BotData.generate(bot, livingTarget));
         }
 
+        bot.tickCommittedCombat(livingTarget);
+
         // Neural-network training needs the deterministic 3-tick cadence so
         // fitness scores are reproducible run-to-run. Everyone else runs every
         // tick so CombatDirector can react at 20 Hz — canSwing() gates the

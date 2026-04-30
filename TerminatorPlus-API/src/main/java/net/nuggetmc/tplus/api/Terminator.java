@@ -2,6 +2,7 @@ package net.nuggetmc.tplus.api;
 
 import com.mojang.authlib.GameProfile;
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.NeuralNetwork;
+import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.CombatTrainingSnapshot;
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementTrainingSnapshot;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -142,6 +143,15 @@ public interface Terminator {
         return false;
     }
 
+    /**
+     * Runs only already-committed combat phases, such as mace airborne tracking
+     * or trident charge/release. This lets multi-tick weapon actions continue
+     * even when the caller's normal melee/movement branch would skip this tick.
+     */
+    default boolean tickCommittedCombat(LivingEntity target) {
+        return false;
+    }
+
     default boolean usesMovementController() {
         return false;
     }
@@ -159,6 +169,10 @@ public interface Terminator {
 
     default MovementTrainingSnapshot movementTrainingSnapshot(LivingEntity target) {
         return MovementTrainingSnapshot.unavailable();
+    }
+
+    default CombatTrainingSnapshot combatTrainingSnapshot() {
+        return CombatTrainingSnapshot.unavailable();
     }
 
     default boolean applyTrainingLoadout(String loadoutName) {

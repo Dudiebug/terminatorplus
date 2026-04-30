@@ -10,6 +10,7 @@ import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementNetwork;
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementTrainingConfig;
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementNetworkGenetics;
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementTrainingSnapshot;
+import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.CombatTrainingSnapshot;
 import net.nuggetmc.tplus.api.utils.ChatUtils;
 import net.nuggetmc.tplus.api.utils.MathUtils;
 import net.nuggetmc.tplus.api.utils.MojangAPI;
@@ -182,8 +183,8 @@ public class IntelligenceAgent {
             }
         }
 
-        Set<Map<BotNode, Map<BotDataType, Double>>> loadedProfiles = genProfiles.get(generation);
-        List<MovementNetwork> loadedMovementNetworks = movementGenerations.get(generation);
+        Set<Map<BotNode, Map<BotDataType, Double>>> loadedProfiles = genProfiles.remove(generation);
+        List<MovementNetwork> loadedMovementNetworks = movementGenerations.remove(generation);
         Location loc = PlayerUtils.findAbove(primary.getLocation(), 20);
 
         scheduler.runTask(plugin, () -> {
@@ -353,6 +354,7 @@ public class IntelligenceAgent {
             profiles.add(profile);
         }
 
+        genProfiles.clear();
         genProfiles.put(generation + 1, profiles);
     }
 
@@ -378,6 +380,8 @@ public class IntelligenceAgent {
             print(ChatColor.GRAY + "[" + ChatColor.YELLOW + "#" + rank + ChatColor.GRAY + "] "
                     + ChatColor.GREEN + bot.getBotName()
                     + ChatUtils.BULLET_FORMATTED + ChatColor.RED + entry.getValue() + " fitness"
+                    + ChatUtils.BULLET_FORMATTED + ChatColor.RED
+                    + MathUtils.round2Dec(bot.combatTrainingSnapshot().damageDealt()) + " dmg"
                     + ChatUtils.BULLET_FORMATTED + ChatColor.RED + bot.getKills() + " kills");
             rank++;
         }
@@ -405,6 +409,7 @@ public class IntelligenceAgent {
             }
         }
 
+        movementGenerations.clear();
         movementGenerations.put(generation + 1,
                 MovementNetworkGenetics.nextGeneration(scored, populationSize, generation, movementConfig, random));
     }
@@ -470,13 +475,25 @@ public class IntelligenceAgent {
     private double movementFitness(Terminator bot) {
         MovementFitness stats = movementFitness.get(bot);
         MovementTrainingConfig.FitnessWeights weights = movementConfig.fitnessWeights();
+        CombatTrainingSnapshot combat = bot.combatTrainingSnapshot();
         double fitness = bot.getAliveTicks() * weights.survival()
-                + bot.getKills() * weights.damageDealt()
-                + bot.getBotHealth() * 12.0;
+                + bot.getKills() * weights.kill()
+                + bot.getBotHealth() * weights.healthRemaining();
+        if (combat.available()) {
+            fitness += combat.damageDealt() * weights.damageDealt();
+            fitness += combat.swordDamage() * weights.swordDamage();
+            fitness += combat.axeDamage() * weights.axeDamage();
+            fitness += combat.maceDamage() * weights.maceDamage();
+            fitness += combat.tridentDamage() * weights.tridentDamage();
+            fitness += combat.spearDamage() * weights.spearDamage();
+            fitness += combat.projectileDamage() * weights.projectileDamage();
+            fitness += combat.explosiveDamage() * weights.explosiveDamage();
+            fitness -= combat.damageTaken() * weights.damageTakenPenalty();
+        }
         if (stats != null) {
             fitness += stats.score(weights);
         }
-        if (bot.getBotMaxHealth() > 0.0f) {
+        if (!combat.available() && bot.getBotMaxHealth() > 0.0f) {
             fitness -= Math.max(0.0, bot.getBotMaxHealth() - bot.getBotHealth()) * weights.damageTakenPenalty();
         }
         return fitness;
@@ -584,9 +601,13 @@ public class IntelligenceAgent {
         if (!bots.isEmpty()) {
             print("Removing all cached bots...");
 
-            bots.values().forEach(Terminator::removeBot);
+            bots.values().forEach(bot -> {
+                bot.removeBot();
+                manager.remove(bot);
+            });
             bots.clear();
         }
+        movementFitness.clear();
 
         /*print("Removing all current bots...");
 

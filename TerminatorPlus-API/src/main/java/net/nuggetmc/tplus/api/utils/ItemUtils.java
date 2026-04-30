@@ -24,36 +24,40 @@ public class ItemUtils {
             case STONE_SHOVEL:
                 return 2;
 
-            case WOODEN_AXE:
-            case GOLDEN_AXE:
             case STONE_PICKAXE:
             case IRON_SHOVEL:
                 return 3;
 
             case WOODEN_SWORD:
             case GOLDEN_SWORD:
-            case STONE_AXE:
             case IRON_PICKAXE:
             case DIAMOND_SHOVEL:
                 return 4;
 
             case STONE_SWORD:
-            case IRON_AXE:
             case DIAMOND_PICKAXE:
             case NETHERITE_SHOVEL:
                 return 5;
 
             case IRON_SWORD:
-            case DIAMOND_AXE:
             case NETHERITE_PICKAXE:
                 return 6;
 
+            case WOODEN_AXE:
+            case GOLDEN_AXE:
             case DIAMOND_SWORD:
-            case NETHERITE_AXE:
                 return 7;
 
             case NETHERITE_SWORD:
                 return 8;
+
+            case STONE_AXE:
+            case IRON_AXE:
+            case DIAMOND_AXE:
+                return 9;
+
+            case NETHERITE_AXE:
+                return 10;
         }
     }
 }
