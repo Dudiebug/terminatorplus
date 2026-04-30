@@ -107,6 +107,25 @@ public final class CombatDebugger {
         emit(bot, "weapon-pick", "w=" + weapon + " dist=" + fmt(distance) + " cdReady=" + cdReady);
     }
 
+    public static void trainingDamage(
+            Bot bot,
+            double amount,
+            String bucket,
+            String classificationSource,
+            String directType,
+            String heldType,
+            String loadout
+    ) {
+        if (!isOn(bot)) return;
+        emit(bot, "training-damage",
+                "amount=" + fmt(amount)
+                        + " bucket=" + sanitizeToken(bucket)
+                        + " classSource=" + sanitizeToken(classificationSource)
+                        + " direct=" + sanitizeToken(directType)
+                        + " held=" + sanitizeToken(heldType)
+                        + " loadout=" + sanitizeToken(loadout));
+    }
+
     public static void dirNoop(Bot bot, double distance, String reason, String branchAttempted) {
         if (!isOn(bot)) return;
         emit(bot, "dir-noop",
@@ -336,8 +355,8 @@ public final class CombatDebugger {
     private static int compactInterval(String event) {
         return switch (event) {
             case "dir-entry", "dir-ready", "snapshot", "scanner-miss" -> 100;
-            case "dir-noop" -> 40;
-            case "weapon-pick", "mace-cd" -> 20;
+            case "dir-noop", "commit-skip" -> 40;
+            case "weapon-pick", "mace-cd", "melee-choice" -> 20;
             case "melee-try", "swing-gate", "sweep-check", "sweep-skip" -> 10;
             default -> 0;
         };

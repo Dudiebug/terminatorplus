@@ -1,6 +1,9 @@
 # TerminatorPlus Wiki
 
-TerminatorPlus is a Paper plugin that spawns server-side player bots with combat AI, a full editable inventory, and a preset system. Unlike basic NPC plugins, each bot is an NMS `ServerPlayer` subclass — it takes and deals real damage, uses real items, and reacts to its surroundings.
+TerminatorPlus is a Paper plugin that spawns server-side player bots with combat
+AI, editable inventories, movement neural networks, a movement-brain bank, and a
+preset system. Each bot is an NMS `ServerPlayer` subclass: it takes and deals
+real damage, uses real items, and reacts through vanilla mechanics.
 
 ## Pages
 
@@ -9,16 +12,29 @@ TerminatorPlus is a Paper plugin that spawns server-side player bots with combat
 - [Commands](Commands)
 - [Loadouts](Loadouts)
 - [Combat Behaviors](Combat-Behaviors)
+- [Movement Network](Movement-Network)
+- [Movement Brain Bank](Movement-Brain-Bank)
+- [AI Training](AI-Training)
+- [Brain Persistence](Brain-Persistence)
+- [Configuration](Configuration)
 - [Presets](Presets)
 - [Inventory GUI](Inventory-GUI)
-- [Neural Network Mode](Neural-Network-Mode)
 - [API](API)
 - [Troubleshooting](Troubleshooting)
 - [Changelog](Changelog)
+- [Release Notes 5.1.1](Release-Notes-5.1.1)
 
-## What's New
+## Movement Brain Bank
 
-- **Weapon-aware combat AI** — bots use swords, maces, tridents with momentum, wind charges, ender pearls, end crystals, respawn anchors, cobwebs, totems, and elytra gliding with firework boosts.
-- **Full inventory editor** — `/bot inventory <bot-name>` opens a 54-slot chest you can edit like a real inventory.
-- **Presets** — save a bot's loadout and behavior settings to YAML, then re-apply to any bot.
-- **Neural-network training mode is preserved** — the AI pipeline only kicks in for non-training bots, so fitness scoring stays deterministic.
+- Movement brains are locomotion-only; `CombatDirector` retains full authority
+  over combat.
+- Movement routing uses `MovementBranchFamily`: lock, intent branch, range/role
+  fallback, then `general_fallback`.
+- Brain persistence uses `ai/movement/manifest.json` plus per-family files under
+  `ai/movement/brains/`.
+- Legacy `ai/brain.json` imports as `general_fallback` when compatible.
+- `/ai reinforcement ... movement` automatically samples weighted loadouts from
+  `movement_balanced` or curriculum mixes.
+- `/ai evaluate` exports repeatable seed/scenario reports with route/family
+  distributions and fallback state.
+

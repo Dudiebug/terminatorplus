@@ -64,6 +64,7 @@ public class TerminatorPlus extends JavaPlugin {
     public void onEnable() {
         instance = this;
         version = getDescription().getVersion();
+        saveDefaultConfig();
 
         mcVersion = Bukkit.getServer().getMinecraftVersion();
         correctVersion = mcVersion.equals(REQUIRED_VERSION);

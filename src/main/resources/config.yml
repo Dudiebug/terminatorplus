@@ -1,0 +1,87 @@
+ai:
+  movement:
+    # Movement-controller brains are locomotion-only. CombatDirector owns all combat actions.
+    enabled: true
+    mode: movement_controller
+    # Must match MovementNetworkShape: 37 inputs, hidden layers, 8 movement outputs.
+    layer-shape: [37, 32, 16, 8]
+    # Legacy import source. Compatible files import as general_fallback.
+    legacy-brain-path: ai/brain.json
+    bank:
+      enabled: true
+      # Manifest plus per-brain files live under plugins/TerminatorPlus/ai/movement/.
+      manifest-path: ai/movement/manifest.json
+      brains-directory: ai/movement/brains
+      fallback-brain-name: general_fallback
+      autosave-best-brain: false
+      save-only-improved-brain: true
+      quarantine-bad-files: true
+      legacy-import-behavior: import-compatible-or-reset
+      debug-logging: false
+  training:
+    # Normal movement training samples this weighted pool automatically.
+    loadout-mix: movement_balanced
+    # general_fallback means mixed mode: record per-family telemetry, update fallback.
+    # Set to a family such as mace or mobility to train that specialist curriculum.
+    curriculum-family: general_fallback
+    loadout-mixes:
+      movement_balanced:
+        # pvp + crystalpvp + anchorbomb total 8% to expose explosive movement
+        # without dominating every generation.
+        sword: 12
+        axe: 12
+        smp: 12
+        pot: 8
+        mace: 10
+        spear: 8
+        trident: 8
+        windcharge: 6
+        skydiver: 5
+        hybrid: 6
+        vanilla: 5
+        pvp: 3
+        crystalpvp: 3
+        anchorbomb: 2
+      melee_curriculum:
+        sword: 20
+        axe: 20
+        smp: 25
+        pot: 15
+        spear: 10
+        hybrid: 10
+      mace_curriculum:
+        mace: 45
+        hybrid: 20
+        windcharge: 15
+        vanilla: 10
+        pvp: 5
+        skydiver: 5
+      trident_curriculum:
+        trident: 40
+        spear: 25
+        skydiver: 15
+        hybrid: 10
+        vanilla: 10
+      mobility_curriculum:
+        windcharge: 25
+        skydiver: 25
+        hybrid: 20
+        trident: 10
+        mace: 10
+        pvp: 5
+        vanilla: 5
+      explosive_survival_curriculum:
+        crystalpvp: 20
+        anchorbomb: 15
+        vanilla: 20
+        pvp: 15
+        hybrid: 10
+        windcharge: 10
+        sword: 10
+  evaluation:
+    # Report-only initializer/exporter for movement-brain ablations.
+    # Live win/damage metrics require running the exported scenario in an arena.
+    default-variant: branch_family_latched
+    default-scenario: all
+    default-seeds: [1337, 7331, 424242]
+    export-directory: ai/movement/evaluations

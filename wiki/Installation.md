@@ -2,40 +2,61 @@
 
 ## Requirements
 
-- **Paper 1.21.1** (tested). Spigot/CraftBukkit are not supported — TerminatorPlus uses Paper-only API (`ItemStack.serializeAsBytes`, CraftBukkit internals, NMS `ServerPlayer` subclass).
-- **Java 21** (matches Paper 1.21's runtime).
+- Paper matching the jar target branch, such as Paper 26.1.2 or Paper 1.21.11.
+- Java 25.
+- Spigot and CraftBukkit are not supported.
 
 ## Install
 
-1. Drop `TerminatorPlus-<version>.jar` into your server's `plugins/` directory.
-2. Start (or restart) the server.
-3. Verify the load banner in console:
-   ```
-   [TerminatorPlus] Running on version: 1.21.1, required version: 1.21.1, correct version: true
-   ```
-   If it shows `correct version: false`, you're on the wrong Minecraft version and bots will still spawn but may behave unexpectedly.
+1. Download the jar matching your server version from the releases page.
+2. Drop `TerminatorPlus-<version>.jar` into `plugins/`.
+3. Start or restart the server.
+4. Check the console banner for the server version and required target version.
 
 ## File Layout
 
-After the first run:
+After first run and movement-bank use:
 
-```
+```text
 plugins/
-└── TerminatorPlus/
-    └── presets/
-        └── mykit.yml       # created by /bot preset save
+  TerminatorPlus/
+    config.yml
+    presets/
+      mykit.yml
+    ai/
+      brain.json                         # optional legacy import source
+      movement/
+        manifest.json
+        brains/
+          general.json
+          melee.json
+          mace.json
+          trident_ranged.json
+          spear_melee.json
+          mobility.json
+          explosive_survival.json
+          projectile_ranged.json
+        evaluations/
+          movement-eval-<timestamp>.json
 ```
 
-`presets/` stores saved bot loadouts as YAML. See [Presets](Presets) for the format.
+- `config.yml`: movement bank, training, and evaluation defaults.
+- `presets/`: saved bot loadouts.
+- `ai/movement/`: movement brain-bank manifest, per-brain files, and evaluation
+  exports.
+- `ai/brain.json`: legacy import path only.
 
 ## Permissions
 
-The plugin declares three nodes (see `plugin.yml`):
-
 | Node | Default | Covers |
 | --- | --- | --- |
-| `terminatorplus.manage` | op | Spawning, loadouts, inventory GUI, `preset save/apply/list` |
-| `terminatorplus.admin`  | op | Destructive commands (`reset`, `preset delete`) |
-| `terminatorplus.*`      | op | Parent node granting both of the above |
+| `terminatorplus.manage` | op | Spawning, loadouts, inventory GUI, presets, AI training, brain and evaluation commands |
+| `terminatorplus.admin` | op | Destructive or diagnostic commands |
+| `terminatorplus.*` | op | Parent node granting both |
 
-Grant to non-op staff via any permission plugin.
+## First Startup
+
+1. Review `config.yml`.
+2. Spawn a bot with `/bot create TestBot`.
+3. Apply a loadout with `/bot loadout hybrid TestBot`.
+4. Use `/ai brain status` to inspect movement-bank state.

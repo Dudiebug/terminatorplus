@@ -12,7 +12,7 @@ import net.nuggetmc.tplus.api.Terminator;
 BotManager bots = TerminatorPlusAPI.getBotManager();
 ```
 
-The `BotManager` is the root object for everything spawning- and registry-related.
+The `BotManager` is the root object for spawning and registry.
 
 ## Spawning
 
@@ -20,12 +20,12 @@ The `BotManager` is the root object for everything spawning- and registry-relate
 Terminator bot = bots.createBot(
     location,              // Location
     "MyBot",               // name (also the Mojang skin lookup)
-    null,                  // skin (null → look up by name)
-    null                   // signature (null → look up by name)
+    null,                  // skin (null = look up by name)
+    null                   // signature (null = look up by name)
 );
 ```
 
-Overloads accept custom skin/signature pairs, multi-spawn counts, pre-built neural networks, etc. See `BotManager.java`.
+Overloads accept custom skin/signature pairs, multi-spawn counts, and pre-built neural networks. See `BotManager.java`.
 
 ### Removing
 
@@ -36,13 +36,13 @@ bots.reset(); // wipe all
 
 ## Inspecting a bot
 
-The `Terminator` interface exposes the subset of `ServerPlayer` behavior that's safe to call from the main thread:
+The `Terminator` interface exposes the subset of `ServerPlayer` behavior safe to call from the main thread:
 
 ```java
 bot.getBotName();
 bot.getLocation();
 bot.getVelocity();
-bot.getBotHealth();        // current HP
+bot.getBotHealth();
 bot.getBotMaxHealth();
 bot.isBotOnGround();
 bot.isFalling();
@@ -63,21 +63,16 @@ bot.setShield(true);
 
 ## Driving the combat director
 
-The new weapon-aware AI is reachable through a single call:
-
 ```java
 boolean handled = bot.combatTick(target);
 ```
 
 - Returns `true` if the director picked a weapon and executed a behavior.
 - Returns `false` if you should fall back to your own attack/targeting logic.
-- Returns `false` unconditionally for bots with a neural network (see [Neural Network Mode](Neural-Network-Mode)).
 
 This mirrors the internal contract: use the return value to decide whether to skip your custom pipeline.
 
 ## Inventory helpers
-
-`Terminator` gives you the legacy setters:
 
 ```java
 bot.setItem(new ItemStack(Material.NETHERITE_SWORD), EquipmentSlot.HAND);
@@ -85,19 +80,17 @@ bot.setItemOffhand(new ItemStack(Material.SHIELD));
 bot.setDefaultItem(new ItemStack(Material.STICK));
 ```
 
-For full per-slot control (hotbar 0–8, storage 9–35, armor, offhand), cast to the implementation's `Bot` class and call `getBotInventory()`. This is an internal API and may change — prefer the public methods when possible.
+For full per-slot control (hotbar 0--8, storage 9--35, armor, offhand), cast to the implementation's `Bot` class and call `getBotInventory()`. This is an internal API and may change.
 
 ## Events
 
-Listeners you can subscribe to:
-
 | Event | Fires when |
 | --- | --- |
-| `BotFallDamageEvent` | A bot is about to take fall damage (cancellable). |
-| `BotDamageByPlayerEvent` | A player attacks a bot. |
-| `BotDeathEvent` | A bot dies from any source. |
-| `BotKilledByPlayerEvent` | A bot is killed specifically by a player. |
-| `TerminatorLocateTargetEvent` | A bot's targeting logic picks a new entity. |
+| `BotFallDamageEvent` | A bot is about to take fall damage (cancellable) |
+| `BotDamageByPlayerEvent` | A player attacks a bot |
+| `BotDeathEvent` | A bot dies from any source |
+| `BotKilledByPlayerEvent` | A bot is killed specifically by a player |
+| `TerminatorLocateTargetEvent` | A bot's targeting logic picks a new entity |
 
 Example:
 
@@ -111,16 +104,29 @@ public void onBotKilled(BotKilledByPlayerEvent e) {
 
 ## AI training
 
-The training pipeline is exposed via `AIManager`:
+The training pipeline is exposed via `AIManager`. In practice, most consumers use the `/ai` command surface. Scripting training sessions programmatically requires the plugin jar as a runtime dependency.
 
-```java
-AIManager ai = /* see internal bridge */;
-```
+## Movement network classes (API module)
 
-In practice, most consumers use the `/ai` command surface. Scripting training sessions programmatically requires the plugin jar as a runtime dependency rather than the API artifact alone.
+The movement network architecture lives in the API module under `net.nuggetmc.tplus.api.agent.legacyagent.ai.movement`:
+
+| Class | Purpose |
+| --- | --- |
+| `MovementNetwork` | Feed-forward network with evaluate/validate/flatten methods |
+| `MovementNetworkShape` | Constants: INPUT_COUNT=30, OUTPUT_COUNT=8, DEFAULT_LAYERS |
+| `MovementNetworkGenetics` | GA operations: crossover, mutation, tournament selection |
+| `MovementTrainingConfig` | Config loading from plugin YAML |
+| `MovementTrainingSnapshot` | Read-only training signal for fitness |
+| `MovementBrainPersistence` | Save/load/reset brain JSON files |
+
+These are public classes, but the movement system is still evolving. Pin to a specific version if you depend on them directly.
 
 ## Compatibility
 
-- API artifact is published against Paper 1.21.1 / Java 21.
+- API artifact is built against Paper 26.1.2 / Paper 1.21.11 with Java 25.
 - Internal changes happen behind the `Terminator` interface — breaking API changes are called out in the [Changelog](Changelog).
-- Because bots are real `ServerPlayer`s, standard Bukkit APIs (`bot.getBukkitEntity()`) mostly work too — but prefer the `Terminator` methods where available for stability.
+- Bots are real `ServerPlayer`s, so standard Bukkit APIs (`bot.getBukkitEntity()`) mostly work. Prefer `Terminator` methods for stability.
+
+## Source
+
+See the [API module source](https://github.com/Dudiebug/terminatorplus/tree/master/TerminatorPlus-API/src/main/java/net/nuggetmc/tplus/api).

@@ -29,6 +29,8 @@ import org.bukkit.potion.PotionEffectType;
 import org.bukkit.potion.PotionType;
 import org.bukkit.util.Vector;
 
+import java.util.Locale;
+
 /**
  * Reads a {@link CombatSnapshot} and identifies the highest-value play available
  * given the bot's current inventory, cooldowns, and the battlefield state.
@@ -174,6 +176,148 @@ public final class OpportunityScanner {
     private static final double ARMOR_REPAIR_SAFE_DIST = 15.0;
     private static final double ARMOR_DURABILITY_THRESHOLD = 0.30;
 
+    public enum ScannerPlay {
+        NONE("none", MovementBranchFamily.GENERAL_FALLBACK, DesiredRangeBand.MELEE, true, 0),
+        CRYSTAL_TRAP("crystal_trap", MovementBranchFamily.EXPLOSIVE_SURVIVAL, DesiredRangeBand.CLOSE, false, 30),
+        KNOCKUP_CRYSTAL("knockup_crystal", MovementBranchFamily.EXPLOSIVE_SURVIVAL, DesiredRangeBand.CLOSE, false, 35),
+        HIT_CRYSTAL("hit_crystal", MovementBranchFamily.EXPLOSIVE_SURVIVAL, DesiredRangeBand.MELEE, false, 30),
+        LEDGE_CRYSTAL("ledge_crystal", MovementBranchFamily.EXPLOSIVE_SURVIVAL, DesiredRangeBand.CLOSE, false, 30),
+        STUN_SLAM("stun_slam", MovementBranchFamily.MELEE, DesiredRangeBand.MELEE, true, 10),
+        WIND_MACE_SMASH("wind_mace_smash", MovementBranchFamily.MACE, DesiredRangeBand.MELEE, false, 60),
+        AERIAL_STRIKE("aerial_strike", MovementBranchFamily.MOBILITY, DesiredRangeBand.MID, false, 60),
+        PEARL_FLASH_CRYSTAL("pearl_flash_crystal", MovementBranchFamily.EXPLOSIVE_SURVIVAL, DesiredRangeBand.MID, false, 50),
+        FACE_PLACE("face_place", MovementBranchFamily.EXPLOSIVE_SURVIVAL, DesiredRangeBand.MELEE, false, 25),
+        HEAD_WEB("head_web", MovementBranchFamily.MELEE, DesiredRangeBand.MELEE, true, 20),
+        HIT_WEB("hit_web", MovementBranchFamily.MELEE, DesiredRangeBand.CLOSE, true, 20),
+        FOOT_PIN("foot_pin", MovementBranchFamily.MELEE, DesiredRangeBand.CLOSE, true, 20),
+        WEB_BUBBLE("web_bubble", MovementBranchFamily.MOBILITY, DesiredRangeBand.MELEE, false, 40),
+        WEB_DRAIN("web_drain", MovementBranchFamily.EXPLOSIVE_SURVIVAL, DesiredRangeBand.CLOSE, true, 20),
+        TIPPED_HARMING("tipped_harming", MovementBranchFamily.PROJECTILE_RANGED, DesiredRangeBand.MID, true, 20),
+        TIPPED_SLOWNESS("tipped_slowness", MovementBranchFamily.PROJECTILE_RANGED, DesiredRangeBand.MID, true, 20),
+        TIPPED_WEAKNESS("tipped_weakness", MovementBranchFamily.PROJECTILE_RANGED, DesiredRangeBand.MID, true, 20),
+        TIPPED_SLOW_FALL("tipped_slow_fall", MovementBranchFamily.PROJECTILE_RANGED, DesiredRangeBand.MID, true, 20),
+        TIPPED_POISON("tipped_poison", MovementBranchFamily.PROJECTILE_RANGED, DesiredRangeBand.MID, true, 20),
+        CROSSBOW_PIERCE("crossbow_pierce", MovementBranchFamily.PROJECTILE_RANGED, DesiredRangeBand.MID, true, 20),
+        INTERRUPT_EAT("interrupt_eat", MovementBranchFamily.PROJECTILE_RANGED, DesiredRangeBand.MID, true, 15),
+        INTERRUPT_BOW("interrupt_bow", MovementBranchFamily.PROJECTILE_RANGED, DesiredRangeBand.MID, true, 15),
+        INTERRUPT_POTION("interrupt_potion", MovementBranchFamily.PROJECTILE_RANGED, DesiredRangeBand.MID, true, 15),
+        SPLASH_HEAL_SELF("splash_heal_self", MovementBranchFamily.MOBILITY, DesiredRangeBand.CLOSE, false, 25),
+        SPLASH_HARMING("splash_harming", MovementBranchFamily.PROJECTILE_RANGED, DesiredRangeBand.CLOSE, true, 20),
+        SPLASH_POISON("splash_poison", MovementBranchFamily.PROJECTILE_RANGED, DesiredRangeBand.CLOSE, true, 20),
+        SPLASH_WEAKNESS("splash_weakness", MovementBranchFamily.PROJECTILE_RANGED, DesiredRangeBand.CLOSE, true, 20),
+        SPLASH_SLOWNESS("splash_slowness", MovementBranchFamily.PROJECTILE_RANGED, DesiredRangeBand.CLOSE, true, 20),
+        STRENGTH_BUFF("strength_buff", MovementBranchFamily.GENERAL_FALLBACK, DesiredRangeBand.MID, false, 40),
+        SPEED_BUFF("speed_buff", MovementBranchFamily.MOBILITY, DesiredRangeBand.LONG, false, 40),
+        FIRE_RES_BUFF("fire_res_buff", MovementBranchFamily.EXPLOSIVE_SURVIVAL, DesiredRangeBand.CLOSE, false, 40),
+        FIREWORK_BLAST("firework_blast", MovementBranchFamily.PROJECTILE_RANGED, DesiredRangeBand.MID, true, 20),
+        LAVA_PIN("lava_pin", MovementBranchFamily.EXPLOSIVE_SURVIVAL, DesiredRangeBand.MELEE, true, 20),
+        FIRE_ZONE("fire_zone", MovementBranchFamily.EXPLOSIVE_SURVIVAL, DesiredRangeBand.CLOSE, true, 20),
+        WATER_DOUSE_SELF("water_douse_self", MovementBranchFamily.MOBILITY, DesiredRangeBand.CLOSE, false, 30),
+        TNT_TRAP("tnt_trap", MovementBranchFamily.EXPLOSIVE_SURVIVAL, DesiredRangeBand.CLOSE, false, 40),
+        SWORD_CRIT_SETUP("sword_crit_setup", MovementBranchFamily.MELEE, DesiredRangeBand.MELEE, true, 10),
+        SPRINT_RESET("sprint_reset", MovementBranchFamily.MELEE, DesiredRangeBand.MELEE, true, 10),
+        PURSUE_GAP_CLOSE("pursue_gap_close", MovementBranchFamily.MOBILITY, DesiredRangeBand.CLOSE, true, 15),
+        FINISHER_COMBO("finisher_combo", MovementBranchFamily.MOBILITY, DesiredRangeBand.LONG, false, 50),
+        FINISHER_TRIDENT("finisher_trident", MovementBranchFamily.TRIDENT_RANGED, DesiredRangeBand.MID, true, 25),
+        FINISHER_PEARL("finisher_pearl", MovementBranchFamily.MOBILITY, DesiredRangeBand.LONG, false, 35),
+        ARMOR_REPAIR("armor_repair", MovementBranchFamily.MOBILITY, DesiredRangeBand.LONG, false, 35);
+
+        private final String id;
+        private final MovementBranchFamily family;
+        private final DesiredRangeBand rangeBand;
+        private final boolean interruptible;
+        private final int lockTicks;
+
+        ScannerPlay(
+                String id,
+                MovementBranchFamily family,
+                DesiredRangeBand rangeBand,
+                boolean interruptible,
+                int lockTicks
+        ) {
+            this.id = id;
+            this.family = family;
+            this.rangeBand = rangeBand;
+            this.interruptible = interruptible;
+            this.lockTicks = lockTicks;
+        }
+
+        public String id() {
+            return id;
+        }
+
+        public MovementBranchFamily family() {
+            return family;
+        }
+
+        public DesiredRangeBand rangeBand() {
+            return rangeBand;
+        }
+
+        public boolean interruptible() {
+            return interruptible;
+        }
+
+        public int lockTicks() {
+            return lockTicks;
+        }
+
+        public String actionIdentity() {
+            return "scanner:" + id;
+        }
+
+        public static ScannerPlay fromId(String id) {
+            if (id == null || id.isBlank()) return NONE;
+            for (ScannerPlay play : values()) {
+                if (play.id.equalsIgnoreCase(id) || play.name().equalsIgnoreCase(id)) {
+                    return play;
+                }
+            }
+            return NONE;
+        }
+    }
+
+    public record ScannerPlan(ScannerPlay play, PotionType potionType) {
+        public static final ScannerPlan NONE = new ScannerPlan(ScannerPlay.NONE, null);
+
+        public ScannerPlan {
+            play = play == null ? ScannerPlay.NONE : play;
+        }
+
+        public static ScannerPlan of(ScannerPlay play) {
+            return new ScannerPlan(play, null);
+        }
+
+        public static ScannerPlan of(ScannerPlay play, PotionType potionType) {
+            return new ScannerPlan(play, potionType);
+        }
+
+        public boolean present() {
+            return play != ScannerPlay.NONE;
+        }
+
+        public String playId() {
+            if (!present()) return "";
+            if (potionType == null) return play.id();
+            return play.id() + ":" + potionType.name().toLowerCase(Locale.ROOT);
+        }
+
+        public static ScannerPlan fromPlayId(String playId) {
+            if (playId == null || playId.isBlank()) return NONE;
+            String[] parts = playId.split(":", 2);
+            ScannerPlay play = ScannerPlay.fromId(parts[0]);
+            PotionType potionType = null;
+            if (parts.length == 2) {
+                try {
+                    potionType = PotionType.valueOf(parts[1].trim().toUpperCase(Locale.ROOT));
+                } catch (IllegalArgumentException ignored) {
+                    potionType = null;
+                }
+            }
+            return of(play, potionType);
+        }
+    }
+
     private final Plugin plugin;
 
     public OpportunityScanner(Plugin plugin) {
@@ -192,6 +336,510 @@ public final class OpportunityScanner {
      */
     public OpportunityScanner() {
         this(TerminatorPlus.getInstance());
+    }
+
+    /**
+     * Side-effect-free probe used by CombatDirector before movement is routed.
+     * This mirrors scanner priority without selecting slots, spawning entities,
+     * mutating cooldowns, or placing blocks.
+     */
+    public ScannerPlan plan(Bot bot, LivingEntity target, CombatSnapshot snap, ComboBehavior combo) {
+        if (bot == null || target == null || snap == null || !target.isValid()) {
+            return ScannerPlan.NONE;
+        }
+
+        BotInventory inv = bot.getBotInventory();
+        int alive = bot.getAliveTicks();
+
+        if (snap.targetBlocking && snap.distance <= MELEE_RANGE
+                && hasAxe(inv) && snap.botOnGround
+                && bot.getBotCooldowns().ready(STUN_SLAM_CD, alive)
+                && BotCombatTiming.shouldPlanNormalMelee(bot, target)) {
+            return ScannerPlan.of(ScannerPlay.STUN_SLAM);
+        }
+
+        if (snap.targetAirborne && snap.targetRising
+                && snap.distance <= CRYSTAL_TRAP_RANGE
+                && inv.hasCrystalKit()
+                && bot.getBotCooldowns().ready(CRYSTAL_TRAP_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.CRYSTAL_TRAP);
+        }
+
+        if (snap.botOnGround && !snap.targetAirborne
+                && snap.distance <= 4.0
+                && inv.hasWindCharge() && inv.hasCrystalKit()
+                && bot.getBotCooldowns().ready(KNOCKUP_CD, alive)
+                && bot.getBotCooldowns().ready(WindChargeBehavior.COOLDOWN_KEY, alive)) {
+            return ScannerPlan.of(ScannerPlay.KNOCKUP_CRYSTAL);
+        }
+
+        if (snap.botOnGround && !snap.targetAirborne
+                && snap.distance >= 1.5 && snap.distance <= MELEE_RANGE
+                && inv.hasCrystalKit() && hasKnockbackSword(inv)
+                && bot.getBotCooldowns().ready(HIT_CRYSTAL_CD, alive)
+                && BotCombatTiming.shouldPlanSprintReset(bot, target)) {
+            return ScannerPlan.of(ScannerPlay.HIT_CRYSTAL);
+        }
+
+        if (snap.targetOverVoid && snap.distance <= 5.0
+                && inv.hasCrystalKit()
+                && bot.getBotCooldowns().ready(LEDGE_CRYSTAL_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.LEDGE_CRYSTAL);
+        }
+
+        if (!snap.targetBlocking && snap.botOnGround && snap.openSkyAboveBot
+                && inv.hasMace() && inv.hasWindCharge()
+                && snap.distance <= 5.0
+                && bot.getBotCooldowns().ready(WIND_MACE_CD, alive)
+                && bot.getBotCooldowns().ready(MaceBehavior.COOLDOWN_KEY, alive)
+                && bot.getBotCooldowns().ready(WindChargeBehavior.COOLDOWN_KEY, alive)
+                && BotCombatTiming.shouldPlanGroundMaceSmash(bot, target, MaceBehavior.LAUNCH_Y)) {
+            return ScannerPlan.of(ScannerPlay.WIND_MACE_SMASH);
+        }
+
+        if (snap.botOnGround && snap.openSkyAboveBot
+                && inv.hasWindCharge() && inv.hasElytra() && inv.hasTrident()
+                && snap.distance >= 8.0 && snap.distance <= 40.0
+                && bot.getBotCooldowns().ready(AERIAL_STRIKE_CD, alive)
+                && bot.getBotCooldowns().ready(ComboBehavior.COOLDOWN_KEY, alive)) {
+            return ScannerPlan.of(ScannerPlay.AERIAL_STRIKE);
+        }
+
+        if (inv.hasEnderPearl() && inv.hasCrystalKit()
+                && snap.distance >= 8.0 && snap.distance <= 30.0
+                && bot.getBotCooldowns().ready(PEARL_FLASH_CD, alive)
+                && bot.getBotCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, alive)) {
+            return ScannerPlan.of(ScannerPlay.PEARL_FLASH_CRYSTAL);
+        }
+
+        if (snap.targetThrowingPearl
+                && inv.hasCrystalKit() && snap.botOnGround
+                && bot.getBotCooldowns().ready(FACE_PLACE_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.FACE_PLACE);
+        }
+
+        if (snap.targetNearWall && snap.distance <= 4.0
+                && inv.hasCobweb()
+                && bot.getBotCooldowns().ready(HEAD_WEB_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.HEAD_WEB);
+        }
+
+        if (snap.targetAirborne && snap.distance <= 5.0
+                && inv.hasCobweb()
+                && bot.getBotCooldowns().ready(HIT_WEB_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.HIT_WEB);
+        }
+
+        if (snap.targetSprintingAway && snap.distance <= 5.0
+                && inv.hasCobweb()
+                && bot.getBotCooldowns().ready(FOOT_PIN_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.FOOT_PIN);
+        }
+
+        if (snap.botHpFraction < 0.35f && snap.distance <= 4.0
+                && countItem(inv, Material.COBWEB) >= 2
+                && bot.getBotCooldowns().ready(WEB_BUBBLE_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.WEB_BUBBLE);
+        }
+
+        if (snap.targetInCobweb && snap.distance <= 5.0
+                && hasItem(inv, Material.LAVA_BUCKET)
+                && bot.getBotCooldowns().ready(WEB_DRAIN_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.WEB_DRAIN);
+        }
+
+        if ((inv.hasCrossbow() || inv.hasBow()) && hasAnyTippedArrow(inv)
+                && snap.distance >= TIPPED_ARROW_MIN && snap.distance <= TIPPED_ARROW_MAX
+                && bot.getBotCooldowns().ready(TIPPED_ARROW_CD, alive)) {
+            PotionType chosen = pickBestTippedArrow(inv, snap, target);
+            ScannerPlay play = tippedArrowPlay(chosen);
+            if (play != ScannerPlay.NONE) return ScannerPlan.of(play, chosen);
+        }
+
+        if (snap.targetBlocking && snap.distance >= 4.0 && snap.distance <= PIERCE_RANGE_MAX
+                && hasPiercingCrossbow(inv)
+                && bot.getBotCooldowns().ready(CROSSBOW_PIERCE_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.CROSSBOW_PIERCE);
+        }
+
+        if (snap.targetEating && snap.distance <= 14.0
+                && bot.getBotCooldowns().ready(INTERRUPT_EAT_CD, alive)
+                && canInterrupt(inv, alive, bot)) {
+            return ScannerPlan.of(ScannerPlay.INTERRUPT_EAT);
+        }
+
+        if (snap.targetDrawingBow && snap.distance <= 24.0
+                && bot.getBotCooldowns().ready(INTERRUPT_BOW_CD, alive)
+                && canInterrupt(inv, alive, bot)) {
+            return ScannerPlan.of(ScannerPlay.INTERRUPT_BOW);
+        }
+
+        if (snap.targetDrinkingPotion && snap.distance <= 14.0
+                && bot.getBotCooldowns().ready(INTERRUPT_POTION_CD, alive)
+                && canInterrupt(inv, alive, bot)) {
+            return ScannerPlan.of(ScannerPlay.INTERRUPT_POTION);
+        }
+
+        if (snap.botHpFraction < 0.4f && hasSplashHealing(inv)
+                && bot.getBotCooldowns().ready(SPLASH_HEAL_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.SPLASH_HEAL_SELF);
+        }
+
+        if (snap.distance <= 4.0 && snap.targetHpFraction < 0.5
+                && hasSplashOf(inv, PotionType.HARMING)
+                && bot.getBotCooldowns().ready(SPLASH_HARM_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.SPLASH_HARMING, PotionType.HARMING);
+        }
+
+        if (snap.distance <= 5.0 && snap.targetHpFraction > 0.5
+                && !targetHasEffect(target, PotionEffectType.POISON)
+                && hasSplashOf(inv, PotionType.POISON)
+                && bot.getBotCooldowns().ready(SPLASH_POISON_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.SPLASH_POISON, PotionType.POISON);
+        }
+
+        if (snap.distance <= 5.0
+                && !targetHasEffect(target, PotionEffectType.WEAKNESS)
+                && hasSplashOf(inv, PotionType.WEAKNESS)
+                && bot.getBotCooldowns().ready(SPLASH_WEAK_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.SPLASH_WEAKNESS, PotionType.WEAKNESS);
+        }
+
+        if (snap.targetSprintingAway && snap.distance <= 6.0
+                && !targetHasEffect(target, PotionEffectType.SLOWNESS)
+                && hasSplashOf(inv, PotionType.SLOWNESS)
+                && bot.getBotCooldowns().ready(SPLASH_SLOW_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.SPLASH_SLOWNESS, PotionType.SLOWNESS);
+        }
+
+        PotionType strength = pickBestDrinkable(inv, PotionType.STRONG_STRENGTH, PotionType.STRENGTH);
+        if (snap.distance >= 6.0 && snap.distance <= 20.0
+                && !botHasEffect(bot, PotionEffectType.STRENGTH)
+                && strength != null
+                && bot.getBotCooldowns().ready(STRENGTH_BUFF_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.STRENGTH_BUFF, strength);
+        }
+
+        PotionType speed = pickBestDrinkable(inv, PotionType.STRONG_SWIFTNESS, PotionType.SWIFTNESS);
+        if (snap.distance >= 10.0
+                && !botHasEffect(bot, PotionEffectType.SPEED)
+                && speed != null
+                && bot.getBotCooldowns().ready(SPEED_BUFF_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.SPEED_BUFF, speed);
+        }
+
+        PotionType fireRes = pickBestDrinkable(inv, PotionType.LONG_FIRE_RESISTANCE, PotionType.FIRE_RESISTANCE);
+        if ((snap.botInLavaArea || snap.botOnFire)
+                && !botHasEffect(bot, PotionEffectType.FIRE_RESISTANCE)
+                && fireRes != null
+                && bot.getBotCooldowns().ready(FIRE_RES_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.FIRE_RES_BUFF, fireRes);
+        }
+
+        if (snap.distance >= 5.0 && snap.distance <= 20.0
+                && inv.hasCrossbow() && inv.hasFirework()
+                && bot.getBotCooldowns().ready(FIREWORK_BLAST_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.FIREWORK_BLAST);
+        }
+
+        if (snap.distance <= MELEE_RANGE && snap.botOnGround
+                && hasItem(inv, Material.LAVA_BUCKET)
+                && !snap.targetInWater
+                && bot.getBotCooldowns().ready(LAVA_PIN_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.LAVA_PIN);
+        }
+
+        if (snap.distance <= 4.5 && snap.botOnGround
+                && (hasItem(inv, Material.FLINT_AND_STEEL) || hasItem(inv, Material.FIRE_CHARGE))
+                && !snap.targetInWater
+                && bot.getBotCooldowns().ready(FIRE_ZONE_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.FIRE_ZONE);
+        }
+
+        if (snap.botOnFire && hasItem(inv, Material.WATER_BUCKET)
+                && bot.getBotCooldowns().ready(WATER_DOUSE_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.WATER_DOUSE_SELF);
+        }
+
+        if (snap.targetInCobweb && snap.distance <= 5.0
+                && hasItem(inv, Material.TNT)
+                && (hasItem(inv, Material.FLINT_AND_STEEL) || hasItem(inv, Material.FIRE_CHARGE))
+                && bot.getBotCooldowns().ready(TNT_TRAP_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.TNT_TRAP);
+        }
+
+        if (hasSwordOrAxe(inv) && snap.botOnGround && snap.distance <= 3.2
+                && !snap.targetBlocking
+                && bot.getBotCooldowns().ready(SWORD_CRIT_CD, alive)
+                && BotCombatTiming.readyForVanillaSpecial(bot)
+                && !BotCombatTiming.isCritWindow(bot)
+                && BotCombatTiming.shouldPlanSprintReset(bot, target)) {
+            return ScannerPlan.of(ScannerPlay.SWORD_CRIT_SETUP);
+        }
+
+        if (hasSwordOrAxe(inv) && snap.botOnGround && snap.distance <= MELEE_RANGE
+                && bot.getBotCooldowns().ready(SPRINT_RESET_CD, alive)
+                && !(snap.botOnGround && snap.distance <= 3.2 && BotCombatTiming.chargeReady(bot))
+                && BotCombatTiming.shouldPlanSprintReset(bot, target)) {
+            return ScannerPlan.of(ScannerPlay.SPRINT_RESET);
+        }
+
+        if (hasSwordOrAxe(inv) && snap.targetSprintingAway
+                && snap.distance > MELEE_RANGE && snap.distance <= 8.0
+                && bot.getBotCooldowns().ready(PURSUE_GAP_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.PURSUE_GAP_CLOSE);
+        }
+
+        if (snap.targetHpFraction < FINISHER_HP_FRAC && snap.distance >= 5.0) {
+            if (snap.distance >= 18.0 && inv.hasWindCharge() && inv.hasEnderPearl()
+                    && combo.canCombo(bot)
+                    && bot.getBotCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, alive)) {
+                return ScannerPlan.of(ScannerPlay.FINISHER_COMBO);
+            }
+            if (snap.distance >= 8.0 && snap.distance <= 28.0 && inv.hasTrident()
+                    && bot.getBotCooldowns().ready(TridentBehavior.COOLDOWN_KEY, alive)) {
+                return ScannerPlan.of(ScannerPlay.FINISHER_TRIDENT);
+            }
+            if (snap.distance >= 10.0 && inv.hasEnderPearl()
+                    && bot.getBotCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, alive)) {
+                return ScannerPlan.of(ScannerPlay.FINISHER_PEARL);
+            }
+        }
+
+        if (snap.distance >= ARMOR_REPAIR_SAFE_DIST
+                && hasItem(inv, Material.EXPERIENCE_BOTTLE)
+                && armorNeedsRepair(bot)
+                && bot.getBotCooldowns().ready(ARMOR_REPAIR_CD, alive)) {
+            return ScannerPlan.of(ScannerPlay.ARMOR_REPAIR);
+        }
+
+        return ScannerPlan.NONE;
+    }
+
+    public boolean execute(Bot bot, LivingEntity target, CombatSnapshot snap, ComboBehavior combo, ScannerPlan plan) {
+        if (plan == null || !plan.present()) return false;
+        ScannerPlan validated = plan(bot, target, snap, combo);
+        if (validated.play() != plan.play()) {
+            CombatDebugger.log(bot, "opp-skip",
+                    "name=" + plan.play().id() + " reason=planned-play-stale now=" + validated.play().id());
+            return false;
+        }
+        if (plan.potionType() == null && validated.potionType() != null) {
+            plan = validated;
+        }
+        BotInventory inv = bot.getBotInventory();
+        int alive = bot.getAliveTicks();
+        switch (plan.play()) {
+            case CRYSTAL_TRAP -> {
+                if (executeCrystalTrap(bot, target)) {
+                    bot.getBotCooldowns().set(CRYSTAL_TRAP_CD, 40, alive);
+                    return true;
+                }
+            }
+            case KNOCKUP_CRYSTAL -> {
+                if (executeKnockupCrystal(bot, target)) {
+                    bot.getBotCooldowns().set(KNOCKUP_CD, 60, alive);
+                    bot.getBotCooldowns().set(WindChargeBehavior.COOLDOWN_KEY, 55, alive);
+                    return true;
+                }
+            }
+            case HIT_CRYSTAL -> {
+                if (!BotCombatTiming.shouldPlanSprintReset(bot, target)) {
+                    chargeSkip(bot, "HIT_CRYSTAL");
+                    return false;
+                }
+                if (executeHitCrystal(bot, target)) {
+                    bot.getBotCooldowns().set(HIT_CRYSTAL_CD, 50, alive);
+                    return true;
+                }
+            }
+            case LEDGE_CRYSTAL -> {
+                if (executeCrystalTrap(bot, target)) {
+                    bot.getBotCooldowns().set(LEDGE_CRYSTAL_CD, 50, alive);
+                    return true;
+                }
+            }
+            case STUN_SLAM -> {
+                if (!BotCombatTiming.shouldPlanNormalMelee(bot, target)) {
+                    chargeSkip(bot, "STUN_SLAM");
+                    return false;
+                }
+                if (executeStunSlam(bot, target)) {
+                    bot.getBotCooldowns().set(STUN_SLAM_CD, 20, alive);
+                    return true;
+                }
+            }
+            case WIND_MACE_SMASH -> {
+                if (executeWindMaceSmash(bot, target)) {
+                    bot.getBotCooldowns().set(WIND_MACE_CD, 160, alive);
+                    return true;
+                }
+            }
+            case AERIAL_STRIKE -> {
+                if (executeAerialStrike(bot, target, combo)) {
+                    bot.getBotCooldowns().set(AERIAL_STRIKE_CD, 80, alive);
+                    return true;
+                }
+            }
+            case PEARL_FLASH_CRYSTAL -> {
+                if (executePearlFlashCrystal(bot, target)) {
+                    bot.getBotCooldowns().set(PEARL_FLASH_CD, 100, alive);
+                    bot.getBotCooldowns().set(EnderPearlBehavior.COOLDOWN_KEY, 80, alive);
+                    return true;
+                }
+            }
+            case FACE_PLACE -> {
+                if (executeFacePlace(bot, target)) {
+                    bot.getBotCooldowns().set(FACE_PLACE_CD, 60, alive);
+                    return true;
+                }
+            }
+            case HEAD_WEB -> {
+                if (executeHeadWeb(bot, target)) {
+                    bot.getBotCooldowns().set(HEAD_WEB_CD, 60, alive);
+                    return true;
+                }
+            }
+            case HIT_WEB -> {
+                if (executeHitWeb(bot, target)) {
+                    bot.getBotCooldowns().set(HIT_WEB_CD, 30, alive);
+                    return true;
+                }
+            }
+            case FOOT_PIN -> {
+                if (executeFootPin(bot, target)) {
+                    bot.getBotCooldowns().set(FOOT_PIN_CD, 40, alive);
+                    return true;
+                }
+            }
+            case WEB_BUBBLE -> {
+                if (executeWebBubble(bot)) {
+                    bot.getBotCooldowns().set(WEB_BUBBLE_CD, 100, alive);
+                    return true;
+                }
+            }
+            case WEB_DRAIN -> {
+                if (executeWebDrain(bot, target)) {
+                    bot.getBotCooldowns().set(WEB_DRAIN_CD, 60, alive);
+                    return true;
+                }
+            }
+            case TIPPED_HARMING, TIPPED_SLOWNESS, TIPPED_WEAKNESS, TIPPED_SLOW_FALL, TIPPED_POISON -> {
+                PotionType type = plan.potionType() == null ? potionForTippedPlay(plan.play()) : plan.potionType();
+                if (type != null && executeTippedArrow(bot, target, type)) {
+                    bot.getBotCooldowns().set(TIPPED_ARROW_CD, 30, alive);
+                    return true;
+                }
+            }
+            case CROSSBOW_PIERCE -> {
+                if (executePiercingCrossbow(bot, target)) {
+                    bot.getBotCooldowns().set(CROSSBOW_PIERCE_CD, 25, alive);
+                    return true;
+                }
+            }
+            case INTERRUPT_EAT -> {
+                return tryInterrupt(bot, target, inv, INTERRUPT_EAT_CD, alive, 30);
+            }
+            case INTERRUPT_BOW -> {
+                return tryInterrupt(bot, target, inv, INTERRUPT_BOW_CD, alive, 25);
+            }
+            case INTERRUPT_POTION -> {
+                return tryInterrupt(bot, target, inv, INTERRUPT_POTION_CD, alive, 30);
+            }
+            case SPLASH_HEAL_SELF -> {
+                if (executeSplashHealSelf(bot)) {
+                    bot.getBotCooldowns().set(SPLASH_HEAL_CD, 20, alive);
+                    return true;
+                }
+            }
+            case SPLASH_HARMING, SPLASH_POISON, SPLASH_WEAKNESS, SPLASH_SLOWNESS -> {
+                PotionType type = plan.potionType() == null ? potionForSplashPlay(plan.play()) : plan.potionType();
+                if (type != null && executeSplashAtTarget(bot, target, type)) {
+                    bot.getBotCooldowns().set(cooldownForSplashPlay(plan.play()), cooldownTicksForSplashPlay(plan.play()), alive);
+                    return true;
+                }
+            }
+            case STRENGTH_BUFF, SPEED_BUFF, FIRE_RES_BUFF -> {
+                PotionType type = plan.potionType();
+                if (type != null && executeDrinkPotion(bot, type)) {
+                    bot.getBotCooldowns().set(cooldownForDrinkPlay(plan.play()), cooldownTicksForDrinkPlay(plan.play()), alive);
+                    return true;
+                }
+            }
+            case FIREWORK_BLAST -> {
+                if (executeFireworkBlast(bot, target)) {
+                    bot.getBotCooldowns().set(FIREWORK_BLAST_CD, 35, alive);
+                    return true;
+                }
+            }
+            case LAVA_PIN -> {
+                if (executeLavaPin(bot, target)) {
+                    bot.getBotCooldowns().set(LAVA_PIN_CD, 80, alive);
+                    return true;
+                }
+            }
+            case FIRE_ZONE -> {
+                if (executeFireZone(bot, target, inv)) {
+                    bot.getBotCooldowns().set(FIRE_ZONE_CD, 60, alive);
+                    return true;
+                }
+            }
+            case WATER_DOUSE_SELF -> {
+                if (executeWaterDouse(bot)) {
+                    bot.getBotCooldowns().set(WATER_DOUSE_CD, 40, alive);
+                    return true;
+                }
+            }
+            case TNT_TRAP -> {
+                if (executeTntTrap(bot, target)) {
+                    bot.getBotCooldowns().set(TNT_TRAP_CD, 60, alive);
+                    return true;
+                }
+            }
+            case SWORD_CRIT_SETUP -> {
+                if (executeSwordCritSetup(bot, target)) {
+                    bot.getBotCooldowns().set(SWORD_CRIT_CD, 18, alive);
+                    return true;
+                }
+            }
+            case SPRINT_RESET -> {
+                if (executeSprintReset(bot, target)) {
+                    bot.getBotCooldowns().set(SPRINT_RESET_CD, 8, alive);
+                    return true;
+                }
+            }
+            case PURSUE_GAP_CLOSE -> {
+                if (executePursueGapClose(bot, target)) {
+                    bot.getBotCooldowns().set(PURSUE_GAP_CD, 12, alive);
+                    return true;
+                }
+            }
+            case FINISHER_COMBO -> {
+                if (combo.canCombo(bot)) {
+                    return combo.start(bot, target, ComboBehavior.ComboType.WIND_PEARL_ENGAGE);
+                }
+            }
+            case FINISHER_TRIDENT -> {
+                int slot = inv.findHotbar(Material.TRIDENT);
+                if (slot >= 0 && selectSlot(bot, slot) >= 0) {
+                    new TridentBehavior().ticksFor(bot, target, snap.distance);
+                    return true;
+                }
+            }
+            case FINISHER_PEARL -> {
+                return executeFinisherPearl(bot, target);
+            }
+            case ARMOR_REPAIR -> {
+                if (executeArmorRepair(bot)) {
+                    bot.getBotCooldowns().set(ARMOR_REPAIR_CD, 80, alive);
+                    return true;
+                }
+            }
+            default -> {
+                return false;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1364,6 +2012,77 @@ public final class OpportunityScanner {
         feet.getWorld().playSound(feet, Sound.ENTITY_EXPERIENCE_BOTTLE_THROW, 1f, 1f);
         consumeOne(bot, Material.EXPERIENCE_BOTTLE);
         return true;
+    }
+
+    private static boolean canInterrupt(BotInventory inv, int alive, Bot bot) {
+        return (inv.hasWindCharge() && bot.getBotCooldowns().ready(WindChargeBehavior.COOLDOWN_KEY, alive))
+                || ((inv.hasCrossbow() || inv.hasBow()) && hasArrow(inv))
+                || hasSplashOf(inv, PotionType.HARMING);
+    }
+
+    private static ScannerPlay tippedArrowPlay(PotionType type) {
+        if (type == null) return ScannerPlay.NONE;
+        return switch (type) {
+            case HARMING, STRONG_HARMING -> ScannerPlay.TIPPED_HARMING;
+            case SLOWNESS, STRONG_SLOWNESS -> ScannerPlay.TIPPED_SLOWNESS;
+            case WEAKNESS -> ScannerPlay.TIPPED_WEAKNESS;
+            case SLOW_FALLING -> ScannerPlay.TIPPED_SLOW_FALL;
+            case POISON, STRONG_POISON -> ScannerPlay.TIPPED_POISON;
+            default -> ScannerPlay.NONE;
+        };
+    }
+
+    private static PotionType potionForTippedPlay(ScannerPlay play) {
+        return switch (play) {
+            case TIPPED_HARMING -> PotionType.HARMING;
+            case TIPPED_SLOWNESS -> PotionType.SLOWNESS;
+            case TIPPED_WEAKNESS -> PotionType.WEAKNESS;
+            case TIPPED_SLOW_FALL -> PotionType.SLOW_FALLING;
+            case TIPPED_POISON -> PotionType.POISON;
+            default -> null;
+        };
+    }
+
+    private static PotionType potionForSplashPlay(ScannerPlay play) {
+        return switch (play) {
+            case SPLASH_HARMING -> PotionType.HARMING;
+            case SPLASH_POISON -> PotionType.POISON;
+            case SPLASH_WEAKNESS -> PotionType.WEAKNESS;
+            case SPLASH_SLOWNESS -> PotionType.SLOWNESS;
+            default -> null;
+        };
+    }
+
+    private static String cooldownForSplashPlay(ScannerPlay play) {
+        return switch (play) {
+            case SPLASH_HARMING -> SPLASH_HARM_CD;
+            case SPLASH_POISON -> SPLASH_POISON_CD;
+            case SPLASH_WEAKNESS -> SPLASH_WEAK_CD;
+            case SPLASH_SLOWNESS -> SPLASH_SLOW_CD;
+            default -> SPLASH_HARM_CD;
+        };
+    }
+
+    private static int cooldownTicksForSplashPlay(ScannerPlay play) {
+        return switch (play) {
+            case SPLASH_POISON -> 200;
+            case SPLASH_WEAKNESS -> 600;
+            case SPLASH_SLOWNESS -> 400;
+            default -> 30;
+        };
+    }
+
+    private static String cooldownForDrinkPlay(ScannerPlay play) {
+        return switch (play) {
+            case STRENGTH_BUFF -> STRENGTH_BUFF_CD;
+            case SPEED_BUFF -> SPEED_BUFF_CD;
+            case FIRE_RES_BUFF -> FIRE_RES_CD;
+            default -> STRENGTH_BUFF_CD;
+        };
+    }
+
+    private static int cooldownTicksForDrinkPlay(ScannerPlay play) {
+        return play == ScannerPlay.FIRE_RES_BUFF ? 600 : 1800;
     }
 
     // ==================================================================

@@ -1,72 +1,73 @@
 # Quick Start
 
-A 60-second tour of TerminatorPlus.
+## Spawn and Equip
 
-## 1. Spawn a bot
-
-```
+```text
 /bot create TestBot
-```
-
-The bot spawns at your feet. Skin defaults to a lookup of the name from Mojang.
-
-## 2. Give it a combat loadout
-
-```
 /bot loadout hybrid TestBot
+/bot weapons TestBot
 ```
 
-The `hybrid` loadout gives netherite armor, a sword, a mace, a trident, 16 wind charges, 4 golden apples, and a shield. See [Loadouts](Loadouts) for the full catalog.
+The bot uses `CombatDirector` for combat decisions and the normal legacy
+movement path unless it was spawned by `/ai movement`.
 
-## 3. Watch it fight
+## Edit and Save a Kit
 
-Punch the bot (or run at it while set as a target). It will:
-
-- Attack with the sword at melee range.
-- Jump-smash with the mace when it's on the ground and can hit you (fall-damage scaling applies).
-- Sprint toward you and throw the trident when you're 5–28 blocks away (spear momentum is amplified by the run-up).
-- Lob wind charges when you get further than ~30 blocks.
-- Eat a golden apple when it drops below 40% HP.
-
-## 4. Edit its inventory visually
-
-```
+```text
 /bot inventory TestBot
-```
-
-A double-chest GUI opens. The top 5 rows mirror the bot's real inventory (hotbar, storage, armor, offhand). The bottom row is locked. Edit items, drag in stacks, then close — your changes are pushed back to the bot.
-
-## 5. Save a preset
-
-```
 /bot preset save mykit TestBot
-```
-
-A file appears at `plugins/TerminatorPlus/presets/mykit.yml`. It captures:
-
-- Every item slot (hotbar, storage, armor, offhand) with full NBT.
-- Selected hotbar slot.
-- Behavior settings: target goal, mob-target flag, player-list flag, shield state.
-
-## 6. Apply the preset to a fresh bot
-
-```
 /bot create T2
 /bot preset apply mykit T2
 ```
 
-T2 now mirrors TestBot's loadout.
+## Train Movement
 
-## 7. See which behaviors each bot unlocks
-
+```text
+/ai reinforcement 120 TrainBot Steve movement
+/ai brain status
+/ai stop
 ```
-/bot weapons
+
+Movement training assigns weighted loadouts automatically from
+`ai.training.loadout-mix`. The default `movement_balanced` mix keeps crystal,
+anchor, and all-chaos kits low-weight while still sampling them.
+
+To train a specialist:
+
+```text
+/ai reinforcement 120 TrainBot Steve movement:family=mace:mix=mace_curriculum
 ```
 
-Prints a per-bot summary of which combat behaviors its inventory makes available (mace, trident, pearl, crystal, anchor, cobweb, totem, elytra, firework).
+Mixed mode records per-family telemetry but updates `general_fallback`.
+Curriculum mode updates the configured family brain.
+
+## Spawn Movement-Bank Bots
+
+```text
+/ai movement 5 Soldier
+```
+
+These are fighting bots, not training bots. The movement bank handles footwork
+only; `CombatDirector` remains responsible for all combat actions.
+
+## Export an Evaluation Report
+
+```text
+/ai evaluate list
+/ai evaluate branch_family_latched all 1337,7331,424242
+```
+
+Reports are written under `plugins/TerminatorPlus/ai/movement/evaluations/` and
+include seed/scenario metadata, schema versions, loadout distribution, active
+branch-family distribution, fallback counts, route switch probes, and reward
+component summaries.
 
 ## Next
 
-- [Commands](Commands) — full `/bot` reference
-- [Combat Behaviors](Combat-Behaviors) — what triggers each weapon and why
-- [Loadouts](Loadouts) — all built-in kits
+- [Commands](Commands)
+- [Loadouts](Loadouts)
+- [Combat Behaviors](Combat-Behaviors)
+- [Movement Network](Movement-Network)
+- [Movement Brain Bank](Movement-Brain-Bank)
+- [AI Training](AI-Training)
+

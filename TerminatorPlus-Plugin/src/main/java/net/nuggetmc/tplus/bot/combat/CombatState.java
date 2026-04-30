@@ -15,6 +15,8 @@ public final class CombatState {
     private Vector chargeDirection;
     private double phaseStartY = Double.NaN;
     private int maceAirborneGroundTicks = 0;
+    private int macePrejumpAirTicks = 0;
+    private int lastExecuteTick = Integer.MIN_VALUE;
 
     public Phase getPhase() {
         return phase;
@@ -25,6 +27,7 @@ public final class CombatState {
         this.phaseTicks = 0;
         this.phaseStartY = Double.NaN;
         this.maceAirborneGroundTicks = 0;
+        this.macePrejumpAirTicks = 0;
     }
 
     public int tickPhase() {
@@ -59,11 +62,26 @@ public final class CombatState {
         maceAirborneGroundTicks = 0;
     }
 
+    public int tickMacePrejumpAirTicks() {
+        return ++macePrejumpAirTicks;
+    }
+
+    public void clearMacePrejumpAirTicks() {
+        macePrejumpAirTicks = 0;
+    }
+
+    public boolean markExecuted(int aliveTick) {
+        if (lastExecuteTick == aliveTick) return false;
+        lastExecuteTick = aliveTick;
+        return true;
+    }
+
     public void reset() {
         phase = Phase.IDLE;
         phaseTicks = 0;
         chargeDirection = null;
         phaseStartY = Double.NaN;
         maceAirborneGroundTicks = 0;
+        macePrejumpAirTicks = 0;
     }
 }
