@@ -255,13 +255,18 @@ public class BotManagerImpl implements BotManager, Listener {
 
     @Override
     public void remove(Terminator bot) {
-        bots.remove(bot);
+        if (bot == null) return;
+        try {
+            agent.cleanupBot(bot);
+        } finally {
+            bots.remove(bot);
+        }
     }
 
     @Override
     public void reset() {
         if (!bots.isEmpty()) {
-            bots.forEach(Terminator::removeBot);
+            new HashSet<>(bots).forEach(Terminator::removeBot);
             bots.clear(); // Not always necessary, but a good security measure
         }
 

@@ -19,6 +19,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -74,6 +75,12 @@ public final class CombatDebugger {
         LAST_PUNCH_TICK.clear();
         LAST_INV_DUMP_TICK.clear();
         LAST_COMPACT_EVENT_TICK.clear();
+    }
+
+    public static void shutdown() {
+        disableAll();
+        DEBUG_DIR_CACHE = null;
+        FILE_IO.shutdownNow();
     }
 
     public static boolean isOn(Bot bot) {
@@ -337,7 +344,11 @@ public final class CombatDebugger {
                 + " event=" + event
                 + (detail.isEmpty() ? "" : " " + detail);
         String line = TS_FORMAT.format(LocalDateTime.now()) + " " + payload;
-        FILE_IO.execute(() -> writeToDebugFiles(bot, line));
+        if (FILE_IO.isShutdown()) return;
+        try {
+            FILE_IO.execute(() -> writeToDebugFiles(bot, line));
+        } catch (RejectedExecutionException ignored) {
+        }
     }
 
     private static boolean shouldEmitCompact(Bot bot, String event) {

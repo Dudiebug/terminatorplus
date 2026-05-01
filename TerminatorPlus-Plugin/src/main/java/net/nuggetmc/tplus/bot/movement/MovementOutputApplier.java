@@ -160,6 +160,12 @@ public final class MovementOutputApplier {
         CombatDebugger.log(bot, "net-invalid", "reason=" + reason);
     }
 
+    public static void clearBot(UUID botId) {
+        if (botId != null) {
+            LAST_INVALID_SHAPE.remove(botId);
+        }
+    }
+
     private static boolean configEnabled() {
         TerminatorPlus plugin = TerminatorPlus.getInstance();
         if (plugin == null) return true;

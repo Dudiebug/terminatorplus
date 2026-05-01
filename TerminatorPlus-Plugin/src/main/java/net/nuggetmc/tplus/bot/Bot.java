@@ -82,6 +82,7 @@ public class Bot extends ServerPlayer implements Terminator {
     private Vector velocity;
     private Vector oldVelocity;
     private boolean removeOnDeath;
+    private boolean removalCleaned;
     private int aliveTicks;
     private int kills;
     private String trainingLoadout = "";
@@ -1009,14 +1010,23 @@ public class Bot extends ServerPlayer implements Terminator {
 
     @Override
     public void removeBot() {
-        if (Bukkit.isPrimaryThread()) {
-            this.remove(RemovalReason.DISCARDED);
-        } else {
-            scheduler.runTask(plugin, () -> this.remove(RemovalReason.DISCARDED));
+        if (!Bukkit.isPrimaryThread()) {
+            scheduler.runTask(plugin, this::removeBot);
+            return;
         }
+        if (removalCleaned) return;
+        removalCleaned = true;
+
+        plugin.getManager().remove(this);
+        CombatDebugger.disable(getUUID());
+        MovementOutputApplier.clearBot(getUUID());
+
+        this.remove(RemovalReason.DISCARDED);
         this.removeVisually();
-        if (inPlayerList)
+        if (inPlayerList) {
             ((CraftServer) Bukkit.getServer()).getServer().getPlayerList().getPlayers().remove(this);
+            inPlayerList = false;
+        }
     }
 
     private void removeTab() {

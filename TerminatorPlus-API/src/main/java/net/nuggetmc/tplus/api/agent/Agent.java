@@ -44,6 +44,10 @@ public abstract class Agent {
     }
 
     public void setEnabled(boolean b) {
+        if (enabled == b) {
+            return;
+        }
+
         enabled = b;
 
         if (b) {
@@ -59,6 +63,9 @@ public abstract class Agent {
             taskList.stream().filter(t -> !t.isCancelled()).forEach(BukkitRunnable::cancel);
             taskList.clear();
         }
+    }
+
+    public void cleanupBot(Terminator bot) {
     }
 
     public void setDrops(boolean enabled) {

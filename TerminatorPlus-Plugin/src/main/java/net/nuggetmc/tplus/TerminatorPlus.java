@@ -2,6 +2,7 @@ package net.nuggetmc.tplus;
 
 import net.nuggetmc.tplus.api.TerminatorPlusAPI;
 import net.nuggetmc.tplus.bot.BotManagerImpl;
+import net.nuggetmc.tplus.bot.combat.CombatDebugger;
 import net.nuggetmc.tplus.bot.combat.CombatDirector;
 import net.nuggetmc.tplus.bot.gui.BotInventoryListener;
 import net.nuggetmc.tplus.bot.preset.PresetManager;
@@ -95,7 +96,10 @@ public class TerminatorPlus extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        manager.reset();
+        if (manager != null) {
+            manager.reset();
+        }
+        CombatDebugger.shutdown();
     }
 
     private void registerEvents(Listener... listeners) {

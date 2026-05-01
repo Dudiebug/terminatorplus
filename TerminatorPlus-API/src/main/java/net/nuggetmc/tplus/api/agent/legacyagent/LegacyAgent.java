@@ -567,6 +567,30 @@ public class LegacyAgent extends Agent {
         }
     }
 
+    @Override
+    public void cleanupBot(Terminator bot) {
+        if (bot == null) return;
+
+        LivingEntity entity = bot.getBukkitEntity();
+        noFace.remove(bot);
+        slow.remove(bot);
+        boatCooldown.remove(bot);
+        fallDamageCooldown.remove(bot);
+
+        if (entity != null) {
+            stopMining(bot);
+            noJump.remove(entity);
+            btList.remove(entity);
+            btCheck.remove(entity);
+            towerList.remove(entity);
+            stuckTicks.remove(entity);
+            stuckLastLoc.remove(entity);
+            if (botsInPlayerList != null) {
+                botsInPlayerList.remove(entity);
+            }
+        }
+    }
+
     private byte checkSide(Terminator npc, LivingEntity target, LivingEntity playerNPC) {  // make it so they don't jump when checking side
         Location a = playerNPC.getEyeLocation();
         Location b = target.getLocation().add(0, 1, 0);
@@ -1703,7 +1727,31 @@ public class LegacyAgent extends Agent {
     @Override
     public void stopAllTasks() {
     	super.stopAllTasks();
-    	
+
+        miningAnim.values().stream()
+                .filter(task -> task != null && !task.isCancelled())
+                .forEach(BukkitRunnable::cancel);
+        miningAnim.clear();
+
+        boats.removeIf(boat -> {
+            if (boat != null && !boat.isDead()) {
+                boat.remove();
+            }
+            return true;
+        });
+
+        noFace.clear();
+        noJump.clear();
+        slow.clear();
+        btList.clear();
+        btCheck.clear();
+        towerList.clear();
+        stuckTicks.clear();
+        stuckLastLoc.clear();
+        boatCooldown.clear();
+        fallDamageCooldown.clear();
+        botsInPlayerList = null;
+
     	Iterator<Entry<Block, Short>> itr = crackList.entrySet().iterator();
     	while(itr.hasNext()) {
     		Block block = itr.next().getKey();

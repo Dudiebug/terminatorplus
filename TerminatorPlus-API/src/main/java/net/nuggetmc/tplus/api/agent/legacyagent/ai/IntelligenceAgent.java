@@ -118,11 +118,14 @@ public class IntelligenceAgent {
 
             try {
                 task();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             } catch (Exception e) {
                 print(e);
                 print("The thread has been interrupted.");
                 print("The session will now close.");
-                close();
+            } finally {
+                cleanupAfterTask();
             }
         });
     }
@@ -307,7 +310,7 @@ public class IntelligenceAgent {
                 + (botSkin == null ? "" : ChatColor.RESET + " and skin " + ChatColor.GREEN + botSkin)
                 + ChatColor.RESET + "...");
 
-        Set<Map<BotNode, Map<BotDataType, Double>>> loadedProfiles = genProfiles.get(generation);
+        Set<Map<BotNode, Map<BotDataType, Double>>> loadedProfiles = genProfiles.remove(generation);
         Location loc = PlayerUtils.findAbove(primary.getLocation(), 20);
 
         scheduler.runTask(plugin, () -> {
@@ -628,8 +631,7 @@ public class IntelligenceAgent {
     }
 
     private void close() {
-        aiManager.clearSession();
-        stop(); // safety call
+        active = false;
     }
 
     public void stop() {
@@ -639,6 +641,29 @@ public class IntelligenceAgent {
 
         if (thread != null && !thread.isInterrupted()) {
             this.thread.interrupt();
+        }
+    }
+
+    private void cleanupAfterTask() {
+        active = false;
+        boolean interrupted = Thread.interrupted();
+
+        try {
+            clearBots();
+        } catch (Exception e) {
+            print(e);
+        } finally {
+            interrupted = interrupted || Thread.currentThread().isInterrupted();
+            bots.clear();
+            genProfiles.clear();
+            users.clear();
+            primary = null;
+            movementBank = null;
+            thread = null;
+            aiManager.clearSession();
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
