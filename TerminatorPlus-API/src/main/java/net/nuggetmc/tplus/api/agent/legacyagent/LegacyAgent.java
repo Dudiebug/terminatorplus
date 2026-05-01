@@ -593,17 +593,28 @@ public class LegacyAgent extends Agent {
     }
 
     @Override
-    public void cleanupBot(Terminator bot) {
+    public void onBotRemoved(Terminator bot) {
         if (bot == null) return;
 
-        LivingEntity entity = bot.getBukkitEntity();
         noFace.remove(bot);
         slow.remove(bot);
         boatCooldown.remove(bot);
         fallDamageCooldown.remove(bot);
 
+        LivingEntity entity = null;
+        try {
+            entity = bot.getBukkitEntity();
+        } catch (RuntimeException ignored) {
+        }
+
         if (entity != null) {
-            stopMining(bot);
+            BukkitRunnable miningTask = miningAnim.remove(entity);
+            if (miningTask != null) {
+                if (!miningTask.isCancelled()) {
+                    miningTask.cancel();
+                }
+                taskList.remove(miningTask);
+            }
             noJump.remove(entity);
             btList.remove(entity);
             btCheck.remove(entity);
@@ -613,6 +624,11 @@ public class LegacyAgent extends Agent {
             if (botsInPlayerList != null) {
                 botsInPlayerList.remove(entity);
             }
+
+            LivingEntity finalEntity = entity;
+            boats.removeIf(boat -> boat == null
+                    || !boat.isValid()
+                    || boat.getPassengers().contains(finalEntity));
         }
     }
 

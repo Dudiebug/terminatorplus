@@ -94,6 +94,10 @@ public abstract class Agent {
     public void cleanupBot(Terminator bot) {
     }
 
+    public void onBotRemoved(Terminator bot) {
+        cleanupBot(bot);
+    }
+
     public void setDrops(boolean enabled) {
         this.drops = enabled;
     }

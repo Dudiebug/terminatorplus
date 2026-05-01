@@ -257,7 +257,7 @@ public class BotManagerImpl implements BotManager, Listener {
     public void remove(Terminator bot) {
         if (bot == null) return;
         try {
-            agent.cleanupBot(bot);
+            agent.onBotRemoved(bot);
         } finally {
             bots.remove(bot);
         }

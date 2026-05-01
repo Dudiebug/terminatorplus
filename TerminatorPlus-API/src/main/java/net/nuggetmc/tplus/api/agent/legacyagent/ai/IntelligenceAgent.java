@@ -31,6 +31,7 @@ import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -100,7 +101,7 @@ public class IntelligenceAgent {
         this.name = new SimpleDateFormat("yyyy-MM-dd HH-mm-ss").format(Calendar.getInstance().getTime());
         this.botName = name;
         this.botSkin = skin;
-        this.bots = new HashMap<>();
+        this.bots = new ConcurrentHashMap<>();
         this.users = new HashSet<>(Collections.singletonList(Bukkit.getConsoleSender()));
         this.cutoff = 5;
         this.genProfiles = new HashMap<>();
@@ -766,7 +767,7 @@ public class IntelligenceAgent {
         if (!bots.isEmpty()) {
             print("Removing all cached bots...");
 
-            bots.values().forEach(Terminator::removeBot);
+            new HashSet<>(bots.values()).forEach(Terminator::removeBot);
             bots.clear();
         }
 
