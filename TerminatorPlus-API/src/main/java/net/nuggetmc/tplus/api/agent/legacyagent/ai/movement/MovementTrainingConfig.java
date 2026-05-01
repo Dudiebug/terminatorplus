@@ -175,7 +175,7 @@ public record MovementTrainingConfig(
         mixes.put("movement_balanced", orderedWeights(
                 "sword", 12, "axe", 12, "smp", 12, "pot", 8,
                 "mace", 10, "spear", 8, "trident", 8, "windcharge", 6,
-                "skydiver", 5, "hybrid", 6, "vanilla", 5,
+                "skydiver", 5, "hybrid", 6, "projectile", 6, "vanilla", 5,
                 "pvp", 3, "crystalpvp", 3, "anchorbomb", 2));
         mixes.put("melee_curriculum", orderedWeights(
                 "sword", 20, "axe", 20, "smp", 25, "pot", 15,
@@ -192,6 +192,9 @@ public record MovementTrainingConfig(
         mixes.put("explosive_survival_curriculum", orderedWeights(
                 "crystalpvp", 20, "anchorbomb", 15, "vanilla", 20,
                 "pvp", 15, "hybrid", 10, "windcharge", 10, "sword", 10));
+        mixes.put("projectile_ranged_curriculum", orderedWeights(
+                "projectile", 45, "trident", 15, "skydiver", 10,
+                "hybrid", 10, "pot", 10, "sword", 10));
         return immutableMixes(mixes);
     }
 

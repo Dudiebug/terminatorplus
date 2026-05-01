@@ -1049,7 +1049,7 @@ public class BotCommand extends CommandInstance {
             "sword", "mace", "trident", "windcharge", "skydiver",
             "crystalpvp", "anchorbomb", "pvp", "hybrid",
             // Minecraft Wiki PvP kit taxonomy (cart + UHC intentionally excluded).
-            "vanilla", "axe", "smp", "pot", "spear",
+            "vanilla", "axe", "smp", "pot", "spear", "projectile",
             "clear"
     };
 
@@ -1058,11 +1058,11 @@ public class BotCommand extends CommandInstance {
     private static final String[] LOADOUT_MIX_ALL_TYPES = {
             "sword", "mace", "trident", "windcharge", "skydiver",
             "crystalpvp", "anchorbomb", "pvp", "hybrid",
-            "vanilla", "axe", "smp", "pot", "spear"
+            "vanilla", "axe", "smp", "pot", "spear", "projectile"
     };
 
     private static final String[] LOADOUT_MIX_CORE = {
-            "sword", "axe", "smp", "mace", "trident", "spear", "pot"
+            "sword", "axe", "smp", "mace", "trident", "spear", "pot", "projectile"
     };
 
     private static final String[] LOADOUT_MIX_PROBLEM = {
@@ -1362,6 +1362,28 @@ public class BotCommand extends CommandInstance {
                 kit[37] = new ItemStack(Material.NETHERITE_LEGGINGS);
                 kit[38] = new ItemStack(Material.NETHERITE_CHESTPLATE);
                 kit[39] = new ItemStack(Material.NETHERITE_HELMET);
+                kit[40] = new ItemStack(Material.SHIELD);
+            }
+            case "projectile", "archer" -> {
+                kit[0] = new ItemStack(Material.BOW);
+                kit[1] = new ItemStack(Material.CROSSBOW);
+                kit[2] = new ItemStack(Material.NETHERITE_SWORD);
+                ItemStack arrows = new ItemStack(Material.ARROW);
+                arrows.setAmount(64);
+                kit[3] = arrows;
+                ItemStack tipped = new ItemStack(Material.TIPPED_ARROW);
+                tipped.setAmount(32);
+                kit[4] = tipped;
+                ItemStack pearls = new ItemStack(Material.ENDER_PEARL);
+                pearls.setAmount(4);
+                kit[5] = pearls;
+                ItemStack projectileGaps = new ItemStack(Material.GOLDEN_APPLE);
+                projectileGaps.setAmount(4);
+                kit[6] = projectileGaps;
+                kit[36] = new ItemStack(Material.CHAINMAIL_BOOTS);
+                kit[37] = new ItemStack(Material.CHAINMAIL_LEGGINGS);
+                kit[38] = new ItemStack(Material.CHAINMAIL_CHESTPLATE);
+                kit[39] = new ItemStack(Material.CHAINMAIL_HELMET);
                 kit[40] = new ItemStack(Material.SHIELD);
             }
             case "clear" -> {

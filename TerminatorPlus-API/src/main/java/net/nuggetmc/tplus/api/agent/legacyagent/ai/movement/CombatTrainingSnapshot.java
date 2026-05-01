@@ -44,6 +44,7 @@ public record CombatTrainingSnapshot(
             case "mace" -> "mace";
             case "spear" -> "spear_melee";
             case "trident" -> "trident_ranged";
+            case "projectile", "archer", "bow", "crossbow" -> "projectile_ranged";
             case "windcharge", "skydiver", "hybrid" -> "mobility";
             case "crystalpvp", "anchorbomb", "pvp" -> "explosive_survival";
             default -> "general_fallback";

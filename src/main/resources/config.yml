@@ -40,6 +40,7 @@ ai:
         windcharge: 6
         skydiver: 5
         hybrid: 6
+        projectile: 6
         vanilla: 5
         pvp: 3
         crystalpvp: 3
@@ -79,6 +80,13 @@ ai:
         pvp: 15
         hybrid: 10
         windcharge: 10
+        sword: 10
+      projectile_ranged_curriculum:
+        projectile: 45
+        trident: 15
+        skydiver: 10
+        hybrid: 10
+        pot: 10
         sword: 10
   evaluation:
     # Report-only initializer/exporter for movement-brain ablations.
