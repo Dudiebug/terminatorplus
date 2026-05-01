@@ -166,6 +166,10 @@ public final class MovementOutputApplier {
         }
     }
 
+    public static void clearAll() {
+        LAST_INVALID_SHAPE.clear();
+    }
+
     private static boolean configEnabled() {
         TerminatorPlus plugin = TerminatorPlus.getInstance();
         if (plugin == null) return true;

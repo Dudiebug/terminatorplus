@@ -11,7 +11,9 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitScheduler;
+import org.bukkit.scheduler.BukkitTask;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Random;
 import java.util.Set;
@@ -22,6 +24,7 @@ public abstract class Agent {
     protected final BotManager manager;
     protected final BukkitScheduler scheduler;
     protected final Set<BukkitRunnable> taskList;
+    protected final Set<BukkitTask> scheduledTasks;
     protected final Random random;
 
     protected boolean enabled;
@@ -34,6 +37,7 @@ public abstract class Agent {
         this.manager = manager;
         this.scheduler = Bukkit.getScheduler();
         this.taskList = new HashSet<>();
+        this.scheduledTasks = new HashSet<>();
         this.random = new Random();
 
         setEnabled(true);
@@ -63,6 +67,28 @@ public abstract class Agent {
             taskList.stream().filter(t -> !t.isCancelled()).forEach(BukkitRunnable::cancel);
             taskList.clear();
         }
+        if (!scheduledTasks.isEmpty()) {
+            new ArrayList<>(scheduledTasks).stream()
+                    .filter(task -> !task.isCancelled())
+                    .forEach(BukkitTask::cancel);
+            scheduledTasks.clear();
+        }
+    }
+
+    protected BukkitTask scheduleTaskLater(Runnable action, long delayTicks) {
+        final BukkitTask[] taskRef = new BukkitTask[1];
+        BukkitTask task = scheduler.runTaskLater(plugin, () -> {
+            try {
+                action.run();
+            } finally {
+                if (taskRef[0] != null) {
+                    scheduledTasks.remove(taskRef[0]);
+                }
+            }
+        }, delayTicks);
+        taskRef[0] = task;
+        scheduledTasks.add(task);
+        return task;
     }
 
     public void cleanupBot(Terminator bot) {

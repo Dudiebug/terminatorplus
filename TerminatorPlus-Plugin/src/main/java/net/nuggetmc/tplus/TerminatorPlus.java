@@ -1,13 +1,17 @@
 package net.nuggetmc.tplus;
 
 import net.nuggetmc.tplus.api.TerminatorPlusAPI;
+import net.nuggetmc.tplus.api.utils.MojangAPI;
+import net.nuggetmc.tplus.api.utils.PlayerUtils;
 import net.nuggetmc.tplus.bot.BotManagerImpl;
 import net.nuggetmc.tplus.bot.combat.CombatDebugger;
 import net.nuggetmc.tplus.bot.combat.CombatDirector;
 import net.nuggetmc.tplus.bot.gui.BotInventoryListener;
+import net.nuggetmc.tplus.bot.movement.MovementOutputApplier;
 import net.nuggetmc.tplus.bot.preset.PresetManager;
 import net.nuggetmc.tplus.bridge.InternalBridgeImpl;
 import net.nuggetmc.tplus.command.CommandHandler;
+import net.nuggetmc.tplus.utils.Debugger;
 import org.bukkit.Bukkit;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -99,7 +103,21 @@ public class TerminatorPlus extends JavaPlugin {
         if (manager != null) {
             manager.reset();
         }
+        handler = null;
+        combatDirector = null;
+        presetManager = null;
+        manager = null;
+        TerminatorPlusAPI.setBotManager(null);
+        TerminatorPlusAPI.setInternalBridge(null);
+        PlayerUtils.clearUsernameCache();
+        MojangAPI.shutdown();
+        Debugger.shutdown();
         CombatDebugger.shutdown();
+        MovementOutputApplier.clearAll();
+        instance = null;
+        version = null;
+        mcVersion = null;
+        correctVersion = false;
     }
 
     private void registerEvents(Listener... listeners) {

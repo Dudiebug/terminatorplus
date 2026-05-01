@@ -77,7 +77,7 @@ public class LegacyBlockCheck {
 
         if (LegacyMats.SPAWN.contains(under.getType())) {
             placeFinal(bot, player, loc.clone().add(0, -1, 0));
-            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            agent.scheduleLegacyTaskLater(() -> {
                 placeFinal(bot, player, block.getLocation());
             }, 2);
         }
@@ -113,7 +113,7 @@ public class LegacyBlockCheck {
 
         if (b && LegacyMats.SPAWN.contains(under.getType())) {
             placeFinal(bot, player, loc.clone().add(0, -1, 0));
-            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            agent.scheduleLegacyTaskLater(() -> {
                 placeFinal(bot, player, block.getLocation());
             }, 2);
             return;
@@ -146,7 +146,7 @@ public class LegacyBlockCheck {
         }
 
         if (t) {
-            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            agent.scheduleLegacyTaskLater(() -> {
                 Block b2 = loc.clone().add(0, -1, 0).getBlock();
                 if (LegacyMats.SPAWN.contains(b2.getType())) {
                     for (Player all : Bukkit.getOnlinePlayers())
@@ -155,7 +155,7 @@ public class LegacyBlockCheck {
                 }
             }, 1);
 
-            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            agent.scheduleLegacyTaskLater(() -> {
                 for (Player all : Bukkit.getOnlinePlayers())
                     all.playSound(loc, Sound.BLOCK_STONE_PLACE, SoundCategory.BLOCKS, 1, 1);
                 placeFinal(bot, player, block.getLocation());
@@ -238,7 +238,7 @@ public class LegacyBlockCheck {
             bot.faceLocation(faceLoc);
             bot.look(BlockFace.DOWN);
 
-            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            agent.scheduleLegacyTaskLater(() -> {
                 bot.faceLocation(faceLoc);
             }, 1);
 
@@ -286,12 +286,12 @@ public class LegacyBlockCheck {
                 agent.slow.add(bot);
                 agent.noFace.add(bot);
 
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                agent.scheduleLegacyTaskLater(() -> {
                     bot.stand();
                     agent.slow.remove(bot);
                 }, 12);
 
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                agent.scheduleLegacyTaskLater(() -> {
                     agent.noFace.remove(bot);
                 }, 15);
 
@@ -300,7 +300,7 @@ public class LegacyBlockCheck {
                 bot.faceLocation(faceLoc);
                 bot.look(BlockFace.DOWN);
 
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                agent.scheduleLegacyTaskLater(() -> {
                     bot.faceLocation(faceLoc);
                 }, 1);
 

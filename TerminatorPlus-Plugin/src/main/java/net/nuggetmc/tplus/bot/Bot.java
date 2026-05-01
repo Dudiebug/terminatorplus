@@ -63,10 +63,12 @@ import org.bukkit.entity.Damageable;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitScheduler;
+import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Bot extends ServerPlayer implements Terminator {
 
@@ -111,6 +113,7 @@ public class Bot extends ServerPlayer implements Terminator {
     private final CombatState combatState;
     private CombatIntent combatIntent;
     private MovementState movementState;
+    private final Set<BukkitTask> scheduledTasks;
     private boolean jumpedThisTick;
     private final MovementOutputApplier movementOutputApplier;
     private boolean lastMovementControllerFallback;
@@ -135,6 +138,7 @@ public class Bot extends ServerPlayer implements Terminator {
         this.combatState = new CombatState();
         this.combatIntent = CombatIntent.DEFAULT;
         this.movementState = MovementState.DEFAULT;
+        this.scheduledTasks = ConcurrentHashMap.newKeySet();
         this.movementOutputApplier = new MovementOutputApplier();
         if (addToPlayerList) {
             minecraftServer.getPlayerList().getPlayers().add(this);
@@ -142,6 +146,33 @@ public class Bot extends ServerPlayer implements Terminator {
         }
 
         //this.entityData.set(new EntityDataAccessor<>(16, EntityDataSerializers.BYTE), (byte) 0xFF);
+    }
+
+    public BukkitTask scheduleBotTask(Runnable action, long delayTicks) {
+        if (removalCleaned) return null;
+        final BukkitTask[] taskRef = new BukkitTask[1];
+        BukkitTask task = scheduler.runTaskLater(plugin, () -> {
+            try {
+                if (!removalCleaned) {
+                    action.run();
+                }
+            } finally {
+                if (taskRef[0] != null) {
+                    scheduledTasks.remove(taskRef[0]);
+                }
+            }
+        }, delayTicks);
+        taskRef[0] = task;
+        scheduledTasks.add(task);
+        return task;
+    }
+
+    private void cancelScheduledTasks() {
+        if (scheduledTasks.isEmpty()) return;
+        new ArrayList<>(scheduledTasks).stream()
+                .filter(task -> !task.isCancelled())
+                .forEach(BukkitTask::cancel);
+        scheduledTasks.clear();
     }
 
     public static Bot createBot(Location loc, String name) {
@@ -218,7 +249,7 @@ public class Bot extends ServerPlayer implements Terminator {
         connection.send(packets[2]);
 
         if (login) {
-            scheduler.runTaskLater(plugin, () -> connection.send(packets[3]), 10);
+            scheduleBotTask(() -> connection.send(packets[3]), 10);
         } else {
             connection.send(packets[3]);
         }
@@ -229,7 +260,7 @@ public class Bot extends ServerPlayer implements Terminator {
         connection.send(packets[1]);
 
         if (login) {
-            scheduler.runTaskLater(plugin, () -> connection.send(packets[2]), 10);
+            scheduleBotTask(() -> connection.send(packets[2]), 10);
         } else {
             connection.send(packets[2]);
         }
@@ -695,7 +726,7 @@ public class Bot extends ServerPlayer implements Terminator {
         CombatDebugger.log(this, "shield-request",
                 "length=" + blockLength + " cooldown=" + cooldown + " off=" + offhandType());
         startBlocking();
-        scheduler.runTaskLater(plugin, () -> stopBlocking(cooldown), blockLength);
+        scheduleBotTask(() -> stopBlocking(cooldown), blockLength);
     }
 
     private void startBlocking() {
@@ -711,7 +742,7 @@ public class Bot extends ServerPlayer implements Terminator {
         boolean wasBlocking = this.blocking;
         this.blocking = false;
         stopUsingItem();
-        scheduler.runTaskLater(plugin, () -> this.blockUse = false, cooldown);
+        scheduleBotTask(() -> this.blockUse = false, cooldown);
         CombatDebugger.log(this, "shield-stop",
                 "cooldown=" + cooldown + " wasBlocking=" + wasBlocking + " off=" + offhandType());
         //sendPacket(new ClientboundSetEntityDataPacket(getId(), entityData, true));
@@ -1016,8 +1047,14 @@ public class Bot extends ServerPlayer implements Terminator {
         }
         if (removalCleaned) return;
         removalCleaned = true;
+        cancelScheduledTasks();
 
-        plugin.getManager().remove(this);
+        if (plugin.getManager() != null) {
+            plugin.getManager().remove(this);
+        }
+        if (plugin.getCombatDirector() != null) {
+            plugin.getCombatDirector().cleanupBot(getUUID());
+        }
         CombatDebugger.disable(getUUID());
         MovementOutputApplier.clearBot(getUUID());
 
@@ -1054,7 +1091,7 @@ public class Bot extends ServerPlayer implements Terminator {
             // this should fix the concurrentmodificationexception mentioned above, I used the ConcurrentHashMap.newKeySet to make a "ConcurrentHashSet"
             plugin.getManager().remove(this);
 
-            scheduler.runTaskLater(plugin, this::removeBot, 20);
+            scheduleBotTask(this::removeBot, 20);
 
             this.removeTab();
         }

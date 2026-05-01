@@ -7,6 +7,8 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.LivingEntity;
 
+import java.util.UUID;
+
 /**
  * Per-tick combat decision maker. Given a bot and its current target, picks the
  * best weapon and delegates the actual move to the matching behavior.
@@ -43,6 +45,10 @@ public final class CombatDirector {
     private static final String ACTION_PEARL = "director:pearl";
     private static final String ACTION_COBWEB = "director:cobweb";
     private static final String ACTION_SCANNER_PREFIX = "scanner:";
+
+    public void cleanupBot(UUID botId) {
+        combo.clear(botId);
+    }
 
     public boolean tick(Bot bot, LivingEntity target) {
         if (target == null || !target.isValid()) return false;

@@ -336,7 +336,7 @@ public class LegacyAgent extends Agent {
                         bot.jump(vel);
                     } else {
                         bot.walk(vel.clone().setY(0));
-                        scheduler.runTaskLater(plugin, () -> bot.jump(vel), 10);
+                        scheduleTaskLater(() -> bot.jump(vel), 10);
                     }
 
                     return;
@@ -363,7 +363,7 @@ public class LegacyAgent extends Agent {
                         bot.jump(vel);
                     } else {
                         bot.walk(vel.clone().setY(0));
-                        scheduler.runTaskLater(plugin, () -> bot.jump(vel), 10);
+                        scheduleTaskLater(() -> bot.jump(vel), 10);
                     }
 
                     return;
@@ -502,7 +502,7 @@ public class LegacyAgent extends Agent {
             world.playSound(loc, sound, 1, 1);
 
             if (itemType == Material.WATER_BUCKET) {
-                scheduler.runTaskLater(plugin, () -> {
+                scheduleTaskLater(() -> {
                     Block block = loc.getBlock();
 
                     boolean waterloggedNow = !nether && block.getBlockData() instanceof Waterlogged
@@ -541,6 +541,7 @@ public class LegacyAgent extends Agent {
             BukkitRunnable task = miningAnim.get(playerNPC);
             if (task != null) {
                 task.cancel();
+                taskList.remove(task);
                 miningAnim.remove(playerNPC);
             }
         }
@@ -562,6 +563,7 @@ public class LegacyAgent extends Agent {
             BukkitRunnable task = miningAnim.get(playerNPC);
             if (task != null) {
                 task.cancel();
+                taskList.remove(task);
                 miningAnim.remove(playerNPC);
             }
         }
@@ -589,6 +591,10 @@ public class LegacyAgent extends Agent {
                 botsInPlayerList.remove(entity);
             }
         }
+    }
+
+    void scheduleLegacyTaskLater(Runnable action, long delayTicks) {
+        scheduleTaskLater(action, delayTicks);
     }
 
     private byte checkSide(Terminator npc, LivingEntity target, LivingEntity playerNPC) {  // make it so they don't jump when checking side
@@ -878,7 +884,7 @@ public class LegacyAgent extends Agent {
         if (level != null) {
         	if (level == LegacyLevel.BELOW) {
                 noJump.add(player);
-                scheduler.runTaskLater(plugin, () -> {
+                scheduleTaskLater(() -> {
                 	noJump.remove(player);
                 }, 15);
                 
@@ -938,6 +944,7 @@ public class LegacyAgent extends Agent {
                     BukkitRunnable task = miningAnim.get(playerNPC);
                     if (task != null) {
                         task.cancel();
+                        taskList.remove(task);
                         miningAnim.remove(playerNPC);
                     }
                 }
@@ -946,12 +953,12 @@ public class LegacyAgent extends Agent {
 
                 // maybe put this in lower if statement onGround()
                 if (m0 != Material.WATER)
-	                scheduler.runTaskLater(plugin, () -> {
+	                scheduleTaskLater(() -> {
 	                    npc.sneak();
 	                    npc.punch();
 	                    npc.look(BlockFace.DOWN);
 	
-	                    scheduler.runTaskLater(plugin, () -> {
+	                    scheduleTaskLater(() -> {
 	                        npc.look(BlockFace.DOWN);
 	                    }, 1);
 	
@@ -968,7 +975,7 @@ public class LegacyAgent extends Agent {
                     if (target.getLocation().distance(playerNPC.getLocation()) < 16) {
                         if (noJump.contains(playerNPC)) {
 
-                            scheduler.runTaskLater(plugin, () -> {
+                            scheduleTaskLater(() -> {
                                 npc.setVelocity(new Vector(0, 0.5, 0));
                             }, 1);
 
@@ -1101,7 +1108,7 @@ public class LegacyAgent extends Agent {
             if (!fallDamageCooldown.contains(npc)) {
                 fallDamageCooldown.add(npc);
 
-                scheduler.runTaskLater(plugin, () -> {
+                scheduleTaskLater(() -> {
                     fallDamageCooldown.remove(npc);
                 }, 10);
             }
@@ -1160,7 +1167,7 @@ public class LegacyAgent extends Agent {
         if (level.isSideDown() || level.isSideDown2()) {
             bot.setBotPitch(69);
 
-            scheduler.runTaskLater(plugin, () -> {
+            scheduleTaskLater(() -> {
                 btCheck.put(player, true);
             }, 5);
         } else if (level.isSideUp()) {
@@ -1180,6 +1187,7 @@ public class LegacyAgent extends Agent {
                             && bot.getBukkitEntity().getWorld() == player.getWorld()
                             && bot.getLocation().distance(player.getLocation()) <= 5.0) {
                         cancel();
+                        taskList.remove(this);
                         miningAnim.remove(player);
                         return;
                     }
@@ -1247,6 +1255,7 @@ public class LegacyAgent extends Agent {
 
                     if (player.isDead() || cur == null || (!block.equals(cur) || block.getType() != cur.getType())) {
                         this.cancel();
+                        taskList.remove(this);
 
                         TerminatorPlusAPI.getInternalBridge().sendBlockDestructionPacket(crackList.get(block), block, -1);
 
@@ -1259,6 +1268,7 @@ public class LegacyAgent extends Agent {
 
                     if (i == 9) {
                         this.cancel();
+                        taskList.remove(this);
 
                         TerminatorPlusAPI.getInternalBridge().sendBlockDestructionPacket(crackList.get(block), block, -1);
 
@@ -1273,7 +1283,7 @@ public class LegacyAgent extends Agent {
                         if (wrapper.getLevel() == LegacyLevel.ABOVE) {
                             noJump.add(player);
 
-                            scheduler.runTaskLater(plugin, () -> {
+                            scheduleTaskLater(() -> {
                                 noJump.remove(player);
                             }, 15);
                         }
@@ -1320,7 +1330,7 @@ public class LegacyAgent extends Agent {
         loc.getBlock().setType(Material.WATER);
         world.playSound(loc, Sound.ITEM_BUCKET_EMPTY, 1, 1);
 
-        scheduler.runTaskLater(plugin, () -> {
+        scheduleTaskLater(() -> {
             Block block = loc.getBlock();
 
             if (block.getType() == Material.WATER) {
@@ -1441,14 +1451,14 @@ public class LegacyAgent extends Agent {
 
                 Boat boat = (Boat) world.spawnEntity(place, EntityType.OAK_BOAT);
 
-                scheduler.runTaskLater(plugin, () -> {
+                scheduleTaskLater(() -> {
                     if (!boat.isDead()) {
                         boats.remove(boat);
                         boat.remove();
                     }
                 }, 20);
 
-                scheduler.runTaskLater(plugin, () -> {
+                scheduleTaskLater(() -> {
                     bot.look(BlockFace.DOWN);
                 }, 1);
 
@@ -1466,7 +1476,7 @@ public class LegacyAgent extends Agent {
                 move.setY(0.42);
                 bot.setVelocity(move);
 
-                scheduler.runTaskLater(plugin, () -> {
+                scheduleTaskLater(() -> {
                     boatCooldown.remove(bot);
                     if (bot.isBotAlive()) {
                         bot.faceLocation(target.getLocation());
@@ -1485,6 +1495,7 @@ public class LegacyAgent extends Agent {
             BukkitRunnable task = miningAnim.get(playerNPC);
             if (task != null) {
                 task.cancel();
+                taskList.remove(task);
                 miningAnim.remove(playerNPC);
             }
         }

@@ -44,6 +44,7 @@ public class Debugger {
      * while this map is restricted to Debugger-defined commands only.
      */
     private static final Map<String, List<Method>> ALLOWED_METHODS = new HashMap<>();
+    private static final Map<UUID, Integer> TRACK_Y_TASKS = new HashMap<>();
     private static final Set<String> RESERVED_NAMES = Set.of("print", "execute", "buildObjects");
 
     static {
@@ -67,6 +68,11 @@ public class Debugger {
 
     public Debugger(CommandSender sender) {
         this.sender = sender;
+    }
+
+    public static void shutdown() {
+        TRACK_Y_TASKS.values().forEach(id -> Bukkit.getScheduler().cancelTask(id));
+        TRACK_Y_TASKS.clear();
     }
 
 
@@ -481,10 +487,24 @@ public class Debugger {
         if (!(sender instanceof Player)) return;
 
         Player player = (Player) sender;
+        UUID playerId = player.getUniqueId();
+        Integer existing = TRACK_Y_TASKS.remove(playerId);
+        if (existing != null) {
+            Bukkit.getScheduler().cancelTask(existing);
+        }
 
-        Bukkit.getScheduler().scheduleSyncRepeatingTask(TerminatorPlus.getInstance(), () -> {
+        final int[] ticks = {0};
+        int taskId = Bukkit.getScheduler().scheduleSyncRepeatingTask(TerminatorPlus.getInstance(), () -> {
+            if (!player.isOnline() || ticks[0]++ >= 20 * 60) {
+                Integer id = TRACK_Y_TASKS.remove(playerId);
+                if (id != null) {
+                    Bukkit.getScheduler().cancelTask(id);
+                }
+                return;
+            }
             print(player.getVelocity().getY());
         }, 0, 1);
+        TRACK_Y_TASKS.put(playerId, taskId);
     }
 
     public void hideNametags() { // this works for some reason
