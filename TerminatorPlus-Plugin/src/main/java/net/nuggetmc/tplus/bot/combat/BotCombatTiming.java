@@ -76,7 +76,8 @@ public final class BotCombatTiming {
     }
 
     public static boolean shouldWaitForCritWindow(Bot bot, LivingEntity target, double distance) {
-        if (bot.hasNeuralNetwork() && !bot.usesMovementController()) return false;
+        // Neural networks may shape movement, but they should never suppress a legal swing.
+        if (bot.hasNeuralNetwork()) return false;
         if (!bot.getBotInventory().isSelectedMeleeWeapon()) return false;
         if (targetHasIFrames(target)) return false;
         if (!chargeReady(bot)) return false;

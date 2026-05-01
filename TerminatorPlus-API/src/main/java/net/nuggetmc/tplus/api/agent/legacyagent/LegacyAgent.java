@@ -170,6 +170,7 @@ public class LegacyAgent extends Agent {
 
         MovementMode movementMode = movementMode(bot);
         boolean ai = movementMode != MovementMode.LEGACY;
+        boolean movementController = movementMode == MovementMode.MOVEMENT_CONTROLLER_NN;
 
         NeuralNetwork network = ai ? bot.getNeuralNetwork() : null;
 
@@ -178,6 +179,9 @@ public class LegacyAgent extends Agent {
         }
 
         bot.tickCommittedCombat(livingTarget);
+        if (movementController) {
+            bot.planCombat(livingTarget);
+        }
 
         // Neural-network training needs the deterministic 3-tick cadence so
         // fitness scores are reproducible run-to-run. Everyone else runs every
@@ -185,7 +189,7 @@ public class LegacyAgent extends Agent {
         // actual damage event on the vanilla attack-strength charge, so this
         // does not over-swing.
         boolean combatTickReady = movementMode == MovementMode.FULL_REPLACEMENT_NN ? bot.tickDelay(3) : true;
-        if (movementMode != MovementMode.MOVEMENT_CONTROLLER_NN && combatTickReady) {
+        if (!movementController && combatTickReady) {
             Location botEyeLoc = botPlayer.getEyeLocation();
             Location playerEyeLoc = livingTarget.getEyeLocation();
             Location playerLoc = livingTarget.getLocation();
@@ -227,7 +231,10 @@ public class LegacyAgent extends Agent {
 
             boolean bothXZ = withinTargetXZ || sameXZ;
 
-            if (checkAt(bot, block, botPlayer)) return;
+            if (checkAt(bot, block, botPlayer)) {
+                executeMovementControllerCombat(bot, livingTarget, movementController);
+                return;
+            }
 
             // Gate/obstacle handlers kick off block-break animations. Previously
             // they returned early, so the bot stopped walking entirely while the
@@ -237,24 +244,31 @@ public class LegacyAgent extends Agent {
             checkFenceAndGates(bot, loc.getBlock(), botPlayer);
             checkObstacles(bot, loc.getBlock(), botPlayer);
 
-            if (checkDown(bot, botPlayer, livingTarget.getLocation(), bothXZ)) return;
+            if (checkDown(bot, botPlayer, livingTarget.getLocation(), bothXZ)) {
+                executeMovementControllerCombat(bot, livingTarget, movementController);
+                return;
+            }
 
-            if ((withinTargetXZ || sameXZ) && checkUp(bot, livingTarget, botPlayer, target, withinTargetXZ, sameXZ)) return;
+            if ((withinTargetXZ || sameXZ) && checkUp(bot, livingTarget, botPlayer, target, withinTargetXZ, sameXZ)) {
+                executeMovementControllerCombat(bot, livingTarget, movementController);
+                return;
+            }
 
             if (bothXZ) sideResult = checkSide(bot, livingTarget, botPlayer);
 
             switch (sideResult) {
                 case 1:
                     resetHand(bot, livingTarget, botPlayer);
-                    if (movementMode == MovementMode.MOVEMENT_CONTROLLER_NN) {
+                    if (movementController) {
                         move(bot, livingTarget, loc, target, movementMode, !noJump.contains(botPlayer) && !waterGround);
+                        executeMovementControllerCombat(bot, livingTarget, true);
                     } else if (!noJump.contains(botPlayer) && !waterGround) {
                         move(bot, livingTarget, loc, target, movementMode, true);
                     }
                     return;
 
                 case 2:
-                    if (movementMode == MovementMode.MOVEMENT_CONTROLLER_NN) {
+                    if (movementController) {
                         move(bot, livingTarget, loc, target, movementMode, !waterGround);
                     } else if (!waterGround) {
                         move(bot, livingTarget, loc, target, movementMode, true);
@@ -263,19 +277,25 @@ public class LegacyAgent extends Agent {
         } else if (LegacyMats.WATER.contains(loc.getBlock().getType())) {
             swim(bot, target, botPlayer, livingTarget, LegacyMats.WATER.contains(loc.clone().add(0, -1, 0).getBlock().getType()));
         }
+
+        executeMovementControllerCombat(bot, livingTarget, movementController);
     }
 
     private void move(Terminator bot, LivingEntity livingTarget, Location loc, Location target, MovementMode movementMode, boolean allowMovement) {
         if (movementMode == MovementMode.MOVEMENT_CONTROLLER_NN) {
-            bot.planCombat(livingTarget);
             if (allowMovement && !bot.tryMovementControllerMove(livingTarget)) {
                 moveLegacy(bot, livingTarget, loc, target, false);
             }
-            bot.executePlannedCombat(livingTarget);
             return;
         }
 
         moveLegacy(bot, livingTarget, loc, target, movementMode == MovementMode.FULL_REPLACEMENT_NN);
+    }
+
+    private void executeMovementControllerCombat(Terminator bot, LivingEntity livingTarget, boolean movementController) {
+        if (movementController) {
+            bot.executePlannedCombat(livingTarget);
+        }
     }
 
     private void moveLegacy(Terminator bot, LivingEntity livingTarget, Location loc, Location target, boolean ai) {
