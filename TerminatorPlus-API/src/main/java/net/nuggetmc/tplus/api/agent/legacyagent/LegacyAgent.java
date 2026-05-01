@@ -78,8 +78,11 @@ public class LegacyAgent extends Agent {
 
     @Override
     protected void tick() {
-    	botsInPlayerList = manager.fetch().stream().filter(t -> t.isInPlayerList()).map(b -> b.getBukkitEntity()).toList();
-    	manager.fetch().forEach(this::tickBot);
+        botsInPlayerList = new ArrayList<>(manager.fetch().stream()
+                .filter(t -> t.isInPlayerList())
+                .map(b -> b.getBukkitEntity())
+                .toList());
+        manager.fetch().forEach(this::tickBot);
     }
 
     private void center(Terminator bot) {
