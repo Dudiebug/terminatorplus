@@ -1,5 +1,11 @@
 # Combat Behaviors
 
+> Legacy/reference notice:
+> This page may describe the old general TerminatorPlus strategy.
+> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
+> Use this page for technical reference only until it is verified against source code and runtime behavior.
+
+
 The **CombatDirector** owns all combat decisions. Every tick it evaluates a priority pipeline and commits to the first matching weapon behavior. The movement neural network (if active) handles footwork only — it never selects weapons or triggers attacks.
 
 ## Priority pipeline

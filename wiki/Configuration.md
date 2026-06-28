@@ -1,5 +1,11 @@
 # Configuration
 
+> Legacy/reference notice:
+> This page may describe the old general TerminatorPlus strategy.
+> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
+> Use this page for technical reference only until it is verified against source code and runtime behavior.
+
+
 `config.yml` is generated in `plugins/TerminatorPlus/` on first startup. The
 current AI settings live under `ai`.
 

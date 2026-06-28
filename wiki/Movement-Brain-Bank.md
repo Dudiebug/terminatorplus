@@ -1,5 +1,11 @@
 # Movement Brain Bank
 
+> Legacy/reference notice:
+> This page may describe the old general TerminatorPlus strategy.
+> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
+> Use this page for technical reference only until it is verified against source code and runtime behavior.
+
+
 TerminatorPlus movement AI is split into combat ownership and movement ownership.
 `CombatDirector` remains the sole owner of combat decisions: weapon selection,
 hotbar changes, blocking, attacks, item use, crystals, anchors, pearls, wind

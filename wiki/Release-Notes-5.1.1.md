@@ -1,5 +1,11 @@
 # Release Notes - 5.1.1
 
+> Legacy/reference notice:
+> This page may describe the old general TerminatorPlus strategy.
+> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
+> Use this page for technical reference only until it is verified against source code and runtime behavior.
+
+
 This is the historical release note for the 5.1.1 combat reliability and first movement-network release. For the current 5.2.x movement brain-bank behavior, see [Movement Brain Bank](Movement-Brain-Bank), [AI Training](AI-Training), and [Configuration](Configuration).
 
 ## Combat Reliability

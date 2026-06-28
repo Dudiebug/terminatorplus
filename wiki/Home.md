@@ -1,12 +1,21 @@
 # TerminatorPlus Wiki
 
-TerminatorPlus 5.2.x is a Paper 26.1.2 plugin that spawns server-side player bots with combat
-AI, editable inventories, movement neural networks, a movement-brain bank, and a
-preset system. Each bot is an NMS `ServerPlayer` subclass: it takes and deals
-real damage, uses real items, and reacts through vanilla mechanics.
+Current strategy: one strong 1v1 PvP bot versus one skilled human PvPer on
+`mc-26.1.2`.
+
+Prioritize movement, spacing, vanilla hit timing, sword/axe/shield fundamentals,
+defensive recovery, punish logic, and controlled advanced tools. Movement is
+combat-informed but not combat-authoritative.
+
+Older wiki pages are preserved as legacy/reference documentation unless a page
+explicitly says it has been rewritten for the current strategy.
 
 ## Pages
 
+- [Current Strategy](Current-Strategy)
+- [Combat Movement Contract](Combat-Movement-Contract)
+- [Duel Testing](Duel-Testing)
+- [Legacy Status](Legacy-Status)
 - [Installation](Installation)
 - [Quick Start](Quick-Start)
 - [Commands](Commands)

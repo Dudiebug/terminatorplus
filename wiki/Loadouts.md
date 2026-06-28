@@ -1,5 +1,11 @@
 # Loadouts
 
+> Legacy/reference notice:
+> This page may describe the old general TerminatorPlus strategy.
+> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
+> Use this page for technical reference only until it is verified against source code and runtime behavior.
+
+
 Loadouts are named, built-in kits applied via `/bot loadout <name> [bot-name]`. They write a full 41-slot layout to the bot: hotbar, storage, armor, and offhand.
 
 If `bot-name` is omitted, the kit is applied to every spawned bot.

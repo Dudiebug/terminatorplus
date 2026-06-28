@@ -1,8 +1,12 @@
 # TerminatorPlus
 
-A Paper plugin for creating server-side player bots with configurable loadouts,
-weapon-aware combat AI, a movement-only neural network bank, and in-JVM
-genetic-algorithm training.
+TerminatorPlus is now focused on one strong 1v1 PvP bot versus one skilled
+human PvPer on the `mc-26.1.2` target branch.
+
+The current priority is duel quality: movement, spacing, vanilla hit timing,
+sword/axe/shield fundamentals, defensive recovery, punish logic, and controlled
+advanced tools. Older broad-feature docs remain useful technical reference, but
+they are not the current strategy unless explicitly rewritten.
 
 [![License: EPL-2.0](https://img.shields.io/github/license/Dudiebug/terminatorplus?color=violet&labelColor=000000&style=for-the-badge)](LICENSE)
 [![Discord](https://img.shields.io/discord/357333217340162069?color=5865F2&label=Discord&logo=Discord&labelColor=23272a&style=for-the-badge)](https://discord.gg/vZVSf2D6mz)
@@ -10,6 +14,7 @@ genetic-algorithm training.
 ## Highlights
 
 - Server-side `ServerPlayer` bots that take and deal real vanilla damage.
+- Current strategy: one bot versus one skilled human player in a controlled duel.
 - Weapon-aware `CombatDirector` for swords, axes, maces, tridents, wind charges,
   pearls, crystals, anchors, cobwebs, totems, elytra/fireworks, and consumables.
 - Full editable 41-slot inventory with GUI support.
@@ -18,9 +23,10 @@ genetic-algorithm training.
   `anchorbomb`, and `clear`.
 - Movement brain bank under `ai/movement/` with manifest, per-family brains,
   schema validation, legacy import, fallback, and quarantine behavior.
-- Movement brains output locomotion only. `CombatDirector` remains the sole owner
-  of combat actions, item use, hotbar selection, crystals, anchors, projectiles,
-  and behavior timing.
+- Movement is combat-informed but not combat-authoritative. Movement brains
+  output locomotion only. `CombatDirector` remains the sole owner of combat
+  actions, item use, hotbar selection, crystals, anchors, projectiles, and
+  behavior timing.
 - `/ai reinforcement ...` defaults to movement-controller training and
   automatically assigns weighted training loadouts and records per-family
   telemetry.
@@ -106,7 +112,17 @@ candidates on the configured family brain via `ai.training.curriculum-family`.
 
 ## Documentation
 
-Full documentation is in the [Wiki](https://github.com/Dudiebug/terminatorplus/wiki):
+Current strategy and workflow docs are in `docs/`:
+
+- [Vision](docs/VISION.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Workflow](docs/WORKFLOW.md)
+- [Duel Test Plan](docs/DUEL_TEST_PLAN.md)
+- [Review Checklist](docs/REVIEW_CHECKLIST.md)
+
+The [Wiki](https://github.com/Dudiebug/terminatorplus/wiki) is preserved as
+legacy/reference material unless a page explicitly says it has been rewritten
+for the current 1v1 strategy:
 
 [Commands](https://github.com/Dudiebug/terminatorplus/wiki/Commands) |
 [Loadouts](https://github.com/Dudiebug/terminatorplus/wiki/Loadouts) |

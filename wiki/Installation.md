@@ -1,5 +1,11 @@
 # Installation
 
+> Legacy/reference notice:
+> This page may describe the old general TerminatorPlus strategy.
+> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
+> Use this page for technical reference only until it is verified against source code and runtime behavior.
+
+
 ## Requirements
 
 - Paper 26.1.2. Current 5.2.x release jars are built only for the `mc26.1.2` target.

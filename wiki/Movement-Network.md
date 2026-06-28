@@ -1,5 +1,11 @@
 # Movement Network
 
+> Legacy/reference notice:
+> This page may describe the old general TerminatorPlus strategy.
+> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
+> Use this page for technical reference only until it is verified against source code and runtime behavior.
+
+
 The movement-controller network handles footwork only. It never selects weapons,
 changes hotbar slots, attacks, blocks, uses items, places crystals or anchors, or
 executes utility combat actions. `CombatDirector` owns combat; movement brains

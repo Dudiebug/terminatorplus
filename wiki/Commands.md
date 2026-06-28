@@ -1,5 +1,11 @@
 # Commands
 
+> Legacy/reference notice:
+> This page may describe the old general TerminatorPlus strategy.
+> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
+> Use this page for technical reference only until it is verified against source code and runtime behavior.
+
+
 All bot management commands live under `/bot` (alias `/npc`). AI training is under `/ai`. Environment configuration is under `/botenvironment` (alias `/botenv`). Plugin info is under `/terminatorplus` (alias `/tplus`).
 
 ## Spawning
