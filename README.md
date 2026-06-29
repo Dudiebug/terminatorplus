@@ -1,73 +1,139 @@
-# TerminatorPlus [BETA]
+# TerminatorPlus
 
-**This project is on pause indefinitely. Updates are not guaranteed. Please do not use in a production server.**
+TerminatorPlus is now focused on one strong 1v1 PvP bot versus one skilled
+human PvPer on the `mc-26.1.2` target branch.
 
-Additionally, the readme and wiki may be outdated.
+The current priority is duel quality: movement, spacing, vanilla hit timing,
+sword/axe/shield fundamentals, defensive recovery, punish logic, and controlled
+advanced tools. Older broad-feature docs remain useful technical reference, but
+they are not the current strategy unless explicitly rewritten.
 
-![Java](https://img.shields.io/badge/java-%23ED8B00.svg?style=for-the-badge&logo=java&logoColor=white)
-![GitHub](https://img.shields.io/github/languages/code-size/HorseNuggets/TerminatorPlus?color=cyan&label=Size&labelColor=000000&logo=GitHub&style=for-the-badge)
-![GitHub](https://img.shields.io/github/license/HorseNuggets/TerminatorPlus?color=violet&logo=GitHub&labelColor=000000&style=for-the-badge)
-![Discord](https://img.shields.io/discord/357333217340162069?color=5865F2&label=Discord&logo=Discord&labelColor=23272a&style=for-the-badge)
+[![License: EPL-2.0](https://img.shields.io/github/license/Dudiebug/terminatorplus?color=violet&labelColor=000000&style=for-the-badge)](LICENSE)
+[![Discord](https://img.shields.io/discord/357333217340162069?color=5865F2&label=Discord&logo=Discord&labelColor=23272a&style=for-the-badge)](https://discord.gg/vZVSf2D6mz)
 
-**TerminatorPlus** is a bukkit (paper) plugin that allows the creation of server-side player bots. Unlike many NPC
-plugins that already exist, this project has an emphasis on making the bots as human-like as possible.
+## Highlights
 
-### Features
+- Server-side `ServerPlayer` bots that take and deal real vanilla damage.
+- Current strategy: one bot versus one skilled human player in a controlled duel.
+- Weapon-aware `CombatDirector` for swords, axes, maces, tridents, wind charges,
+  pearls, crystals, anchors, cobwebs, totems, elytra/fireworks, and consumables.
+- Full editable 41-slot inventory with GUI support.
+- Built-in loadouts: `sword`, `axe`, `smp`, `pot`, `mace`, `spear`, `trident`,
+  `windcharge`, `skydiver`, `hybrid`, `vanilla`, `pvp`, `crystalpvp`,
+  `anchorbomb`, and `clear`.
+- Movement brain bank under `ai/movement/` with manifest, per-family brains,
+  schema validation, legacy import, fallback, and quarantine behavior.
+- Movement is combat-informed but not combat-authoritative. Movement brains
+  output locomotion only. `CombatDirector` remains the sole owner of combat
+  actions, item use, hotbar selection, crystals, anchors, projectiles, and
+  behavior timing.
+- `/ai reinforcement ...` defaults to movement-controller training and
+  automatically assigns weighted training loadouts and records per-family
+  telemetry.
+- `/ai evaluate` exports repeatable seed/scenario reports with route/family
+  distributions, fallback state, schema metadata, and reward components.
 
-- **Weapon-aware combat AI** — swords, maces (jump-smash), tridents (momentum throw), wind charges, ender pearls, end crystals, respawn anchors, cobwebs, totems of undying, and elytra gliding with firework boosts.
-- **Full editable inventory** — hotbar, storage, armor, offhand. Open it as a chest GUI with `/bot inventory <name>`.
-- **Loadouts** — `/bot loadout <name>` for built-in kits (`sword`, `mace`, `trident`, `windcharge`, `skydiver`, `hybrid`, `crystalpvp`, `anchorbomb`, `pvp`, `clear`).
-- **Presets** — save a bot's loadout + behavior settings to YAML, re-apply to any bot.
-- **Neural-network training mode** — preserved deterministic damage path for reinforcement-learning sessions.
-- **Paper API artifact** — drive bots from your own plugin via `Terminator.combatTick(target)`.
+## Version Support
 
-### Documentation
+Built for the active Paper target branch, such as Paper 26.1.2 or Paper
+1.21.11, with Java 25. Spigot and CraftBukkit are not supported.
 
-See the [Wiki](https://github.com/HorseNuggets/TerminatorPlus/wiki):
-[Installation](https://github.com/HorseNuggets/TerminatorPlus/wiki/Installation) ·
-[Quick Start](https://github.com/HorseNuggets/TerminatorPlus/wiki/Quick-Start) ·
-[Commands](https://github.com/HorseNuggets/TerminatorPlus/wiki/Commands) ·
-[Loadouts](https://github.com/HorseNuggets/TerminatorPlus/wiki/Loadouts) ·
-[Combat Behaviors](https://github.com/HorseNuggets/TerminatorPlus/wiki/Combat-Behaviors) ·
-[Presets](https://github.com/HorseNuggets/TerminatorPlus/wiki/Presets) ·
-[API](https://github.com/HorseNuggets/TerminatorPlus/wiki/API) ·
-[Troubleshooting](https://github.com/HorseNuggets/TerminatorPlus/wiki/Troubleshooting)
+## Quick Start
 
-### Download
-
-Releases are currently available on our Discord server, which can be found [here](https://discord.gg/vZVSf2D6mz). You
-can also find them on the [releases page](https://github.com/HorseNuggets/TerminatorPlus/releases)
-
-### Machine Learning
-
-TerminatorPlus currently utilizes classic population-based reinforcement learning for bot PVP training. Q-learning is a work in progress, along with variable A* pathfinding.
-
-### API Support
-
-Built API artifacts are available on the [releases page](https://github.com/HorseNuggets/TerminatorPlus/releases), and
-the Discord server.
-See
-the [API Module](https://github.com/HorseNuggets/TerminatorPlus/tree/master/TerminatorPlus-API/src/main/java/net/nuggetmc/tplus/api)
-for available methods.
-
-Example:
-```java
-Terminator terminator = TerminatorPlusAPI.getBotManager().createBot(location, "BotName", skin, skinSignature);
+```text
+/bot create TestBot
+/bot loadout hybrid TestBot
+/bot inventory TestBot
+/bot preset save mykit TestBot
+/bot preset apply mykit
 ```
 
-### Version Support
+Train and deploy movement-bank bots:
 
-This plugin requires [Paper 26.1.2](https://papermc.io/downloads/all).
+```text
+/ai reinforcement 120 TrainBot Steve
+/ai brain status
+/ai stop
+/ai movement 5 Soldier
+```
 
-### Future Updates
+Run a report-only evaluation export:
 
-This project is in a very early stage, and we have many more ideas to tackle.
-- [x] A GUI to view and edit currently loaded bot inventories (`/bot inventory <name>`)
-- [x] Loadout + behavior presets saved to the plugin data folder
-- [ ] Individual agents assigned per bot
-- [ ] AI data saved to the plugin data folder, able to be loaded into bots
-- [ ] Saving config data in memory
+```text
+/ai evaluate list
+/ai evaluate branch_family_latched all 1337,7331,424242
+```
+
+Reports are written under
+`plugins/TerminatorPlus/ai/movement/evaluations/`.
+
+## Movement Architecture
+
+`CombatDirector.plan(...)` emits a typed `CombatIntent`. `MovementBrainRouter`
+then selects a brain by:
+
+1. lock or committed family
+2. `CombatIntent.branchFamily`
+3. desired range or role fallback
+4. `general_fallback`
+
+The movement network receives a 37-value observation vector with one-hot
+`MovementBranchFamily` fields and produces 8 locomotion outputs. It may walk,
+jump, sprint, strafe, retreat, adjust facing, and report movement state. It may
+not call combat actions.
+
+## Persistence
+
+Default layout:
+
+```text
+plugins/TerminatorPlus/ai/movement/manifest.json
+plugins/TerminatorPlus/ai/movement/brains/general.json
+plugins/TerminatorPlus/ai/movement/brains/melee.json
+plugins/TerminatorPlus/ai/movement/brains/mace.json
+plugins/TerminatorPlus/ai/movement/brains/trident_ranged.json
+plugins/TerminatorPlus/ai/movement/brains/spear_melee.json
+plugins/TerminatorPlus/ai/movement/brains/mobility.json
+plugins/TerminatorPlus/ai/movement/brains/explosive_survival.json
+plugins/TerminatorPlus/ai/movement/brains/projectile_ranged.json
+```
+
+Compatible legacy `ai/brain.json` files import as `general_fallback`. Missing
+specialists fall back safely; bad files can be quarantined.
+
+## Training Notes
+
+The default `movement_balanced` mix keeps `pvp + crystalpvp + anchorbomb` at 8%
+total so explosive movement is represented without dominating training.
+
+Mixed training ranks candidates by assigned loadout family and updates every
+eligible specialist brain represented in the round. Curriculum mode focuses all
+candidates on the configured family brain via `ai.training.curriculum-family`.
+
+## Documentation
+
+Current strategy and workflow docs are in `docs/`:
+
+- [Codex Playbook](CODEX.md)
+- [Vision](docs/VISION.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Workflow](docs/WORKFLOW.md)
+- [Duel Test Plan](docs/DUEL_TEST_PLAN.md)
+- [Review Checklist](docs/REVIEW_CHECKLIST.md)
+
+The [Wiki](https://github.com/Dudiebug/terminatorplus/wiki) is preserved as
+legacy/reference material unless a page explicitly says it has been rewritten
+for the current 1v1 strategy:
+
+[Commands](https://github.com/Dudiebug/terminatorplus/wiki/Commands) |
+[Loadouts](https://github.com/Dudiebug/terminatorplus/wiki/Loadouts) |
+[Combat Behaviors](https://github.com/Dudiebug/terminatorplus/wiki/Combat-Behaviors) |
+[Movement Network](https://github.com/Dudiebug/terminatorplus/wiki/Movement-Network) |
+[Movement Brain Bank](https://github.com/Dudiebug/terminatorplus/wiki/Movement-Brain-Bank) |
+[AI Training](https://github.com/Dudiebug/terminatorplus/wiki/AI-Training) |
+[Brain Persistence](https://github.com/Dudiebug/terminatorplus/wiki/Brain-Persistence) |
+[Configuration](https://github.com/Dudiebug/terminatorplus/wiki/Configuration)
 
 ## License
 
-This project is licensed under [Eclipse Public License](https://github.com/batchprogrammer314/player-ai/blob/master/LICENSE).
+[Eclipse Public License 2.0](LICENSE)
