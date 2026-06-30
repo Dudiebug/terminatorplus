@@ -27,6 +27,8 @@ public final class PlayerLikeActionController {
     private int directShortcutCount;
     private int instantConsumeShortcutCount;
     private int interruptionCount;
+    private int healCompletionCount;
+    private int healCancelCount;
 
     public void beginTick(Bot bot) {
         int now = bot == null ? -1 : bot.getAliveTicks();
@@ -84,6 +86,9 @@ public final class PlayerLikeActionController {
     public void complete(Bot bot, String result) {
         if (state == BotActionState.IDLE) return;
         completionResult = token(result);
+        if (isHealSource(source)) {
+            healCompletionCount++;
+        }
         Runnable callback = completionCallback;
         completionCallback = null;
         if (callback != null) {
@@ -96,6 +101,9 @@ public final class PlayerLikeActionController {
     public void interrupt(Bot bot, String reason) {
         if (state == BotActionState.IDLE) return;
         interruptionReason = token(reason);
+        if (isHealSource(source)) {
+            healCancelCount++;
+        }
         completionCallback = null;
         interruptionCount++;
         CombatDebugger.log(bot, "action-interrupt", describe() + " reason=" + interruptionReason);
@@ -201,6 +209,14 @@ public final class PlayerLikeActionController {
         return interruptionCount;
     }
 
+    public int healCompletionCount() {
+        return healCompletionCount;
+    }
+
+    public int healCancelCount() {
+        return healCancelCount;
+    }
+
     private void reservePrimary(Bot bot, BotActionState actionState, String actionSource, int slot, boolean shortcut) {
         primaryActionsThisTick++;
         if (primaryActionsThisTick > 1) {
@@ -258,5 +274,10 @@ public final class PlayerLikeActionController {
         ItemStack active = player.getActiveItem();
         if (active == null) return "AIR";
         return active.getType().name();
+    }
+
+    private static boolean isHealSource(String value) {
+        String token = token(value).toLowerCase(java.util.Locale.ROOT);
+        return token.contains("heal") || token.contains("gapple") || token.contains("apple");
     }
 }

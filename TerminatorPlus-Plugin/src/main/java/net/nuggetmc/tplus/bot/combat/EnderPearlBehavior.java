@@ -24,6 +24,7 @@ public final class EnderPearlBehavior implements WeaponBehavior {
     /** Vanilla pearls have ~30-block reach before falling out of the air; cap so we don't waste throws. */
     private static final double MAX_DISTANCE = 64.0;
     private static final double SPEED = 1.8;
+    private static final int RELEASE_TICKS = 5;
 
     @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
@@ -43,6 +44,7 @@ public final class EnderPearlBehavior implements WeaponBehavior {
             return 0;
         }
 
+        int previousSlot = bot.getBotInventory().getSelectedHotbarSlot();
         slot = bot.getBotInventory().selectMainInventorySlot(slot);
         if (slot < 0) {
             CombatDebugger.log(bot, "pearl-skip", "reason=no-selectable-slot");
@@ -50,27 +52,40 @@ public final class EnderPearlBehavior implements WeaponBehavior {
         }
         bot.faceLocation(target.getLocation());
         bot.punch();
-        bot.getActionController().recordDirectShortcut(bot, BotActionState.USING_PEARL,
-                "direct-pearl-spawn", slot);
+        int selectedSlot = slot;
+        boolean started = bot.getActionController().start(bot, BotActionState.USING_PEARL, RELEASE_TICKS,
+                selectedSlot, "timed-pearl-release", () -> {
+                    if (!target.isValid()) {
+                        CombatDebugger.log(bot, "pearl-cancel", "reason=target-invalid slot=" + selectedSlot);
+                        bot.getBotInventory().restoreSelectedSlotOrBestWeapon(previousSlot);
+                        return;
+                    }
+                    bot.getActionController().recordDirectShortcut(bot, BotActionState.USING_PEARL,
+                            "projectile-pearl-release", selectedSlot);
+                    Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
+                    // Lead the target slightly based on their horizontal velocity.
+                    Vector targetVel = target.getVelocity();
+                    Vector aimPoint = target.getLocation().toVector()
+                            .add(targetVel.clone().multiply(distance / 12.0))
+                            .add(new Vector(0, target.getHeight() * 0.5, 0));
+                    Vector aim = aimPoint.subtract(spawn.toVector()).normalize();
+                    // Arc slightly upward so the pearl travels over short cover.
+                    aim.setY(aim.getY() + 0.12).normalize();
 
-        Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
-        // Lead the target slightly based on their horizontal velocity.
-        Vector targetVel = target.getVelocity();
-        Vector aimPoint = target.getLocation().toVector()
-                .add(targetVel.clone().multiply(distance / 12.0))
-                .add(new Vector(0, target.getHeight() * 0.5, 0));
-        Vector aim = aimPoint.subtract(spawn.toVector()).normalize();
-        // Arc slightly upward so the pearl travels over short cover.
-        aim.setY(aim.getY() + 0.12).normalize();
+                    spawn.getWorld().spawn(spawn, EnderPearl.class, p -> {
+                        p.setShooter(bot.getBukkitEntity());
+                        p.setVelocity(aim.multiply(SPEED));
+                    });
 
-        spawn.getWorld().spawn(spawn, EnderPearl.class, p -> {
-            p.setShooter(bot.getBukkitEntity());
-            p.setVelocity(aim.multiply(SPEED));
-        });
-
-        spawn.getWorld().playSound(spawn, Sound.ENTITY_ENDER_PEARL_THROW, 1f, 1f);
-        CombatDebugger.log(bot, "pearl-throw", "dist=" + String.format("%.2f", distance) + " slot=" + slot);
-        bot.getBotInventory().decrementMainInventorySlot(slot, 1);
+                    spawn.getWorld().playSound(spawn, Sound.ENTITY_ENDER_PEARL_THROW, 1f, 1f);
+                    CombatDebugger.log(bot, "pearl-throw", "dist=" + String.format("%.2f", distance) + " slot=" + selectedSlot);
+                    bot.getBotInventory().decrementMainInventorySlot(selectedSlot, 1);
+                    bot.getBotInventory().restoreSelectedSlotOrBestWeapon(previousSlot);
+                });
+        if (!started) {
+            bot.getBotInventory().restoreSelectedSlotOrBestWeapon(previousSlot);
+            return 0;
+        }
         bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, alive);
         return COOLDOWN;
     }

@@ -65,22 +65,22 @@ duel arena. Null live metrics mean "not collected", not zero.
 | Combat authority | `CombatDirector` still owns action choice; movement changes do not call combat behavior internals | Safe |
 | Movement-only contract | Baseline and mixer emit `MovementOutput` only | Safe |
 | Action controller | Central state exists and blocks timed consume/drink actions from stacking with attacks | Partial but aligned |
-| Consumables | Apples and drinkable potions are timed; splash self-heal/offense remain direct shortcut telemetry | Incomplete |
-| Mining/block breaking | No vanilla-like mining action yet | Incomplete |
-| Fall/clutch/mace damage | No legal clutch/fall rewrite yet | Incomplete; needs runtime tests |
-| Block/projectile/explosive actions | Cobweb, pearl, trident, wind, crystal, anchor paths are logged as shortcuts, not migrated | Incomplete |
-| Evaluation | Report-only exports are honest about null live metrics | Improved |
+| Consumables | Apples and drinkable potions are timed; splash self-heal/offense now reserve a short throw action and no longer apply duplicate instant self-heal | Improved in 6.1.0; needs runtime test |
+| Mining/block breaking | Legacy mining crack progress now uses a small block/tool speed model for common obstacle blocks | Improved in 6.1.0; needs runtime test |
+| Fall/clutch/mace damage | Mace-in-hotbar fall immunity is not present; environment fall blocking now records fall-clutch telemetry | Improved in 6.1.0; needs runtime tests |
+| Block/projectile/explosive actions | Cobweb, pearl, splash, and trident now reserve action-controller phases before direct release; wind/crystal/anchor remain shortcut telemetry | Partial |
+| Evaluation | Report-only exports are honest about null live metrics; runtime fights now have `LiveDuelMetricsRecorder` payloads | Improved |
 | Docs/commands | Current vs training/debug/admin/legacy surfaces are classified here | Improved |
 
 ## Remaining Direct Shortcut Table
 
 | Path | Current state | Next migration |
 |---|---|---|
-| Splash self-heal | Throws potion and still applies immediate heal | Convert to projectile impact/result timing |
-| Splash offense | Direct projectile spawn and consume | Wrap in projectile action phase |
-| Cobweb placement | Direct `setType` with telemetry | Convert to legal placement action |
-| Ender pearl | Direct projectile spawn with telemetry | Convert to selected item/use/release action |
-| Trident | Charge exists, release still direct-spawns projectile | Bind release to action controller |
+| Splash self-heal | Short action phase, projectile release, no duplicate immediate heal | Runtime-test impact timing |
+| Splash offense | Short action phase, projectile release | Runtime-test aim and consume-once behavior |
+| Cobweb placement | Action-controller placement window before `setType` release | Runtime-test scanner and utility paths |
+| Ender pearl | Selected item plus short release action, then direct projectile spawn telemetry | Runtime-test teleport and weapon restore |
+| Trident | Charge is action-state-bound; direct spawn counted on release | Runtime-test charge/release and hit accounting |
 | Wind charge | Windup exists for boost, spawn remains direct with telemetry | Convert to projectile use action |
 | Crystal | Direct host block, crystal spawn, explosion | Split into host place, crystal place, detonate sequence |
 | Anchor | Direct anchor set, charge consume, explosion | Split into place, charge, use/detonate sequence |
@@ -95,9 +95,9 @@ Must fix before merge:
 
 Should fix soon:
 
-- Convert splash self-heal so it does not both spawn a potion and apply immediate heal.
-- Add live arena collection for `damageDealt`, `damageTaken`, desired-range ticks, fallback rate, fake action count, and same-tick action count.
-- Convert cobweb placement before crystals/anchors.
+- Runtime-test splash self-heal/offense to confirm release timing and no duplicate healing.
+- Runtime-test live collection for `damageDealt`, `damageTaken`, desired-range ticks, fallback rate, fake action count, and same-tick action count.
+- Continue migrating wind/crystal/anchor after cobweb/pearl/trident runtime proof.
 
 Safe follow-up:
 

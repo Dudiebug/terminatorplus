@@ -52,6 +52,7 @@ public final class UtilityBehavior implements WeaponBehavior {
             CombatDebugger.log(bot, "cobweb-skip", "reason=no-hotbar-slot");
             return 0;
         }
+        int previousSlot = bot.getBotInventory().getSelectedHotbarSlot();
         slot = bot.getBotInventory().selectMainInventorySlot(slot);
         if (slot < 0) {
             CombatDebugger.log(bot, "cobweb-skip", "reason=no-selectable-slot");
@@ -73,13 +74,26 @@ public final class UtilityBehavior implements WeaponBehavior {
                     "reason=no-support below=" + block.getRelative(0, -1, 0).getType().name());
             return 0;
         }
-        bot.getActionController().recordDirectShortcut(bot, BotActionState.PLACING_BLOCK,
-                "direct-cobweb-setType", slot);
-        placeBlock(bot, block, Material.COBWEB, "utility-cobweb");
-        CombatDebugger.log(bot, "cobweb-place", "slot=" + slot + " dot=" + String.format("%.2f", fleeDot));
-
-        bot.getBotInventory().decrementMainInventorySlot(slot, 1);
-
+        int selectedSlot = slot;
+        Block targetBlock = block;
+        boolean started = bot.getActionController().start(bot, BotActionState.PLACING_BLOCK, 4,
+                selectedSlot, "timed-cobweb-place", () -> {
+                    if (!targetBlock.getType().isAir() || !hasPlaceSupport(targetBlock)) {
+                        CombatDebugger.log(bot, "cobweb-cancel", "reason=blocked-on-release slot=" + selectedSlot);
+                        bot.getBotInventory().restoreSelectedSlotOrBestWeapon(previousSlot);
+                        return;
+                    }
+                    bot.getActionController().recordDirectShortcut(bot, BotActionState.PLACING_BLOCK,
+                            "action-cobweb-setType-release", selectedSlot);
+                    placeBlock(bot, targetBlock, Material.COBWEB, "utility-cobweb");
+                    bot.getBotInventory().decrementMainInventorySlot(selectedSlot, 1);
+                    bot.getBotInventory().restoreSelectedSlotOrBestWeapon(previousSlot);
+                    CombatDebugger.log(bot, "cobweb-place", "slot=" + selectedSlot + " dot=" + String.format("%.2f", fleeDot));
+                });
+        if (!started) {
+            bot.getBotInventory().restoreSelectedSlotOrBestWeapon(previousSlot);
+            return 0;
+        }
         bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, alive);
         return COOLDOWN;
     }

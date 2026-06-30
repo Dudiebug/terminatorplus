@@ -147,6 +147,12 @@ public final class MovementRewardProfile {
         Map<String, Double> out = new LinkedHashMap<>();
         out.put("damage_delta", d.damageDealt() * dealtWeight - d.damageTaken() * takenWeight);
         out.put("survival", m.available() ? 0.08 : -0.25);
+        out.put("action_legality",
+                -(d.fakeActionCount() * 0.10
+                        + d.instantConsumeCount() * 0.35
+                        + d.illegalSameTickActionCount() * 0.40
+                        + d.actionInterruptionCount() * 0.08));
+        out.put("heal_completion", d.healCompletionCount() * 0.12 - d.healCancelCount() * 0.10);
         return out;
     }
 
@@ -165,9 +171,15 @@ public final class MovementRewardProfile {
             double tridentDamage,
             double spearDamage,
             double projectileDamage,
-            double explosiveDamage
+            double explosiveDamage,
+            double fakeActionCount,
+            double instantConsumeCount,
+            double illegalSameTickActionCount,
+            double actionInterruptionCount,
+            double healCompletionCount,
+            double healCancelCount
     ) {
-        public static final CombatDeltas ZERO = new CombatDeltas(0, 0, 0, 0, 0, 0, 0, 0, 0);
+        public static final CombatDeltas ZERO = new CombatDeltas(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
         public static CombatDeltas between(CombatTrainingSnapshot previous, CombatTrainingSnapshot current) {
             CombatTrainingSnapshot p = previous == null ? CombatTrainingSnapshot.unavailable() : previous;
@@ -181,7 +193,13 @@ public final class MovementRewardProfile {
                     nonNegative(c.tridentDamage() - p.tridentDamage()),
                     nonNegative(c.spearDamage() - p.spearDamage()),
                     nonNegative(c.projectileDamage() - p.projectileDamage()),
-                    nonNegative(c.explosiveDamage() - p.explosiveDamage())
+                    nonNegative(c.explosiveDamage() - p.explosiveDamage()),
+                    nonNegative(c.fakeActionCount() - p.fakeActionCount()),
+                    nonNegative(c.instantConsumeCount() - p.instantConsumeCount()),
+                    nonNegative(c.illegalSameTickActionCount() - p.illegalSameTickActionCount()),
+                    nonNegative(c.actionInterruptionCount() - p.actionInterruptionCount()),
+                    nonNegative(c.healCompletionCount() - p.healCompletionCount()),
+                    nonNegative(c.healCancelCount() - p.healCancelCount())
             );
         }
 

@@ -23,6 +23,9 @@ public record CombatTrainingSnapshot(
         int instantConsumeCount,
         int illegalSameTickActionCount,
         int actionInterruptionCount,
+        int healCompletionCount,
+        int healCancelCount,
+        LiveDuelMetricsSnapshot liveMetrics,
         String lastDamageBucket,
         String lastClassificationSource
 ) {
@@ -30,15 +33,49 @@ public record CombatTrainingSnapshot(
         loadout = loadout == null ? "" : loadout.trim().toLowerCase(Locale.ROOT);
         loadoutFamily = MovementTrainingConfig.normalizeFamilyId(loadoutFamily);
         activeBranchFamily = MovementTrainingConfig.normalizeFamilyId(activeBranchFamily);
+        liveMetrics = liveMetrics == null ? LiveDuelMetricsSnapshot.unavailable() : liveMetrics;
         lastDamageBucket = lastDamageBucket == null || lastDamageBucket.isBlank() ? "none" : lastDamageBucket;
         lastClassificationSource = lastClassificationSource == null || lastClassificationSource.isBlank()
                 ? "none"
                 : lastClassificationSource;
     }
 
+    public CombatTrainingSnapshot(
+            boolean available,
+            String loadout,
+            String loadoutFamily,
+            String activeBranchFamily,
+            double damageDealt,
+            double damageTaken,
+            double swordDamage,
+            double axeDamage,
+            double maceDamage,
+            double tridentDamage,
+            double spearDamage,
+            double projectileDamage,
+            double explosiveDamage,
+            int directDamageClassifications,
+            int heldItemDamageClassifications,
+            int loadoutFallbackDamageClassifications,
+            int fakeActionCount,
+            int instantConsumeCount,
+            int illegalSameTickActionCount,
+            int actionInterruptionCount,
+            String lastDamageBucket,
+            String lastClassificationSource
+    ) {
+        this(available, loadout, loadoutFamily, activeBranchFamily, damageDealt, damageTaken,
+                swordDamage, axeDamage, maceDamage, tridentDamage, spearDamage, projectileDamage,
+                explosiveDamage, directDamageClassifications, heldItemDamageClassifications,
+                loadoutFallbackDamageClassifications, fakeActionCount, instantConsumeCount,
+                illegalSameTickActionCount, actionInterruptionCount, 0, 0,
+                LiveDuelMetricsSnapshot.unavailable(), lastDamageBucket, lastClassificationSource);
+    }
+
     public static CombatTrainingSnapshot unavailable() {
         return new CombatTrainingSnapshot(false, "", "general_fallback", "general_fallback", 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "none", "none");
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                LiveDuelMetricsSnapshot.unavailable(), "none", "none");
     }
 
     public double damageDelta() {

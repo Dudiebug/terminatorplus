@@ -39,6 +39,7 @@ import net.nuggetmc.tplus.bot.combat.BotActionState;
 import net.nuggetmc.tplus.bot.combat.CombatDirector;
 import net.nuggetmc.tplus.bot.combat.CombatDebugger;
 import net.nuggetmc.tplus.bot.combat.CombatIntent;
+import net.nuggetmc.tplus.bot.combat.LiveDuelMetricsRecorder;
 import net.nuggetmc.tplus.bot.combat.MeleeBehavior;
 import net.nuggetmc.tplus.bot.combat.CombatState;
 import net.nuggetmc.tplus.bot.combat.MovementBranchFamily;
@@ -411,6 +412,7 @@ public class Bot extends ServerPlayer implements Terminator {
         MovementOutputApplier.ApplyResult result = movementOutputApplier.tryApply(this, target, network.movementBrainBank());
         lastMovementControllerFallback = result.fallback();
         lastMovementControllerHeld = result.held();
+        LiveDuelMetricsRecorder.recordMovementResult(this, result);
         return !result.fallback();
     }
 
@@ -495,6 +497,9 @@ public class Bot extends ServerPlayer implements Terminator {
                 actionController.instantConsumeShortcutCount(),
                 actionController.sameTickActionViolations(),
                 actionController.interruptionCount(),
+                actionController.healCompletionCount(),
+                actionController.healCancelCount(),
+                LiveDuelMetricsRecorder.snapshot(this),
                 lastTrainingDamageBucket,
                 lastTrainingDamageClassificationSource
         );
@@ -681,7 +686,16 @@ public class Bot extends ServerPlayer implements Terminator {
     }
 
     private void fallDamageCheck() { // TODO create a better bot event system in the future, also have bot.getAgent()
-        if (groundTicks != 0 && noFallTicks == 0 && !(oldVelocity.getY() >= -0.8) && !isFallBlocked()) {
+        if (groundTicks != 0 && noFallTicks == 0 && !(oldVelocity.getY() >= -0.8) && isFallBlocked()) {
+            actionController.recordDirectShortcut(this, BotActionState.FALL_CLUTCH,
+                    "legacy-environment-fall-block", botInventory.getSelectedHotbarSlot());
+            CombatDebugger.log(this, "fall-clutch",
+                    "src=environment-block vy=" + fmt(oldVelocity.getY())
+                            + " held=" + mainhandType()
+                            + " maceHotbar=" + botInventory.hasMace());
+            return;
+        }
+        if (groundTicks != 0 && noFallTicks == 0 && !(oldVelocity.getY() >= -0.8)) {
             BotFallDamageEvent event = new BotFallDamageEvent(this, new ArrayList<>(getStandingOn()));
 
             plugin.getManager().getAgent().onFallDamage(event);
@@ -1078,6 +1092,7 @@ public class Bot extends ServerPlayer implements Terminator {
         }
         CombatDebugger.disable(getUUID());
         MovementOutputApplier.clearBot(getUUID());
+        LiveDuelMetricsRecorder.clearBot(getUUID());
 
         this.remove(RemovalReason.DISCARDED);
         this.removeVisually();
@@ -1193,6 +1208,7 @@ public class Bot extends ServerPlayer implements Terminator {
             double actualDamage = Math.max(0.0, beforeHp - afterHp);
             if (actualDamage > 0.0) {
                 trainingDamageTaken += actualDamage;
+                LiveDuelMetricsRecorder.recordDamageTaken(this, actualDamage);
                 recordAttackerTrainingDamage(damagesource, attacker, actualDamage);
             }
         }
@@ -1235,6 +1251,7 @@ public class Bot extends ServerPlayer implements Terminator {
 
     private void recordTrainingDamageDealt(DamageSource source, Entity attacker, double amount) {
         trainingDamageDealt += amount;
+        LiveDuelMetricsRecorder.recordDamageDealt(this, amount);
         TrainingDamageClassification classification = classifyTrainingDamage(source, attacker);
         switch (classification.bucket()) {
             case "sword" -> trainingSwordDamage += amount;

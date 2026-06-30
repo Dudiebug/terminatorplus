@@ -29,9 +29,10 @@ import org.bukkit.util.Vector;
  *   <li>Offensive splash — target within 8 blocks → throw harming / poison / slowness</li>
  * </ol>
  *
- * <p>Effects apply INSTANTLY (no 32-tick vanilla eat animation) — bot combat flow can't
- * survive a 32-tick hold. Matches the pattern the old {@code CombatDirector.tryHeal()}
- * used before this class subsumed it.
+ * <p>Core apples and drinkable potions now reserve a 32-tick player-like use
+ * window and apply effects from completion callbacks. Splash potions still use
+ * direct projectile spawning for compatibility, but the result is tied to a
+ * short throw action instead of applying a duplicate immediate heal.
  */
 public final class ConsumableBehavior {
 
@@ -56,6 +57,7 @@ public final class ConsumableBehavior {
     private static final int CD_STRENGTH_TICKS    = 200;  // Same — effect duration is the real gate
     private static final int CD_SPLASH_HARM_TICKS = 200;
     private static final int USE_DURATION_TICKS = 32;
+    private static final int SPLASH_RELEASE_TICKS = 6;
 
     public void tick(Bot bot, LivingEntity target) {
         if (bot.getActionController().active(BotActionState.USING_CONSUMABLE)
@@ -219,27 +221,27 @@ public final class ConsumableBehavior {
         int previousSlot = inv.getSelectedHotbarSlot();
         slot = inv.selectMainInventorySlot(slot);
         if (slot < 0) return false;
-        bot.getActionController().recordDirectShortcut(bot, BotActionState.THROWING_PROJECTILE,
-                "instant-splash-self-heal", slot);
-        bukkit.swingMainHand();
-        Location eye = bukkit.getEyeLocation();
-        ItemStack splash = stack.clone();
-        splash.setAmount(1);
-        bukkit.getWorld().spawn(eye, ThrownPotion.class, p -> {
-            p.setShooter(bukkit);
-            p.setItem(splash);
-            p.setVelocity(new Vector(0, -0.4, 0));
+        int selectedSlot = slot;
+        return startSplashThrow(bot, inv, bukkit, "splash-self-heal", selectedSlot, previousSlot, () -> {
+            if (!hasExpectedItem(inv, selectedSlot, Material.SPLASH_POTION)) {
+                CombatDebugger.log(bot, "consumable-cancel", "type=splash-self-heal reason=item-missing slot=" + selectedSlot);
+                inv.restoreSelectedSlotOrBestWeapon(previousSlot);
+                return;
+            }
+            bot.getActionController().recordDirectShortcut(bot, BotActionState.THROWING_PROJECTILE,
+                    "projectile-splash-self-heal-release", selectedSlot);
+            Location eye = bukkit.getEyeLocation();
+            ItemStack splash = stack.clone();
+            splash.setAmount(1);
+            bukkit.getWorld().spawn(eye, ThrownPotion.class, p -> {
+                p.setShooter(bukkit);
+                p.setItem(splash);
+                p.setVelocity(new Vector(0, -0.4, 0));
+            });
+            decrementSlot(inv, selectedSlot);
+            inv.restoreSelectedSlotOrBestWeapon(previousSlot);
+            CombatDebugger.log(bot, "consumable-complete", "type=splash-self-heal slot=" + selectedSlot);
         });
-        // Apply instant-heal immediately too, mirroring tryHeal's no-animation style. The thrown
-        // potion still shatters visually; the double-heal is small (splash radius effect stacks
-        // once on self), kept for reliability in case the entity despawns before impact.
-        PotionType pt = (stack.getItemMeta() instanceof PotionMeta pm) ? pm.getBasePotionType() : null;
-        float heal = (pt == PotionType.STRONG_HEALING) ? 12.0f : 6.0f;
-        float max = bot.getBotMaxHealth();
-        bukkit.setHealth(Math.min(max, bot.getBotHealth() + heal));
-        decrementSlot(inv, slot);
-        inv.restoreSelectedSlotOrBestWeapon(previousSlot);
-        return true;
     }
 
     private boolean tryDrinkFireRes(Bot bot, BotInventory inv, Player bukkit) {
@@ -296,26 +298,33 @@ public final class ConsumableBehavior {
         int previousSlot = inv.getSelectedHotbarSlot();
         slot = inv.selectMainInventorySlot(slot);
         if (slot < 0) return false;
-        bot.getActionController().recordDirectShortcut(bot, BotActionState.THROWING_PROJECTILE,
-                "instant-splash-offense", slot);
-        bot.faceLocation(target.getLocation());
-        bukkit.swingMainHand();
-        Location eye = bukkit.getEyeLocation();
-        Vector aim = target.getEyeLocation().toVector()
-                .subtract(eye.toVector())
-                .normalize()
-                .multiply(0.5);
-        aim.setY(aim.getY() + 0.1); // Slight arc so it lands near the target's feet.
-        ItemStack splash = stack.clone();
-        splash.setAmount(1);
-        bukkit.getWorld().spawn(eye, ThrownPotion.class, p -> {
-            p.setShooter(bukkit);
-            p.setItem(splash);
-            p.setVelocity(aim);
+        int selectedSlot = slot;
+        return startSplashThrow(bot, inv, bukkit, "splash-offense", selectedSlot, previousSlot, () -> {
+            if (!target.isValid() || !hasExpectedItem(inv, selectedSlot, Material.SPLASH_POTION)) {
+                CombatDebugger.log(bot, "consumable-cancel", "type=splash-offense reason=invalid-release slot=" + selectedSlot);
+                inv.restoreSelectedSlotOrBestWeapon(previousSlot);
+                return;
+            }
+            bot.getActionController().recordDirectShortcut(bot, BotActionState.THROWING_PROJECTILE,
+                    "projectile-splash-offense-release", selectedSlot);
+            bot.faceLocation(target.getLocation());
+            Location eye = bukkit.getEyeLocation();
+            Vector aim = target.getEyeLocation().toVector()
+                    .subtract(eye.toVector())
+                    .normalize()
+                    .multiply(0.5);
+            aim.setY(aim.getY() + 0.1); // Slight arc so it lands near the target's feet.
+            ItemStack splash = stack.clone();
+            splash.setAmount(1);
+            bukkit.getWorld().spawn(eye, ThrownPotion.class, p -> {
+                p.setShooter(bukkit);
+                p.setItem(splash);
+                p.setVelocity(aim);
+            });
+            decrementSlot(inv, selectedSlot);
+            inv.restoreSelectedSlotOrBestWeapon(previousSlot);
+            CombatDebugger.log(bot, "consumable-complete", "type=splash-offense slot=" + selectedSlot);
         });
-        decrementSlot(inv, slot);
-        inv.restoreSelectedSlotOrBestWeapon(previousSlot);
-        return true;
     }
 
     private static void decrementSlot(BotInventory inv, int slot) {
@@ -359,6 +368,31 @@ public final class ConsumableBehavior {
                             + " duration=" + USE_DURATION_TICKS);
         }
         return started;
+    }
+
+    private static boolean startSplashThrow(
+            Bot bot,
+            BotInventory inv,
+            Player bukkit,
+            String source,
+            int slot,
+            int previousSlot,
+            Runnable release
+    ) {
+        if (!hasExpectedItem(inv, slot, Material.SPLASH_POTION)) return false;
+        bukkit.swingMainHand();
+        boolean started = bot.getActionController().start(bot, BotActionState.THROWING_PROJECTILE,
+                SPLASH_RELEASE_TICKS, slot, "timed-" + source, release);
+        if (!started) {
+            inv.restoreSelectedSlotOrBestWeapon(previousSlot);
+            return false;
+        }
+        CombatDebugger.log(bot, "consumable-start",
+                "type=" + source
+                        + " slot=" + slot
+                        + " prev=" + previousSlot
+                        + " duration=" + SPLASH_RELEASE_TICKS);
+        return true;
     }
 
     private static boolean hasExpectedItem(BotInventory inv, int slot, Material expected) {

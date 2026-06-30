@@ -53,6 +53,17 @@ public final class TridentBehavior implements WeaponBehavior {
         bot.faceLocation(targetLoc);
 
         if (state.getPhase() != CombatState.Phase.CHARGING) {
+            int slot = bot.getBotInventory().findHotbar(Material.TRIDENT);
+            if (slot < 0) {
+                CombatDebugger.log(bot, "trident-skip", "reason=no-trident-slot");
+                return 0;
+            }
+            if (!bot.getActionController().start(bot, BotActionState.THROWING_TRIDENT,
+                    MAX_CHARGE_TICKS + 4, slot, "timed-trident-charge")) {
+                CombatDebugger.log(bot, "trident-skip",
+                        "reason=action-busy active=" + bot.getActionController().state());
+                return 0;
+            }
             CombatDebugger.log(bot, "trident-charge-start", "dist=" + String.format("%.2f", distance));
             state.setPhase(CombatState.Phase.CHARGING);
             state.setChargeDirection(dir);
@@ -95,7 +106,7 @@ public final class TridentBehavior implements WeaponBehavior {
 
         int slot = bot.getBotInventory().findHotbar(Material.TRIDENT);
         bot.getActionController().recordDirectShortcut(bot, BotActionState.THROWING_TRIDENT,
-                "direct-trident-spawn", slot);
+                "projectile-trident-release", slot);
         bot.punch();
 
         Trident trident = spawn.getWorld().spawn(spawn, Trident.class, t -> {
@@ -105,5 +116,8 @@ public final class TridentBehavior implements WeaponBehavior {
         });
 
         spawn.getWorld().playSound(spawn, Sound.ITEM_TRIDENT_THROW, 1f, 1f);
+        if (bot.getActionController().active(BotActionState.THROWING_TRIDENT)) {
+            bot.getActionController().complete(bot, "released");
+        }
     }
 }

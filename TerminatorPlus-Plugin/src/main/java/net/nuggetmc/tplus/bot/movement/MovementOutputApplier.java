@@ -4,6 +4,7 @@ import net.nuggetmc.tplus.TerminatorPlus;
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementBrainBank;
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementNetwork;
 import net.nuggetmc.tplus.bot.Bot;
+import net.nuggetmc.tplus.bot.combat.BotActionState;
 import net.nuggetmc.tplus.bot.combat.CombatDebugger;
 import net.nuggetmc.tplus.bot.combat.CombatIntent;
 import net.nuggetmc.tplus.bot.combat.MovementState;
@@ -86,7 +87,7 @@ public final class MovementOutputApplier {
 
         CombatIntent intent = bot.getCombatIntent();
         MovementOutputMixer.MixResult mixed = mixer.mix(intent, baseline, nnOutput, nnAvailable);
-        MovementOutput output = mixed.output();
+        MovementOutput output = constrainForActiveAction(bot, mixed.output());
         logMovementTelemetry(bot, intent, baseline, nnOutput, output, mixed, nnAvailable, fallbackReason);
         if (intent.wantsHoldPosition() || output.holdPosition() >= HOLD_THRESHOLD) {
             writeObservedState(bot, target, false);
@@ -136,6 +137,41 @@ public final class MovementOutputApplier {
                 + ",r=" + fmt(output.retreatDesire())
                 + ",u=" + fmt(output.urgency())
                 + ",h=" + fmt(output.holdPosition()) + "]";
+    }
+
+    private static MovementOutput constrainForActiveAction(Bot bot, MovementOutput output) {
+        if (bot == null || output == null || !bot.getActionController().active()) return output;
+        BotActionState state = bot.getActionController().state();
+        MovementOutput constrained = switch (state) {
+            case USING_CONSUMABLE, DRINKING_POTION -> new MovementOutput(
+                    output.forwardPressure() * 0.20,
+                    output.strafePressure() * 0.25,
+                    0.0,
+                    0.0,
+                    output.retreatDesire() * 0.35,
+                    output.facingAdjustment() * 0.35,
+                    Math.min(output.urgency(), 0.35),
+                    Math.max(output.holdPosition(), 0.45));
+            case THROWING_PROJECTILE, USING_PEARL, PLACING_BLOCK, MINING -> new MovementOutput(
+                    output.forwardPressure() * 0.45,
+                    output.strafePressure() * 0.50,
+                    0.0,
+                    0.0,
+                    output.retreatDesire() * 0.60,
+                    output.facingAdjustment() * 0.60,
+                    Math.min(output.urgency(), 0.55),
+                    output.holdPosition());
+            default -> output;
+        };
+        if (constrained != output) {
+            CombatDebugger.log(bot, "move-action-constraint",
+                    "state=" + state
+                            + " src=" + bot.getActionController().source()
+                            + " left=" + bot.getActionController().remainingTicks()
+                            + " before=" + shortOutput(output)
+                            + " after=" + shortOutput(constrained));
+        }
+        return constrained;
     }
 
     private static String fmt(double value) {

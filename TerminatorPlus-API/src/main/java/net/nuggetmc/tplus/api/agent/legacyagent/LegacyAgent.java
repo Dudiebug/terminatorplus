@@ -1318,7 +1318,8 @@ public class LegacyAgent extends Agent {
 
                     Sound sound = LegacyUtils.breakBlockSound(block);
 
-                    if (i == 9) {
+                    int nextCrack = Math.min(9, i + miningCrackIncrement(bot, block));
+                    if (nextCrack >= 9) {
                         this.cancel();
                         taskList.remove(this);
 
@@ -1361,9 +1362,9 @@ public class LegacyAgent extends Agent {
                         return;
                     }
 
-                    TerminatorPlusAPI.getInternalBridge().sendBlockDestructionPacket(crackList.get(block), block, i);
+                    TerminatorPlusAPI.getInternalBridge().sendBlockDestructionPacket(crackList.get(block), block, nextCrack);
 
-                    mining.put(this, (byte) (i + 1));
+                    mining.put(this, (byte) nextCrack);
                 }
             };
 
@@ -1372,6 +1373,59 @@ public class LegacyAgent extends Agent {
             crackList.put(block, (short) random.nextInt(2000));
             task.runTaskTimer(plugin, 0, 2);
         }
+    }
+
+    private static int miningCrackIncrement(Terminator bot, Block block) {
+        Material blockType = block == null ? Material.AIR : block.getType();
+        ItemStack held = bot != null && bot.getBukkitEntity() instanceof Player player
+                ? player.getInventory().getItemInMainHand()
+                : null;
+        Material tool = held == null ? Material.AIR : held.getType();
+        double hardness = miningHardness(blockType);
+        double speed = toolSpeed(tool, blockType);
+        int ticksToBreak = (int) Math.ceil(hardness * 18.0 / Math.max(0.25, speed));
+        ticksToBreak = Math.max(4, Math.min(80, ticksToBreak));
+        return Math.max(1, (int) Math.ceil(10.0 / (ticksToBreak / 2.0)));
+    }
+
+    private static double miningHardness(Material material) {
+        if (material == null || material == Material.AIR) return 0.1;
+        String name = material.name();
+        if (LegacyMats.INSTANT_BREAK.contains(material)) return 0.1;
+        if (name.contains("OBSIDIAN")) return 50.0;
+        if (name.contains("DEEPSLATE")) return 4.5;
+        if (name.contains("STONE") || name.contains("COBBLE") || name.contains("BRICK")) return 2.0;
+        if (name.contains("DIRT") || name.contains("GRASS") || name.contains("SAND") || name.contains("GRAVEL")) return 0.8;
+        if (name.contains("LOG") || name.contains("PLANK") || name.contains("WOOD")) return 1.6;
+        if (name.contains("WOOL") || name.contains("LEAVES")) return 0.4;
+        return material.isSolid() ? 1.5 : 0.4;
+    }
+
+    private static double toolSpeed(Material tool, Material block) {
+        if (tool == null || block == null) return 1.0;
+        String toolName = tool.name();
+        String blockName = block.name();
+        boolean pick = blockName.contains("STONE") || blockName.contains("COBBLE") || blockName.contains("ORE")
+                || blockName.contains("OBSIDIAN") || blockName.contains("BRICK") || blockName.contains("DEEPSLATE");
+        boolean shovel = blockName.contains("DIRT") || blockName.contains("GRASS") || blockName.contains("SAND")
+                || blockName.contains("GRAVEL") || blockName.contains("CLAY") || blockName.contains("SNOW");
+        boolean axe = blockName.contains("LOG") || blockName.contains("PLANK") || blockName.contains("WOOD")
+                || blockName.contains("STEM") || blockName.contains("HYPHAE");
+        if (pick && toolName.endsWith("_PICKAXE")) return materialTierSpeed(toolName);
+        if (shovel && toolName.endsWith("_SHOVEL")) return materialTierSpeed(toolName);
+        if (axe && toolName.endsWith("_AXE")) return materialTierSpeed(toolName);
+        if (blockName.contains("WOOL") && toolName.endsWith("_SHEARS")) return 5.0;
+        return 1.0;
+    }
+
+    private static double materialTierSpeed(String toolName) {
+        if (toolName.startsWith("NETHERITE_")) return 9.0;
+        if (toolName.startsWith("DIAMOND_")) return 8.0;
+        if (toolName.startsWith("IRON_")) return 6.0;
+        if (toolName.startsWith("STONE_")) return 4.0;
+        if (toolName.startsWith("GOLDEN_")) return 12.0;
+        if (toolName.startsWith("WOODEN_")) return 2.0;
+        return 1.0;
     }
 
     private void placeWaterDown(Terminator bot, World world, Location loc) {

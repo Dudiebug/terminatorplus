@@ -5,6 +5,28 @@
 > Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
 > Use this page for technical reference only until it is verified against source code and runtime behavior.
 
+## 6.1.0 - Legal Action Migration and Live Duel Metrics
+
+See [Release Notes 6.1.0](Release-Notes-6.1.0) for the full patch notes.
+
+### Added
+
+- Action-controller release phases for splash throws, utility/scanner cobweb placement, ender pearl throws, and trident charge/release.
+- `LiveDuelMetricsRecorder` and `LiveDuelMetricsSnapshot` for runtime damage, spacing, movement fallback, route thrash, retreat, heal, and action-legality counters.
+- Movement constraints while timed actions are active, without changing MovementInput schema v3.
+- Tool-aware legacy mining crack progress for common obstacle blocks.
+
+### Changed
+
+- Splash self-heal no longer applies duplicate instant healing in addition to the thrown potion.
+- Movement reward scoring now penalizes fake/direct shortcuts, instant consumes, illegal same-tick actions, and interruptions.
+- Report-only evaluation schema is now version 3 and continues to keep uncollected live metrics null.
+
+### Notes
+
+- Build passed with `./gradlew build -q`.
+- Runtime gameplay claims remain `needs runtime test` until verified in a live Paper duel.
+
 ## 6.0.0 - Duel Core V2, Player-Like Actions, Movement Brain Bank, and Evaluation Overhaul
 
 This is the largest TerminatorPlus update in the modern Paper 26 line. Version

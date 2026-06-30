@@ -33,7 +33,7 @@ import java.util.UUID;
  * schema repeatable and inspectable.
  */
 public final class MovementEvaluationHarness {
-    public static final int REPORT_SCHEMA_VERSION = 2;
+    public static final int REPORT_SCHEMA_VERSION = 3;
 
     private static final Gson GSON = new GsonBuilder()
             .setPrettyPrinting()
@@ -288,7 +288,7 @@ public final class MovementEvaluationHarness {
     private List<String> notesFor(EvaluationVariant variant, MovementBrainBank bank) {
         List<String> notes = new ArrayList<>();
         notes.add("CombatDirector remains the sole combat owner; this harness never calls combat actions.");
-        notes.add("Movement brains output movement only. Live win/damage/action-conversion metrics require an arena run and are null in report-only exports.");
+        notes.add("Movement brains output movement only. Live damage/action/spacing metrics come from LiveDuelMetricsRecorder during runtime fights and are null in report-only exports.");
         notes.add("Mixed movement training currently records per-family telemetry but updates general_fallback; curriculum mode updates the configured family brain.");
         if (variant.supportStatus() != VariantSupport.REPORT_ONLY) {
             notes.add(variant.metricStatus());
@@ -779,7 +779,18 @@ public final class MovementEvaluationHarness {
             "fakeActionCount",
             "instantConsumeCount",
             "illegalSameTickActionCount",
-            "actionInterruptionCount"
+            "actionInterruptionCount",
+            "healCompletionCount",
+            "healCancelCount",
+            "retreatTicks",
+            "retreatSuccessTicks",
+            "retreatFailureTicks",
+            "retreatSuccessRate",
+            "movementFallbackTicks",
+            "movementHeldTicks",
+            "routeThrashCount",
+            "routeThrashRate",
+            "fallbackRate"
     );
 
     private static Map<String, Double> liveMetricNulls() {

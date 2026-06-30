@@ -2421,6 +2421,26 @@ public final class OpportunityScanner {
     }
 
     private static void placeBlock(Bot bot, Block block, Material material, String source) {
+        if (material == Material.COBWEB) {
+            int slot = bot.getBotInventory().findHotbar(Material.COBWEB);
+            boolean started = bot.getActionController().start(bot, BotActionState.PLACING_BLOCK, 4,
+                    slot, "timed-" + source, () -> {
+                        if (!block.getType().isAir()) {
+                            CombatDebugger.log(bot, "cobweb-cancel", "src=" + source + " reason=blocked-on-release");
+                            return;
+                        }
+                        bot.getActionController().recordDirectShortcut(bot, BotActionState.PLACING_BLOCK,
+                                "scanner-cobweb-setType-release:" + source, slot);
+                        Material previous = block.getType();
+                        CombatDebugger.blockPlace(bot, source, material, block, previous);
+                        block.setType(material);
+                    });
+            if (!started) {
+                CombatDebugger.log(bot, "cobweb-cancel",
+                        "src=" + source + " reason=action-busy active=" + bot.getActionController().state());
+            }
+            return;
+        }
         Material previous = block.getType();
         CombatDebugger.blockPlace(bot, source, material, block, previous);
         block.setType(material);

@@ -103,6 +103,7 @@ public final class CombatDirector {
         }
 
         double distance = bot.getLocation().distance(target.getLocation());
+        LiveDuelMetricsRecorder.recordTick(bot, target, distance);
         BotInventory inv = bot.getBotInventory();
         CombatState.Phase phase = bot.getCombatState().getPhase();
         snapshot.update(bot, target);
