@@ -93,6 +93,9 @@ public final class TridentBehavior implements WeaponBehavior {
         CombatDebugger.log(bot, "trident-release",
                 "speed=" + String.format("%.2f", velocity.length()) + " momentum=" + String.format("%.2f", momentum.length()));
 
+        int slot = bot.getBotInventory().findHotbar(Material.TRIDENT);
+        bot.getActionController().recordDirectShortcut(bot, BotActionState.THROWING_TRIDENT,
+                "direct-trident-spawn", slot);
         bot.punch();
 
         Trident trident = spawn.getWorld().spawn(spawn, Trident.class, t -> {

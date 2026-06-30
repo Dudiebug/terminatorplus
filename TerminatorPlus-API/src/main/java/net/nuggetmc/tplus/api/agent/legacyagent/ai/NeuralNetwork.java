@@ -1,6 +1,9 @@
 package net.nuggetmc.tplus.api.agent.legacyagent.ai;
 
 import net.md_5.bungee.api.ChatColor;
+import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementBrainBank;
+import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementNetwork;
+import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementNetworkGenetics;
 import net.nuggetmc.tplus.api.utils.ChatUtils;
 import net.nuggetmc.tplus.api.utils.MathUtils;
 
@@ -18,12 +21,18 @@ public class NeuralNetwork {
     private final Map<BotNode, NodeConnections> nodes;
 
     private final boolean dynamicLR;
+    private final MovementBrainBank movementBrainBank;
 
     public static final NeuralNetwork RANDOM = new NeuralNetwork(new HashMap<>());
 
     private NeuralNetwork(Map<BotNode, Map<BotDataType, Double>> profile) {
+        this(profile, null);
+    }
+
+    private NeuralNetwork(Map<BotNode, Map<BotDataType, Double>> profile, MovementBrainBank movementBrainBank) {
         this.nodes = new HashMap<>();
         this.dynamicLR = true;
+        this.movementBrainBank = movementBrainBank;
 
         if (profile == null) {
             Arrays.stream(BotNode.values()).forEach(n -> this.nodes.put(n, new NodeConnections()));
@@ -34,6 +43,20 @@ public class NeuralNetwork {
 
     public static NeuralNetwork createNetworkFromProfile(Map<BotNode, Map<BotDataType, Double>> profile) {
         return new NeuralNetwork(profile);
+    }
+
+    public static NeuralNetwork createMovementControllerNetwork(MovementNetwork movementNetwork) {
+        MovementBrainBank bank = MovementNetworkGenetics.isValid(movementNetwork)
+                ? MovementBrainBank.singleFallback(movementNetwork,
+                net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementBrainPersistence.TrainingMetadata.manual(),
+                "",
+                "single-network")
+                : null;
+        return new NeuralNetwork(null, bank);
+    }
+
+    public static NeuralNetwork createMovementControllerNetwork(MovementBrainBank movementBrainBank) {
+        return new NeuralNetwork(null, movementBrainBank);
     }
 
     public static NeuralNetwork generateRandomNetwork() {
@@ -62,6 +85,18 @@ public class NeuralNetwork {
 
     public boolean dynamicLR() {
         return dynamicLR;
+    }
+
+    public boolean usesMovementController() {
+        return movementBrainBank != null && movementBrainBank.hasValidFallback();
+    }
+
+    public MovementNetwork movementNetwork() {
+        return movementBrainBank == null ? null : movementBrainBank.fallbackNetwork();
+    }
+
+    public MovementBrainBank movementBrainBank() {
+        return movementBrainBank;
     }
 
     public Map<BotNode, Map<BotDataType, Double>> values() {

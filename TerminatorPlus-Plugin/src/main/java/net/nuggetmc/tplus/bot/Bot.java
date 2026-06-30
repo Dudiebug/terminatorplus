@@ -28,16 +28,27 @@ import net.nuggetmc.tplus.api.Terminator;
 import net.nuggetmc.tplus.api.agent.Agent;
 import net.nuggetmc.tplus.api.agent.legacyagent.LegacyMats;
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.NeuralNetwork;
+import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.CombatTrainingSnapshot;
+import net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementTrainingSnapshot;
 import net.nuggetmc.tplus.api.event.BotDamageByPlayerEvent;
 import net.nuggetmc.tplus.api.event.BotFallDamageEvent;
 import net.nuggetmc.tplus.api.event.BotKilledByPlayerEvent;
 import net.nuggetmc.tplus.api.utils.*;
+import net.nuggetmc.tplus.bot.combat.BotCombatTiming;
+import net.nuggetmc.tplus.bot.combat.BotActionState;
 import net.nuggetmc.tplus.bot.combat.CombatDirector;
 import net.nuggetmc.tplus.bot.combat.CombatDebugger;
+import net.nuggetmc.tplus.bot.combat.CombatIntent;
+import net.nuggetmc.tplus.bot.combat.MeleeBehavior;
 import net.nuggetmc.tplus.bot.combat.CombatState;
+import net.nuggetmc.tplus.bot.combat.MovementBranchFamily;
+import net.nuggetmc.tplus.bot.combat.MovementState;
+import net.nuggetmc.tplus.bot.combat.PlayerLikeActionController;
 import net.nuggetmc.tplus.bot.combat.WindChargeMovePlan;
 import net.nuggetmc.tplus.bot.loadout.BotInventory;
 import net.nuggetmc.tplus.bot.loadout.Cooldowns;
+import net.nuggetmc.tplus.bot.movement.MovementOutputApplier;
+import net.nuggetmc.tplus.command.commands.BotCommand;
 import net.nuggetmc.tplus.nms.MockConnection;
 import net.nuggetmc.tplus.utils.NMSUtils;
 import org.bukkit.*;
@@ -54,10 +65,12 @@ import org.bukkit.entity.Damageable;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitScheduler;
+import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Bot extends ServerPlayer implements Terminator {
 
@@ -73,8 +86,24 @@ public class Bot extends ServerPlayer implements Terminator {
     private Vector velocity;
     private Vector oldVelocity;
     private boolean removeOnDeath;
+    private boolean removalCleaned;
     private int aliveTicks;
     private int kills;
+    private String trainingLoadout = "";
+    private double trainingDamageDealt;
+    private double trainingDamageTaken;
+    private double trainingSwordDamage;
+    private double trainingAxeDamage;
+    private double trainingMaceDamage;
+    private double trainingTridentDamage;
+    private double trainingSpearDamage;
+    private double trainingProjectileDamage;
+    private double trainingExplosiveDamage;
+    private int trainingDirectDamageClassifications;
+    private int trainingHeldItemDamageClassifications;
+    private int trainingLoadoutFallbackDamageClassifications;
+    private String lastTrainingDamageBucket = "none";
+    private String lastTrainingDamageClassificationSource = "none";
     private byte groundTicks;
     private byte jumpTicks;
     private byte noFallTicks;
@@ -84,6 +113,14 @@ public class Bot extends ServerPlayer implements Terminator {
     private final BotInventory botInventory;
     private final Cooldowns cooldowns;
     private final CombatState combatState;
+    private CombatIntent combatIntent;
+    private MovementState movementState;
+    private final PlayerLikeActionController actionController;
+    private final Set<BukkitTask> scheduledTasks;
+    private boolean jumpedThisTick;
+    private final MovementOutputApplier movementOutputApplier;
+    private boolean lastMovementControllerFallback;
+    private boolean lastMovementControllerHeld;
     /** Pending wind-charge self-boost (aim + fire tick). Null when not planning a throw. */
     public WindChargeMovePlan pendingWindChargePlan;
 
@@ -102,12 +139,44 @@ public class Bot extends ServerPlayer implements Terminator {
         this.botInventory = new BotInventory(this);
         this.cooldowns = new Cooldowns();
         this.combatState = new CombatState();
+        this.combatIntent = CombatIntent.DEFAULT;
+        this.movementState = MovementState.DEFAULT;
+        this.actionController = new PlayerLikeActionController();
+        this.scheduledTasks = ConcurrentHashMap.newKeySet();
+        this.movementOutputApplier = new MovementOutputApplier();
         if (addToPlayerList) {
             minecraftServer.getPlayerList().getPlayers().add(this);
             inPlayerList = true;
         }
 
         //this.entityData.set(new EntityDataAccessor<>(16, EntityDataSerializers.BYTE), (byte) 0xFF);
+    }
+
+    public BukkitTask scheduleBotTask(Runnable action, long delayTicks) {
+        if (removalCleaned) return null;
+        final BukkitTask[] taskRef = new BukkitTask[1];
+        BukkitTask task = scheduler.runTaskLater(plugin, () -> {
+            try {
+                if (!removalCleaned) {
+                    action.run();
+                }
+            } finally {
+                if (taskRef[0] != null) {
+                    scheduledTasks.remove(taskRef[0]);
+                }
+            }
+        }, delayTicks);
+        taskRef[0] = task;
+        scheduledTasks.add(task);
+        return task;
+    }
+
+    private void cancelScheduledTasks() {
+        if (scheduledTasks.isEmpty()) return;
+        new ArrayList<>(scheduledTasks).stream()
+                .filter(task -> !task.isCancelled())
+                .forEach(BukkitTask::cancel);
+        scheduledTasks.clear();
     }
 
     public static Bot createBot(Location loc, String name) {
@@ -184,7 +253,7 @@ public class Bot extends ServerPlayer implements Terminator {
         connection.send(packets[2]);
 
         if (login) {
-            scheduler.runTaskLater(plugin, () -> connection.send(packets[3]), 10);
+            scheduleBotTask(() -> connection.send(packets[3]), 10);
         } else {
             connection.send(packets[3]);
         }
@@ -195,7 +264,7 @@ public class Bot extends ServerPlayer implements Terminator {
         connection.send(packets[1]);
 
         if (login) {
-            scheduler.runTaskLater(plugin, () -> connection.send(packets[2]), 10);
+            scheduleBotTask(() -> connection.send(packets[2]), 10);
         } else {
             connection.send(packets[2]);
         }
@@ -290,11 +359,163 @@ public class Bot extends ServerPlayer implements Terminator {
         return combatState;
     }
 
+    public CombatIntent getCombatIntent() {
+        return combatIntent;
+    }
+
+    public void setCombatIntent(CombatIntent combatIntent) {
+        this.combatIntent = combatIntent == null ? CombatIntent.DEFAULT : combatIntent;
+    }
+
+    public MovementState getMovementState() {
+        return movementState;
+    }
+
+    public void setMovementState(MovementState movementState) {
+        this.movementState = movementState == null ? MovementState.DEFAULT : movementState;
+    }
+
+    public PlayerLikeActionController getActionController() {
+        return actionController;
+    }
+
     @Override
     public boolean combatTick(org.bukkit.entity.LivingEntity target) {
         CombatDirector director = plugin.getCombatDirector();
         if (director == null) return false;
         return director.tick(this, target);
+    }
+
+    @Override
+    public boolean tickCommittedCombat(org.bukkit.entity.LivingEntity target) {
+        CombatDirector director = plugin.getCombatDirector();
+        if (director == null) return false;
+        return director.tickCommitted(this, target);
+    }
+
+    @Override
+    public boolean usesMovementController() {
+        return network != null && network.usesMovementController();
+    }
+
+    @Override
+    public void planCombat(org.bukkit.entity.LivingEntity target) {
+        CombatDirector director = plugin.getCombatDirector();
+        if (director == null) return;
+        director.plan(this, target, getCombatIntent());
+    }
+
+    @Override
+    public boolean tryMovementControllerMove(org.bukkit.entity.LivingEntity target) {
+        if (!usesMovementController()) return false;
+        MovementOutputApplier.ApplyResult result = movementOutputApplier.tryApply(this, target, network.movementBrainBank());
+        lastMovementControllerFallback = result.fallback();
+        lastMovementControllerHeld = result.held();
+        return !result.fallback();
+    }
+
+    @Override
+    public boolean executePlannedCombat(org.bukkit.entity.LivingEntity target) {
+        CombatDirector director = plugin.getCombatDirector();
+        if (director == null) return false;
+        return director.execute(this, target, getMovementState());
+    }
+
+    @Override
+    public MovementTrainingSnapshot movementTrainingSnapshot(org.bukkit.entity.LivingEntity target) {
+        if (target == null || !target.isValid()) return MovementTrainingSnapshot.unavailable();
+        CombatIntent intent = getCombatIntent();
+        MovementState movement = getMovementState();
+        double distance = getLocation().distance(target.getLocation());
+        double horizontalDistance = getLocation().toVector()
+                .subtract(target.getLocation().toVector())
+                .setY(0)
+                .length();
+        boolean inMeleeRange = distance <= MeleeBehavior.ATTACK_RANGE;
+        boolean legalCritSetup = intent.wantsCritSetup()
+                && inMeleeRange
+                && movement.isFalling()
+                && BotCombatTiming.isCritWindow(this)
+                && BotCombatTiming.shouldPlanNormalMelee(this, target);
+        boolean legalSprintSetup = intent.wantsSprintHit()
+                && inMeleeRange
+                && movement.isSprinting()
+                && BotCombatTiming.shouldPlanSprintReset(this, target);
+        boolean holdCompliant = !intent.wantsHoldPosition() || lastMovementControllerHeld;
+        return new MovementTrainingSnapshot(
+                true,
+                distance,
+                horizontalDistance,
+                intent.desiredRange(),
+                intent.rangeUrgency(),
+                intent.wantsCritSetup(),
+                intent.wantsSprintHit(),
+                intent.wantsHoldPosition(),
+                intent.isCommitted(),
+                intent.commitProgress(),
+                movement.isSprinting(),
+                movement.justJumped(),
+                movement.isFalling(),
+                movement.isRetreating(),
+                movement.isCircling(),
+                movement.approachSpeed(),
+                legalCritSetup,
+                legalSprintSetup,
+                holdCompliant,
+                lastMovementControllerFallback,
+                activeMovementFamilyId(intent),
+                intent.playId(),
+                intent.plannedAction(),
+                intent.movementLocked(getAliveTicks()),
+                intent.lockFamily().id()
+        );
+    }
+
+    @Override
+    public CombatTrainingSnapshot combatTrainingSnapshot() {
+        CombatIntent intent = getCombatIntent();
+        return new CombatTrainingSnapshot(
+                true,
+                trainingLoadout,
+                CombatTrainingSnapshot.familyForLoadout(trainingLoadout),
+                activeMovementFamilyId(intent),
+                trainingDamageDealt,
+                trainingDamageTaken,
+                trainingSwordDamage,
+                trainingAxeDamage,
+                trainingMaceDamage,
+                trainingTridentDamage,
+                trainingSpearDamage,
+                trainingProjectileDamage,
+                trainingExplosiveDamage,
+                trainingDirectDamageClassifications,
+                trainingHeldItemDamageClassifications,
+                trainingLoadoutFallbackDamageClassifications,
+                actionController.directShortcutCount(),
+                actionController.instantConsumeShortcutCount(),
+                actionController.sameTickActionViolations(),
+                actionController.interruptionCount(),
+                lastTrainingDamageBucket,
+                lastTrainingDamageClassificationSource
+        );
+    }
+
+    @Override
+    public boolean applyTrainingLoadout(String loadoutName) {
+        boolean applied = BotCommand.applyNamedLoadoutToBot(this, loadoutName);
+        if (applied) {
+            trainingLoadout = loadoutName == null ? "" : loadoutName.trim().toLowerCase(Locale.ROOT);
+        }
+        return applied;
+    }
+
+    private String activeMovementFamilyId(CombatIntent intent) {
+        CombatIntent safe = intent == null ? CombatIntent.DEFAULT : intent;
+        if (safe.movementLocked(getAliveTicks())
+                && safe.lockFamily() != MovementBranchFamily.GENERAL_FALLBACK) {
+            return safe.lockFamily().id();
+        }
+        return safe.branchFamily().id();
     }
 
     @Override
@@ -349,17 +570,6 @@ public class Bot extends ServerPlayer implements Terminator {
         } else {
             groundTicks = 0;
         }
-        if (CombatDebugger.isOn(this)) {
-            Location loc = getLocation();
-            CombatDebugger.log(this, "move-tick",
-                    "pos=" + fmt(loc.getX()) + "," + fmt(loc.getY()) + "," + fmt(loc.getZ())
-                            + " vel=" + fmtVec(velocity)
-                            + " onGround=" + onTheGround
-                            + " phase=" + combatState.getPhase()
-                            + " jumpTicks=" + jumpTicks
-                            + " groundTicks=" + groundTicks);
-        }
-
         // Vanilla Player.attack() reads this.fallDistance and this.onGround()
         // to decide whether an attack is a crit (1.5× damage + particles). We
         // override doTick() to skip aiStep(), which is where vanilla advances
@@ -375,6 +585,7 @@ public class Bot extends ServerPlayer implements Terminator {
         }
 
         updateLocation();
+        updateMovementState();
 
         if (!isAlive()) return;
 
@@ -515,23 +726,38 @@ public class Bot extends ServerPlayer implements Terminator {
 
     @Override
     public void block(int blockLength, int cooldown) {
-        if (!shield || blockUse) return;
+        if (!shield || blockUse) {
+            if (CombatDebugger.isOn(this)) {
+                CombatDebugger.log(this, "shield-skip",
+                        "reason=" + (!shield ? "disabled" : "cooldown")
+                                + " blockUse=" + blockUse
+                                + " off=" + offhandType());
+            }
+            return;
+        }
+        CombatDebugger.log(this, "shield-request",
+                "length=" + blockLength + " cooldown=" + cooldown + " off=" + offhandType());
         startBlocking();
-        scheduler.runTaskLater(plugin, () -> stopBlocking(cooldown), blockLength);
+        scheduleBotTask(() -> stopBlocking(cooldown), blockLength);
     }
 
     private void startBlocking() {
         this.blocking = true;
         this.blockUse = true;
+        actionController.recordPrimaryAction(this, BotActionState.BLOCKING, "shield-start", 40);
+        CombatDebugger.log(this, "shield-start", "off=" + offhandType());
         startUsingItem(InteractionHand.OFF_HAND);
         //sendPacket(new ClientboundSetEntityDataPacket(getId(), entityData, true));
         sendPacket(new ClientboundSetEntityDataPacket(getId(), entityData.packDirty()));
     }
 
     private void stopBlocking(int cooldown) {
+        boolean wasBlocking = this.blocking;
         this.blocking = false;
         stopUsingItem();
-        scheduler.runTaskLater(plugin, () -> this.blockUse = false, cooldown);
+        scheduleBotTask(() -> this.blockUse = false, cooldown);
+        CombatDebugger.log(this, "shield-stop",
+                "cooldown=" + cooldown + " wasBlocking=" + wasBlocking + " off=" + offhandType());
         //sendPacket(new ClientboundSetEntityDataPacket(getId(), entityData, true));
         sendPacket(new ClientboundSetEntityDataPacket(getId(), entityData.packDirty()));
     }
@@ -550,7 +776,6 @@ public class Bot extends ServerPlayer implements Terminator {
 
     private void updateLocation() {
         double y;
-        String mode;
 
         MathUtils.clean(velocity); // TODO lag????
 
@@ -558,27 +783,34 @@ public class Bot extends ServerPlayer implements Terminator {
             y = Math.min(velocity.getY() + 0.1, 0.1);
             addFriction(0.8);
             velocity.setY(y);
-            mode = "fluid";
         } else {
             if (groundTicks != 0) {
                 velocity.setY(0);
                 addFriction(0.5);
                 y = 0;
-                mode = "ground";
             } else {
                 y = velocity.getY();
                 if(jumpTicks - 3 <= 0) {
                     velocity.setY(Math.max(y - 0.08, -3.5));
                 }
-                mode = "air";
             }
         }
-        if (CombatDebugger.isOn(this)) {
-            CombatDebugger.log(this, "move-step",
-                    "mode=" + mode + " vel=" + fmtVec(velocity) + " moveY=" + fmt(y));
-        }
-
         this.move(MoverType.SELF, new Vec3(velocity.getX(), y, velocity.getZ()));
+    }
+
+    private void updateMovementState() {
+        Vector horizontalVelocity = velocity.clone();
+        horizontalVelocity.setY(0);
+        movementState = new MovementState(
+                isSprinting(),
+                jumpedThisTick,
+                isFalling(),
+                false,
+                false,
+                horizontalVelocity.length(),
+                getLocation().getDirection()
+        );
+        jumpedThisTick = false;
     }
 
     @Override
@@ -603,6 +835,7 @@ public class Bot extends ServerPlayer implements Terminator {
         if (jumpTicks == 0 && groundTicks > 1) {
             jumpTicks = 4;
             velocity = vel;
+            jumpedThisTick = true;
             if (CombatDebugger.isOn(this)) {
                 CombatDebugger.log(this, "move-jump", "accepted vel=" + fmtVec(vel));
             }
@@ -631,31 +864,44 @@ public class Bot extends ServerPlayer implements Terminator {
     @Override
     public void walk(Vector vel) {
         double max = 0.4;
-        Vector before = velocity.clone();
 
-        Vector sum = velocity.clone().add(vel);
+        double y = velocity.getY();
+        Vector sum = velocity.clone().setY(0).add(vel.clone().setY(0));
         if (sum.length() > max) sum.normalize().multiply(max);
+        sum.setY(y);
 
         velocity = sum;
-        if (CombatDebugger.isOn(this)) {
-            CombatDebugger.log(this, "move-walk",
-                    "input=" + fmtVec(vel) + " before=" + fmtVec(before) + " after=" + fmtVec(sum));
-        }
     }
 
     @Override
     public void attack(org.bukkit.entity.Entity entity) {
         faceLocation(entity.getLocation());
+        if (actionController.blocksCombatAction()) {
+            CombatDebugger.log(this, "attack-skip",
+                    "reason=action-busy state=" + actionController.state()
+                            + " src=" + actionController.source()
+                            + " left=" + actionController.remainingTicks());
+            return;
+        }
+        actionController.recordPrimaryAction(this, BotActionState.MELEE_ATTACK, "bot-attack", botInventory.getSelectedHotbarSlot());
 
         // Neural-network training relies on the deterministic legacy damage table so fitness
         // scores are reproducible run-to-run. For everyone else, use the vanilla Bukkit attack
         // so sweep attacks, mace fall-damage scaling, enchantments and density bonuses apply.
-        if (network != null) {
+        if (network != null && !network.usesMovementController()) {
+            double before = entityHealth(entity);
             punch();
             double damage = ItemUtils.getLegacyAttackDamage(
                     getBukkitEntity().getInventory().getItemInMainHand());
             if (entity instanceof Damageable) {
                 ((Damageable) entity).damage(damage, getBukkitEntity());
+            }
+            if (CombatDebugger.isOn(this)) {
+                double after = entityHealth(entity);
+                CombatDebugger.log(this, "attack-result",
+                        "mode=legacy crit=false hp=" + fmt(before) + "->" + fmt(after)
+                                + " delta=" + fmt(before - after)
+                                + " held=" + mainhandType());
             }
             return;
         }
@@ -666,11 +912,49 @@ public class Bot extends ServerPlayer implements Terminator {
                         "reason=non-melee-held held=" + botInventory.getSelected().getType().name());
                 return;
             }
-            punch();
+            boolean critPred = BotCombatTiming.isCritWindow(this);
+            float chargeBefore = getAttackStrengthScale(0.0f);
+            double before = entityHealth(entity);
+            boolean targetBlocking = entity instanceof org.bukkit.entity.Player player && player.isBlocking();
+            float chargeAtVanillaAttack = getAttackStrengthScale(0.0f);
+            if (CombatDebugger.isOn(this)) {
+                CombatDebugger.log(this, "attack-try",
+                        "mode=vanilla held=" + mainhandType()
+                                + " chargeBefore=" + fmt(chargeBefore)
+                                + " chargeAtVanillaAttack=" + fmt(chargeAtVanillaAttack)
+                                + " critPred=" + critPred
+                                + " fall=" + fmt(fallDistance)
+                                + " vy=" + fmt(velocity.getY())
+                                + " sprint=" + isSprinting()
+                                + " targetBlocking=" + targetBlocking
+                                + " targetHp=" + fmt(before));
+            }
             getBukkitEntity().attack(entity);
+            float chargeAfterVanillaAttack = getAttackStrengthScale(0.0f);
+            punch();
+            if (CombatDebugger.isOn(this)) {
+                double after = entityHealth(entity);
+                CombatDebugger.log(this, "attack-result",
+                        "mode=vanilla critPred=" + critPred
+                                + " chargeBefore=" + fmt(chargeBefore)
+                                + " chargeAtVanillaAttack=" + fmt(chargeAtVanillaAttack)
+                                + " chargeAfterVanillaAttack=" + fmt(chargeAfterVanillaAttack)
+                                + " targetHp=" + fmt(before) + "->" + fmt(after)
+                                + " targetHpDelta=" + fmt(before - after)
+                                + " targetBlocking=" + targetBlocking
+                                + " held=" + mainhandType());
+            }
         } else if (entity instanceof Damageable d) {
+            double before = entityHealth(entity);
             punch();
             d.damage(1.0, getBukkitEntity());
+            if (CombatDebugger.isOn(this)) {
+                double after = entityHealth(entity);
+                CombatDebugger.log(this, "attack-result",
+                        "mode=damageable crit=false hp=" + fmt(before) + "->" + fmt(after)
+                                + " delta=" + fmt(before - after)
+                                + " held=" + mainhandType());
+            }
         }
     }
 
@@ -684,17 +968,10 @@ public class Bot extends ServerPlayer implements Terminator {
         double vy = velocity.getY();
 
         if (vy > 0) {
-            if (CombatDebugger.isOn(this)) {
-                CombatDebugger.log(this, "move-ground", "result=false reason=ascending vy=" + fmt(vy));
-            }
             return false;
         }
 
-        boolean grounded = checkStandingOn();
-        if (CombatDebugger.isOn(this)) {
-            CombatDebugger.log(this, "move-ground", "result=" + grounded + " vy=" + fmt(vy));
-        }
-        return grounded;
+        return checkStandingOn();
     }
 
     public boolean checkStandingOn() {
@@ -785,14 +1062,29 @@ public class Bot extends ServerPlayer implements Terminator {
 
     @Override
     public void removeBot() {
-        if (Bukkit.isPrimaryThread()) {
-            this.remove(RemovalReason.DISCARDED);
-        } else {
-            scheduler.runTask(plugin, () -> this.remove(RemovalReason.DISCARDED));
+        if (!Bukkit.isPrimaryThread()) {
+            scheduler.runTask(plugin, this::removeBot);
+            return;
         }
+        if (removalCleaned) return;
+        removalCleaned = true;
+        cancelScheduledTasks();
+
+        if (plugin.getManager() != null) {
+            plugin.getManager().remove(this);
+        }
+        if (plugin.getCombatDirector() != null) {
+            plugin.getCombatDirector().cleanupBot(getUUID());
+        }
+        CombatDebugger.disable(getUUID());
+        MovementOutputApplier.clearBot(getUUID());
+
+        this.remove(RemovalReason.DISCARDED);
         this.removeVisually();
-        if (inPlayerList)
+        if (inPlayerList) {
             ((CraftServer) Bukkit.getServer()).getServer().getPlayerList().getPlayers().remove(this);
+            inPlayerList = false;
+        }
     }
 
     private void removeTab() {
@@ -820,7 +1112,7 @@ public class Bot extends ServerPlayer implements Terminator {
             // this should fix the concurrentmodificationexception mentioned above, I used the ConcurrentHashMap.newKeySet to make a "ConcurrentHashSet"
             plugin.getManager().remove(this);
 
-            scheduler.runTaskLater(plugin, this::removeBot, 20);
+            scheduleBotTask(this::removeBot, 20);
 
             this.removeTab();
         }
@@ -881,6 +1173,10 @@ public class Bot extends ServerPlayer implements Terminator {
             agent.onPlayerDamage(event);
 
             if (event.isCancelled()) {
+                CombatDebugger.log(this, "damage",
+                        "raw=" + fmt(f) + " applied=0.00 cancelled=true blocking=" + blocking
+                                + " src=" + damageSourceToken(damagesource)
+                                + " attacker=" + attackerToken(attacker));
                 return false;
             }
 
@@ -890,7 +1186,28 @@ public class Bot extends ServerPlayer implements Terminator {
             damage = f;
         }
 
+        float beforeHp = getHealth();
         boolean damaged = super.hurtServer(worldServer, damagesource, damage);
+        float afterHp = getHealth();
+        if (damaged) {
+            double actualDamage = Math.max(0.0, beforeHp - afterHp);
+            if (actualDamage > 0.0) {
+                trainingDamageTaken += actualDamage;
+                recordAttackerTrainingDamage(damagesource, attacker, actualDamage);
+            }
+        }
+
+        if (CombatDebugger.isOn(this)) {
+            CombatDebugger.log(this, "damage",
+                    "raw=" + fmt(f)
+                            + " applied=" + fmt(damage)
+                            + " hp=" + fmt(beforeHp) + "->" + fmt(afterHp)
+                            + " damaged=" + damaged
+                            + " blocked=" + (!damaged && blocking)
+                            + " blocking=" + blocking
+                            + " src=" + damageSourceToken(damagesource)
+                            + " attacker=" + attackerToken(attacker));
+        }
 
         if (!damaged && blocking) {
             getBukkitEntity().getWorld().playSound(getLocation(), Sound.ITEM_SHIELD_BLOCK, 1, 1);
@@ -907,6 +1224,98 @@ public class Bot extends ServerPlayer implements Terminator {
 
         return damaged;
     }
+
+    private void recordAttackerTrainingDamage(DamageSource source, Entity attacker, double amount) {
+        if (!(attacker instanceof ServerPlayer player)) return;
+        Terminator terminator = plugin.getManager().getBot(player.getBukkitEntity());
+        if (terminator instanceof Bot bot && bot != this) {
+            bot.recordTrainingDamageDealt(source, attacker, amount);
+        }
+    }
+
+    private void recordTrainingDamageDealt(DamageSource source, Entity attacker, double amount) {
+        trainingDamageDealt += amount;
+        TrainingDamageClassification classification = classifyTrainingDamage(source, attacker);
+        switch (classification.bucket()) {
+            case "sword" -> trainingSwordDamage += amount;
+            case "axe" -> trainingAxeDamage += amount;
+            case "mace" -> trainingMaceDamage += amount;
+            case "trident" -> trainingTridentDamage += amount;
+            case "spear" -> trainingSpearDamage += amount;
+            case "explosive" -> trainingExplosiveDamage += amount;
+            case "projectile" -> trainingProjectileDamage += amount;
+            default -> {
+            }
+        }
+        switch (classification.classificationSource()) {
+            case "direct" -> trainingDirectDamageClassifications++;
+            case "held" -> trainingHeldItemDamageClassifications++;
+            case "loadout-fallback" -> trainingLoadoutFallbackDamageClassifications++;
+            default -> {
+            }
+        }
+        lastTrainingDamageBucket = classification.bucket();
+        lastTrainingDamageClassificationSource = classification.classificationSource();
+        if (CombatDebugger.isOn(this)) {
+            CombatDebugger.trainingDamage(this, amount, classification.bucket(), classification.classificationSource(),
+                    classification.directType(), classification.heldType(), trainingLoadout);
+        }
+    }
+
+    private TrainingDamageClassification classifyTrainingDamage(DamageSource source, Entity attacker) {
+        Entity direct = source == null ? null : source.getDirectEntity();
+        String directType = direct == null ? "" : direct.getBukkitEntity().getType().name();
+        if (directType.contains("TRIDENT")) return trainingDamage("trident", "direct", directType, heldType(attacker));
+        if (directType.contains("CRYSTAL") || directType.contains("TNT") || directType.contains("EXPLOSIVE")) {
+            return trainingDamage("explosive", "direct", directType, heldType(attacker));
+        }
+        if (directType.contains("ARROW") || directType.contains("FIREBALL") || directType.contains("WIND_CHARGE")) {
+            return trainingDamage("projectile", "direct", directType, heldType(attacker));
+        }
+
+        Material held = heldMaterial(attacker);
+        if (held == Material.MACE) return trainingDamage("mace", "held", directType, held.name());
+        if (held == Material.TRIDENT) return trainingDamage(tridentTrainingType(), tridentClassificationSource(), directType, held.name());
+        String name = held.name();
+        if (name.endsWith("_SWORD")) return trainingDamage("sword", "held", directType, held.name());
+        if (name.endsWith("_AXE")) return trainingDamage("axe", "held", directType, held.name());
+        return trainingDamage("other", "unknown", directType, held.name());
+    }
+
+    private String tridentTrainingType() {
+        return "spear".equals(trainingLoadout) ? "spear" : "trident";
+    }
+
+    private String tridentClassificationSource() {
+        return "spear".equals(trainingLoadout) ? "loadout-fallback" : "held";
+    }
+
+    private static Material heldMaterial(Entity attacker) {
+        if (attacker instanceof ServerPlayer player) {
+            return player.getBukkitEntity().getInventory().getItemInMainHand().getType();
+        }
+        return Material.AIR;
+    }
+
+    private static String heldType(Entity attacker) {
+        return heldMaterial(attacker).name();
+    }
+
+    private static TrainingDamageClassification trainingDamage(String bucket, String classificationSource, String directType, String heldType) {
+        return new TrainingDamageClassification(
+                bucket == null || bucket.isBlank() ? "other" : bucket,
+                classificationSource == null || classificationSource.isBlank() ? "unknown" : classificationSource,
+                directType == null || directType.isBlank() ? "none" : directType,
+                heldType == null || heldType.isBlank() ? "AIR" : heldType
+        );
+    }
+
+    private record TrainingDamageClassification(
+            String bucket,
+            String classificationSource,
+            String directType,
+            String heldType
+    ) {}
 
     private void kb(Location loc1, Location loc2, Entity attacker) {
         Vector vel = loc1.toVector().subtract(loc2.toVector()).setY(0).normalize().multiply(0.3);
@@ -953,10 +1362,6 @@ public class Bot extends ServerPlayer implements Terminator {
     @Override
     public void faceLocation(Location loc) {
         look(loc.toVector().subtract(getLocation().toVector()), false);
-        if (CombatDebugger.isOn(this)) {
-            CombatDebugger.log(this, "move-face",
-                    "target=" + fmt(loc.getX()) + "," + fmt(loc.getY()) + "," + fmt(loc.getZ()));
-        }
     }
 
     @Override
@@ -995,6 +1400,7 @@ public class Bot extends ServerPlayer implements Terminator {
         World world = loc.getWorld();
 
         if (!LegacyMats.isSolid(block.getType())) {
+            CombatDebugger.blockPlace(this, "bot-attemptBlockPlace", type, block, block.getType());
             block.setType(type);
             if (world != null) world.playSound(loc, Sound.BLOCK_STONE_PLACE, SoundCategory.BLOCKS, 1, 1);
         }
@@ -1096,10 +1502,6 @@ public class Bot extends ServerPlayer implements Terminator {
     public void doTick() {
         detectEquipmentUpdates();
         baseTick();
-        if (CombatDebugger.isOn(this)) {
-            CombatDebugger.log(this, "move-attack-charge",
-                    "ticker=" + attackStrengthTicker + " scale=" + fmt(getAttackStrengthScale(0.0f)));
-        }
         // Vanilla Player.aiStep() normally advances this each tick; we skip aiStep
         // to avoid hunger/ability mutations on bots, but BotCombatTiming reads the
         // resulting attack-strength scale as the gate for full-damage/crit swings.
@@ -1115,6 +1517,47 @@ public class Bot extends ServerPlayer implements Terminator {
     @Override
     public World.Environment getDimension() {
         return getBukkitEntity().getWorld().getEnvironment();
+    }
+
+    private String mainhandType() {
+        ItemStack held = getBukkitEntity().getInventory().getItemInMainHand();
+        return held == null ? "AIR" : held.getType().name();
+    }
+
+    private String offhandType() {
+        ItemStack held = getBukkitEntity().getInventory().getItemInOffHand();
+        return held == null ? "AIR" : held.getType().name();
+    }
+
+    private static double entityHealth(org.bukkit.entity.Entity entity) {
+        if (entity instanceof Damageable damageable) {
+            try {
+                return Math.max(0.0, damageable.getHealth());
+            } catch (IllegalStateException ignored) {
+                return 0.0;
+            }
+        }
+        return -1.0;
+    }
+
+    private static String damageSourceToken(DamageSource source) {
+        return safeToken(source == null ? "unknown" : source.toString());
+    }
+
+    private static String attackerToken(Entity attacker) {
+        if (attacker == null) return "none";
+        try {
+            org.bukkit.entity.Entity bukkit = attacker.getBukkitEntity();
+            if (bukkit == null) return attacker.getType().toString();
+            return bukkit.getType().name() + ":" + safeToken(bukkit.getName());
+        } catch (RuntimeException ignored) {
+            return safeToken(attacker.getType().toString());
+        }
+    }
+
+    private static String safeToken(String value) {
+        if (value == null || value.isBlank()) return "unknown";
+        return value.replaceAll("\\s+", "_").replaceAll("[^A-Za-z0-9_.:-]", "_");
     }
 
     private static String fmt(double value) {

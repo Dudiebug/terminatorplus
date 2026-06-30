@@ -25,6 +25,7 @@ public final class MaceBehavior implements WeaponBehavior {
     private static final int JUMP_COOLDOWN = 55;
     private static final int PRE_JUMP_MIN_HOLD_TICKS = 10;
     private static final int PRE_JUMP_TIMEOUT_TICKS = 45;
+    private static final int PRE_JUMP_AIR_GRACE_TICKS = 3;
     private static final int HEIGHT_LOG_TICKS = 10;
     private static final int AIRBORNE_GROUND_CLIP_TOLERANCE_TICKS = 2;
     private static final int AIRBORNE_MIN_TICKS_BEFORE_GROUND_RESET = 6;
@@ -111,12 +112,34 @@ public final class MaceBehavior implements WeaponBehavior {
                     return 0;
                 }
                 if (!bot.isBotOnGround()) {
+                    if (BotCombatTiming.shouldPlanCurrentMaceDive(bot, target)) {
+                        CombatDebugger.log(bot, "mace-prejump-air",
+                                "action=commit-dive charge=" + fmt(charge)
+                                        + " airReady=" + planReady
+                                        + " held=" + heldType(bot));
+                        CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.AIRBORNE);
+                        state.setPhase(CombatState.Phase.AIRBORNE);
+                        state.setPhaseStartY(bot.getLocation().getY());
+                        return 0;
+                    }
+
+                    int airTicks = state.tickMacePrejumpAirTicks();
+                    if (airTicks <= PRE_JUMP_AIR_GRACE_TICKS) {
+                        CombatDebugger.log(bot, "mace-prejump-air",
+                                "grace=" + (PRE_JUMP_AIR_GRACE_TICKS - airTicks + 1)
+                                        + " ticks=" + airTicks
+                                        + " charge=" + fmt(charge)
+                                        + " airReady=" + planReady
+                                        + " held=" + heldType(bot));
+                        return 0;
+                    }
                     CombatDebugger.log(bot, "mace-reset",
-                            "reason=prejump-airborne held=" + heldType(bot));
+                            "reason=prejump-airborne-timeout held=" + heldType(bot));
                     CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.IDLE);
                     state.reset();
                     return 0;
                 }
+                state.clearMacePrejumpAirTicks();
                 if (chargeTicks >= PRE_JUMP_TIMEOUT_TICKS && (!ready || !planReady)) {
                     CombatDebugger.log(bot, "mace-reset",
                             "reason=prejump-timeout charge=" + fmt(charge)
@@ -138,7 +161,7 @@ public final class MaceBehavior implements WeaponBehavior {
                 Vector vel = bot.getVelocity();
                 logAirborneHeight(bot, state, airborneTicks, vel, distance);
 
-                if (shouldResetAirborneForGround(bot, state, airborneTicks)) {
+                if (shouldResetAirborneForGround(bot, state, airborneTicks, vel, distance)) {
                     CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.IDLE);
                     state.reset();
                     return 0;
@@ -153,12 +176,15 @@ public final class MaceBehavior implements WeaponBehavior {
                     boolean iframes = BotCombatTiming.targetHasIFrames(target);
                     CombatDebugger.maceSmash(bot, vel.getY(), iframes, bot.isBotOnGround());
                     if (!BotCombatTiming.canSwingMaceSmash(bot)) {
+                        logImpactMiss(bot, "charge", distance, vel);
                         CombatDebugger.log(bot, "mace-smash-wait",
                                 "reason=charge charge=" + fmt(bot.getAttackStrengthScale(0.0f)));
                         return 0;
                     }
                     if (!iframes) {
                         doAttack(bot, target);
+                    } else {
+                        logImpactMiss(bot, "iframes", distance, vel);
                     }
                     CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.IDLE);
                     state.reset();
@@ -166,6 +192,14 @@ public final class MaceBehavior implements WeaponBehavior {
                 }
 
                 if (airborneTicks > 80) {
+                    String reason = bot.isBotOnGround()
+                            ? "grounded"
+                            : distance > ATTACK_RANGE
+                            ? "range"
+                            : vel.getY() >= -0.3
+                            ? "vy"
+                            : "timeout";
+                    logImpactMiss(bot, reason, distance, vel);
                     CombatDebugger.log(bot, "mace-reset", "reason=airborne-timeout");
                     CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.IDLE);
                     state.reset();
@@ -206,7 +240,7 @@ public final class MaceBehavior implements WeaponBehavior {
         bot.getLocation().getWorld().playSound(bot.getLocation(), Sound.ENTITY_PLAYER_BIG_FALL, 0.3f, 1.6f);
     }
 
-    private static boolean shouldResetAirborneForGround(Bot bot, CombatState state, int airborneTicks) {
+    private static boolean shouldResetAirborneForGround(Bot bot, CombatState state, int airborneTicks, Vector vel, double distance) {
         if (!bot.isBotOnGround()) {
             state.clearMaceAirborneGroundTicks();
             return false;
@@ -221,9 +255,19 @@ public final class MaceBehavior implements WeaponBehavior {
             return false;
         }
 
+        logImpactMiss(bot, "grounded", distance, vel);
         CombatDebugger.log(bot, "mace-reset",
                 "reason=grounded airTick=" + airborneTicks + " groundTicks=" + groundTicks);
         return true;
+    }
+
+    private static void logImpactMiss(Bot bot, String reason, double distance, Vector vel) {
+        CombatDebugger.log(bot, "mace-impact-miss",
+                "reason=" + reason
+                        + " dist=" + fmt(distance)
+                        + " vy=" + fmt(vel.getY())
+                        + " ground=" + bot.isBotOnGround()
+                        + " charge=" + fmt(bot.getAttackStrengthScale(0.0f)));
     }
 
     private static void trackAirborne(Bot bot, Vector toTarget, Vector vel) {

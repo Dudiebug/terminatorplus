@@ -55,8 +55,17 @@ public final class ConsumableBehavior {
     private static final int CD_FIRE_RES_TICKS    = 200;  // Re-check guard; the real gate is hasPotionEffect
     private static final int CD_STRENGTH_TICKS    = 200;  // Same — effect duration is the real gate
     private static final int CD_SPLASH_HARM_TICKS = 200;
+    private static final int USE_DURATION_TICKS = 32;
 
     public void tick(Bot bot, LivingEntity target) {
+        if (bot.getActionController().active(BotActionState.USING_CONSUMABLE)
+                || bot.getActionController().active(BotActionState.DRINKING_POTION)) {
+            CombatDebugger.log(bot, "consumable-wait",
+                    "state=" + bot.getActionController().state()
+                            + " left=" + bot.getActionController().remainingTicks());
+            return;
+        }
+
         // Cheap pre-gate: bail if the bot has nothing to consume.
         BotInventory inv = bot.getBotInventory();
         if (!inv.hasAnyConsumable()) return;
@@ -147,16 +156,17 @@ public final class ConsumableBehavior {
         int previousSlot = inv.getSelectedHotbarSlot();
         slot = inv.selectMainInventorySlot(slot);
         if (slot < 0) return false;
-        float max = bot.getBotMaxHealth();
-        bukkit.setHealth(Math.min(max, bot.getBotHealth() + 4.0f));
-        bukkit.addPotionEffect(new PotionEffect(PotionEffectType.ABSORPTION, 2400, 3));
-        bukkit.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, 400, 1));
-        bukkit.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE, 6000, 0));
-        bukkit.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, 6000, 0));
-        decrementSlot(inv, slot);
-        inv.restoreSelectedSlotOrBestWeapon(previousSlot);
-        bukkit.getWorld().playSound(bukkit.getLocation(), Sound.ENTITY_PLAYER_BURP, 0.5f, 1.0f);
-        return true;
+        int selectedSlot = slot;
+        return startTimedUse(bot, inv, bukkit, BotActionState.USING_CONSUMABLE, "enchanted-gapple",
+                selectedSlot, previousSlot, Material.ENCHANTED_GOLDEN_APPLE, () -> {
+                    float max = bot.getBotMaxHealth();
+                    bukkit.setHealth(Math.min(max, bot.getBotHealth() + 4.0f));
+                    bukkit.addPotionEffect(new PotionEffect(PotionEffectType.ABSORPTION, 2400, 3));
+                    bukkit.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, 400, 1));
+                    bukkit.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE, 6000, 0));
+                    bukkit.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, 6000, 0));
+                    bukkit.getWorld().playSound(bukkit.getLocation(), Sound.ENTITY_PLAYER_BURP, 0.5f, 1.0f);
+                });
     }
 
     private boolean tryEatGoldenApple(Bot bot, BotInventory inv, Player bukkit) {
@@ -170,14 +180,15 @@ public final class ConsumableBehavior {
         int previousSlot = inv.getSelectedHotbarSlot();
         slot = inv.selectMainInventorySlot(slot);
         if (slot < 0) return false;
-        float max = bot.getBotMaxHealth();
-        bukkit.setHealth(Math.min(max, bot.getBotHealth() + 4.0f));
-        bukkit.addPotionEffect(new PotionEffect(PotionEffectType.ABSORPTION, 2400, 0));
-        bukkit.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, 100, 1));
-        decrementSlot(inv, slot);
-        inv.restoreSelectedSlotOrBestWeapon(previousSlot);
-        bukkit.getWorld().playSound(bukkit.getLocation(), Sound.ENTITY_PLAYER_BURP, 0.5f, 1.0f);
-        return true;
+        int selectedSlot = slot;
+        return startTimedUse(bot, inv, bukkit, BotActionState.USING_CONSUMABLE, "gapple",
+                selectedSlot, previousSlot, Material.GOLDEN_APPLE, () -> {
+                    float max = bot.getBotMaxHealth();
+                    bukkit.setHealth(Math.min(max, bot.getBotHealth() + 4.0f));
+                    bukkit.addPotionEffect(new PotionEffect(PotionEffectType.ABSORPTION, 2400, 0));
+                    bukkit.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, 100, 1));
+                    bukkit.getWorld().playSound(bukkit.getLocation(), Sound.ENTITY_PLAYER_BURP, 0.5f, 1.0f);
+                });
     }
 
     private boolean tryDrinkHealing(Bot bot, BotInventory inv, Player bukkit) {
@@ -190,12 +201,13 @@ public final class ConsumableBehavior {
         int previousSlot = inv.getSelectedHotbarSlot();
         slot = inv.selectMainInventorySlot(slot);
         if (slot < 0) return false;
-        float max = bot.getBotMaxHealth();
-        bukkit.setHealth(Math.min(max, bot.getBotHealth() + heal));
-        decrementSlot(inv, slot);
-        inv.restoreSelectedSlotOrBestWeapon(previousSlot);
-        bukkit.getWorld().playSound(bukkit.getLocation(), Sound.ENTITY_GENERIC_DRINK, 0.8f, 1.0f);
-        return true;
+        int selectedSlot = slot;
+        return startTimedUse(bot, inv, bukkit, BotActionState.DRINKING_POTION, "drink-heal",
+                selectedSlot, previousSlot, Material.POTION, () -> {
+                    float max = bot.getBotMaxHealth();
+                    bukkit.setHealth(Math.min(max, bot.getBotHealth() + heal));
+                    bukkit.getWorld().playSound(bukkit.getLocation(), Sound.ENTITY_GENERIC_DRINK, 0.8f, 1.0f);
+                });
     }
 
     private boolean trySplashSelfHeal(Bot bot, BotInventory inv, Player bukkit) {
@@ -207,6 +219,8 @@ public final class ConsumableBehavior {
         int previousSlot = inv.getSelectedHotbarSlot();
         slot = inv.selectMainInventorySlot(slot);
         if (slot < 0) return false;
+        bot.getActionController().recordDirectShortcut(bot, BotActionState.THROWING_PROJECTILE,
+                "instant-splash-self-heal", slot);
         bukkit.swingMainHand();
         Location eye = bukkit.getEyeLocation();
         ItemStack splash = stack.clone();
@@ -238,12 +252,13 @@ public final class ConsumableBehavior {
         int previousSlot = inv.getSelectedHotbarSlot();
         slot = inv.selectMainInventorySlot(slot);
         if (slot < 0) return false;
-        bukkit.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, duration, 0));
-        bukkit.setFireTicks(0);
-        decrementSlot(inv, slot);
-        inv.restoreSelectedSlotOrBestWeapon(previousSlot);
-        bukkit.getWorld().playSound(bukkit.getLocation(), Sound.ENTITY_GENERIC_DRINK, 0.8f, 1.0f);
-        return true;
+        int selectedSlot = slot;
+        return startTimedUse(bot, inv, bukkit, BotActionState.DRINKING_POTION, "fire-res",
+                selectedSlot, previousSlot, Material.POTION, () -> {
+                    bukkit.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, duration, 0));
+                    bukkit.setFireTicks(0);
+                    bukkit.getWorld().playSound(bukkit.getLocation(), Sound.ENTITY_GENERIC_DRINK, 0.8f, 1.0f);
+                });
     }
 
     private boolean tryDrinkStrength(Bot bot, BotInventory inv, Player bukkit) {
@@ -264,11 +279,12 @@ public final class ConsumableBehavior {
         int previousSlot = inv.getSelectedHotbarSlot();
         slot = inv.selectMainInventorySlot(slot);
         if (slot < 0) return false;
-        bukkit.addPotionEffect(new PotionEffect(PotionEffectType.STRENGTH, duration, amplifier));
-        decrementSlot(inv, slot);
-        inv.restoreSelectedSlotOrBestWeapon(previousSlot);
-        bukkit.getWorld().playSound(bukkit.getLocation(), Sound.ENTITY_GENERIC_DRINK, 0.8f, 1.0f);
-        return true;
+        int selectedSlot = slot;
+        return startTimedUse(bot, inv, bukkit, BotActionState.DRINKING_POTION, "strength",
+                selectedSlot, previousSlot, Material.POTION, () -> {
+                    bukkit.addPotionEffect(new PotionEffect(PotionEffectType.STRENGTH, duration, amplifier));
+                    bukkit.getWorld().playSound(bukkit.getLocation(), Sound.ENTITY_GENERIC_DRINK, 0.8f, 1.0f);
+                });
     }
 
     private boolean tryThrowSplashHarming(Bot bot, BotInventory inv, LivingEntity target) {
@@ -280,6 +296,8 @@ public final class ConsumableBehavior {
         int previousSlot = inv.getSelectedHotbarSlot();
         slot = inv.selectMainInventorySlot(slot);
         if (slot < 0) return false;
+        bot.getActionController().recordDirectShortcut(bot, BotActionState.THROWING_PROJECTILE,
+                "instant-splash-offense", slot);
         bot.faceLocation(target.getLocation());
         bukkit.swingMainHand();
         Location eye = bukkit.getEyeLocation();
@@ -302,5 +320,49 @@ public final class ConsumableBehavior {
 
     private static void decrementSlot(BotInventory inv, int slot) {
         inv.decrementMainInventorySlot(slot, 1);
+    }
+
+    private static boolean startTimedUse(
+            Bot bot,
+            BotInventory inv,
+            Player bukkit,
+            BotActionState state,
+            String source,
+            int slot,
+            int previousSlot,
+            Material expected,
+            Runnable effects
+    ) {
+        if (!hasExpectedItem(inv, slot, expected)) return false;
+        bukkit.swingMainHand();
+        boolean started = bot.getActionController().start(bot, state, USE_DURATION_TICKS, slot,
+                "timed-" + source, () -> {
+                    if (!bot.isAlive()) {
+                        CombatDebugger.log(bot, "consumable-cancel", "type=" + source + " reason=dead");
+                        return;
+                    }
+                    if (!hasExpectedItem(inv, slot, expected)) {
+                        CombatDebugger.log(bot, "consumable-cancel", "type=" + source + " reason=item-missing slot=" + slot);
+                        inv.restoreSelectedSlotOrBestWeapon(previousSlot);
+                        return;
+                    }
+                    effects.run();
+                    decrementSlot(inv, slot);
+                    inv.restoreSelectedSlotOrBestWeapon(previousSlot);
+                    CombatDebugger.log(bot, "consumable-complete", "type=" + source + " slot=" + slot);
+                });
+        if (started) {
+            CombatDebugger.log(bot, "consumable-start",
+                    "type=" + source
+                            + " slot=" + slot
+                            + " prev=" + previousSlot
+                            + " duration=" + USE_DURATION_TICKS);
+        }
+        return started;
+    }
+
+    private static boolean hasExpectedItem(BotInventory inv, int slot, Material expected) {
+        ItemStack current = inv.raw().getItem(slot);
+        return current != null && current.getType() == expected && current.getAmount() > 0;
     }
 }

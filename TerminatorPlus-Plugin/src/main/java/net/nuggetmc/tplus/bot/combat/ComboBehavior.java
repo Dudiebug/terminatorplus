@@ -2,7 +2,6 @@ package net.nuggetmc.tplus.bot.combat;
 
 import net.nuggetmc.tplus.TerminatorPlus;
 import net.nuggetmc.tplus.bot.Bot;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
@@ -73,6 +72,12 @@ public final class ComboBehavior {
         return true;
     }
 
+    public void clear(UUID botId) {
+        if (botId != null) {
+            active.remove(botId);
+        }
+    }
+
     public boolean canCombo(Bot bot) {
         if (inProgress(bot)) return false;
         return bot.getBotCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks());
@@ -89,9 +94,13 @@ public final class ComboBehavior {
         bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN_TICKS, alive);
         bot.getBotCooldowns().set(WindChargeBehavior.COOLDOWN_KEY, 55, alive);
 
-        return switch (type) {
+        boolean launched = switch (type) {
             case WIND_PEARL_ENGAGE -> launchEngage(bot, target);
         };
+        if (!launched) {
+            active.remove(bot.getUUID());
+        }
+        return launched;
     }
 
     private boolean launchEngage(Bot bot, LivingEntity target) {
@@ -104,27 +113,30 @@ public final class ComboBehavior {
         spawnWindCharge(bot, behind, forward.clone().multiply(-0.4).setY(-0.2));
 
         // Step 2 (2 ticks later): throw pearl forward along the same line.
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (!bot.isBotAlive()) return;
-            int slot = bot.getBotInventory().findHotbar(Material.ENDER_PEARL);
-            if (slot >= 0) {
-                slot = bot.getBotInventory().selectMainInventorySlot(slot);
-            }
-            if (slot < 0) {
+        bot.scheduleBotTask(() -> {
+            try {
+                if (!bot.isBotAlive()) return;
+                int slot = bot.getBotInventory().findHotbar(Material.ENDER_PEARL);
+                if (slot >= 0) {
+                    slot = bot.getBotInventory().selectMainInventorySlot(slot);
+                }
+                if (slot < 0) {
+                    return;
+                }
+                Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
+                Vector aim = target.getEyeLocation().toVector().subtract(spawn.toVector()).normalize();
+                aim.setY(aim.getY() + 0.08).normalize();
+                bot.faceLocation(target.getLocation());
+                bot.punch();
+                spawn.getWorld().spawn(spawn, EnderPearl.class, p -> {
+                    p.setShooter(bot.getBukkitEntity());
+                    p.setVelocity(aim.multiply(2.2));
+                });
+                spawn.getWorld().playSound(spawn, Sound.ENTITY_ENDER_PEARL_THROW, 1f, 1f);
+                bot.getBotInventory().decrementMainInventorySlot(slot, 1);
+            } finally {
                 active.remove(bot.getUUID());
-                return;
             }
-            Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
-            Vector aim = target.getEyeLocation().toVector().subtract(spawn.toVector()).normalize();
-            aim.setY(aim.getY() + 0.08).normalize();
-            bot.faceLocation(target.getLocation());
-            bot.punch();
-            spawn.getWorld().spawn(spawn, EnderPearl.class, p -> {
-                p.setShooter(bot.getBukkitEntity());
-                p.setVelocity(aim.multiply(2.2));
-            });
-            spawn.getWorld().playSound(spawn, Sound.ENTITY_ENDER_PEARL_THROW, 1f, 1f);
-            bot.getBotInventory().decrementMainInventorySlot(slot, 1);
         }, PEARL_DELAY_TICKS);
         return true;
     }

@@ -120,6 +120,7 @@ Current strategy and workflow docs are in `docs/`:
 - [Workflow](docs/WORKFLOW.md)
 - [Duel Test Plan](docs/DUEL_TEST_PLAN.md)
 - [Review Checklist](docs/REVIEW_CHECKLIST.md)
+- [Phase D/E Metrics and Integration Review](docs/PHASE_D_E_REVIEW.md)
 
 The [Wiki](https://github.com/Dudiebug/terminatorplus/wiki) is preserved as
 legacy/reference material unless a page explicitly says it has been rewritten

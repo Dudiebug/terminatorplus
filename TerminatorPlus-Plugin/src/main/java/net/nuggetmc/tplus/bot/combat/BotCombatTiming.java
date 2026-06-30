@@ -76,6 +76,7 @@ public final class BotCombatTiming {
     }
 
     public static boolean shouldWaitForCritWindow(Bot bot, LivingEntity target, double distance) {
+        // Neural networks may shape movement, but they should never suppress a legal swing.
         if (bot.hasNeuralNetwork()) return false;
         if (!bot.getBotInventory().isSelectedMeleeWeapon()) return false;
         if (targetHasIFrames(target)) return false;
@@ -85,11 +86,15 @@ public final class BotCombatTiming {
         Vector velocity = bot.getVelocity();
         if (isCritWindow(bot)) return false;
         if (!bot.isBotOnGround() && velocity.getY() > CRIT_DESCENT_VELOCITY) {
+            if (bot.isSprinting()) bot.setSprinting(false);
             CombatDebugger.log(bot, "melee-wait", "reason=crit-window vy=" + String.format("%.2f", velocity.getY()));
             return true;
         }
-        if (bot.isBotOnGround() && distance <= 3.2 && !bot.isSprinting()) {
-            bot.jump();
+        if (bot.isBotOnGround() && distance <= 3.2) {
+            if (bot.isSprinting()) bot.setSprinting(false);
+            Vector jump = bot.getVelocity();
+            jump.setY(0.42);
+            bot.setVelocity(jump);
             CombatDebugger.log(bot, "melee-wait", "reason=crit-jump");
             return true;
         }
@@ -229,6 +234,10 @@ public final class BotCombatTiming {
         return sweepDiagnostic(bot, target, distance).eligible;
     }
 
+    public static boolean predictsSweepWithSword(Bot bot, LivingEntity target, double distance) {
+        return sweepDiagnostic(bot, target, distance, true).eligible;
+    }
+
     public static int sweepVictimCount(Bot bot, LivingEntity target) {
         return countSweepTargets(bot, target);
     }
@@ -247,11 +256,15 @@ public final class BotCombatTiming {
     }
 
     private static SweepDiagnostic sweepDiagnostic(Bot bot, LivingEntity target, double distance) {
+        return sweepDiagnostic(bot, target, distance, false);
+    }
+
+    private static SweepDiagnostic sweepDiagnostic(Bot bot, LivingEntity target, double distance, boolean assumeSwordHeld) {
         float charge = charge(bot);
         boolean range = distance <= MeleeBehavior.ATTACK_RANGE;
         boolean chargeReady = charge >= READY_CHARGE;
         boolean targetHittable = !targetHasIFrames(target);
-        boolean geometry = sweepGeometryReady(bot);
+        boolean geometry = sweepGeometryReady(bot, assumeSwordHeld);
         int targets = countSweepTargets(bot, target);
 
         String reason = "ready";
@@ -270,9 +283,9 @@ public final class BotCombatTiming {
         return new SweepDiagnostic(eligible, reason, charge, distance, targets);
     }
 
-    private static boolean sweepGeometryReady(Bot bot) {
+    private static boolean sweepGeometryReady(Bot bot, boolean assumeSwordHeld) {
         ItemStack held = bot.getBotInventory().getSelected();
-        if (!isSword(held)) return false;
+        if (!assumeSwordHeld && !isSword(held)) return false;
         if (!bot.isBotOnGround()) return false;
         if (bot.isSprinting()) return false;
         if (isCritWindow(bot)) return false;

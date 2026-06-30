@@ -70,6 +70,13 @@ public class PlayerUtils {
         }
     }
 
+    public static void clearUsernameCache() {
+        synchronized (USERNAME_CACHE_LOCK) {
+            USERNAME_CACHE.clear();
+            usernameCacheLoaded = false;
+        }
+    }
+
     public static Location findAbove(Location loc, int amount) {
         boolean check = false;
 

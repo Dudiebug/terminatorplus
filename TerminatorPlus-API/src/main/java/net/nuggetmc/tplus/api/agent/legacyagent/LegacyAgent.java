@@ -61,6 +61,10 @@ public class LegacyAgent extends Agent {
     private double regionWeightX;
     private double regionWeightY;
     private double regionWeightZ;
+    private final TargetingPolicy targetingPolicy;
+    private final SurvivalController survivalController;
+    private final MovementControllerRouter movementRouter;
+    private final BotRuntimeOrchestrator runtimeOrchestrator;
 
     public static final Set<EntityType> CUSTOM_MOB_LIST = new HashSet<>();
     public static CustomListMode customListMode = CustomListMode.CUSTOM;
@@ -70,6 +74,10 @@ public class LegacyAgent extends Agent {
 
         this.goal = EnumTargetGoal.NEAREST_VULNERABLE_PLAYER;
         this.blockCheck = new LegacyBlockCheck(this, plugin);
+        this.targetingPolicy = new LegacyTargetingPolicy(this);
+        this.survivalController = new LegacySurvivalController(this);
+        this.movementRouter = new LegacyMovementControllerRouter(this);
+        this.runtimeOrchestrator = new BotRuntimeOrchestrator(this);
     }
 
     private static boolean checkSideBreak(Material type) {
@@ -78,8 +86,11 @@ public class LegacyAgent extends Agent {
 
     @Override
     protected void tick() {
-    	botsInPlayerList = manager.fetch().stream().filter(t -> t.isInPlayerList()).map(b -> b.getBukkitEntity()).toList();
-    	manager.fetch().forEach(this::tickBot);
+        botsInPlayerList = new ArrayList<>(manager.fetch().stream()
+                .filter(t -> t.isInPlayerList())
+                .map(b -> b.getBukkitEntity())
+                .toList());
+        manager.fetch().forEach(runtimeOrchestrator::tick);
     }
 
     private void center(Terminator bot) {
@@ -107,7 +118,7 @@ public class LegacyAgent extends Agent {
         btList.put(botEntity, loc);
     }
 
-    private void tickBot(Terminator bot) {
+    void tickBot(Terminator bot) {
         if (!bot.isBotAlive()) {
             return;
         }
@@ -119,16 +130,12 @@ public class LegacyAgent extends Agent {
         Location loc = bot.getLocation();
         LivingEntity botEntity = bot.getBukkitEntity();
 
-        LivingEntity livingTarget = locateTarget(bot, loc);
+        LivingEntity livingTarget = targetingPolicy.selectTarget(bot, loc);
 
-        blockCheck.tryPreMLG(bot, loc);
+        survivalController.beforeTarget(bot, loc);
 
         if (livingTarget == null) {
-            stopMining(bot);
-            // Idle (no target) — clear any pending stuck counter so we don't
-            // jolt the bot when they legitimately have nowhere to go.
-            stuckTicks.remove(botEntity);
-            stuckLastLoc.remove(botEntity);
+            survivalController.onIdle(bot);
             return;
         }
 
@@ -157,20 +164,24 @@ public class LegacyAgent extends Agent {
         }
         stuckLastLoc.put(botEntity, loc.clone());
 
-        blockCheck.clutch(bot, livingTarget);
-
-        fallDamageCheck(bot);
-        miscellaneousChecks(bot, livingTarget);
+        survivalController.beforeMovement(bot, livingTarget);
 
         LivingEntity botPlayer = bot.getBukkitEntity();
         Location target = offsets ? livingTarget.getLocation().add(bot.getOffset()) : livingTarget.getLocation();
 
-        boolean ai = bot.hasNeuralNetwork();
+        MovementMode movementMode = movementRouter.mode(bot);
+        boolean ai = movementMode != MovementMode.LEGACY;
+        boolean movementController = movementMode == MovementMode.MOVEMENT_CONTROLLER_NN;
 
         NeuralNetwork network = ai ? bot.getNeuralNetwork() : null;
 
-        if (ai) {
+        if (movementMode == MovementMode.FULL_REPLACEMENT_NN) {
             network.feed(BotData.generate(bot, livingTarget));
+        }
+
+        bot.tickCommittedCombat(livingTarget);
+        if (movementController) {
+            bot.planCombat(livingTarget);
         }
 
         // Neural-network training needs the deterministic 3-tick cadence so
@@ -178,8 +189,8 @@ public class LegacyAgent extends Agent {
         // tick so CombatDirector can react at 20 Hz — canSwing() gates the
         // actual damage event on the vanilla attack-strength charge, so this
         // does not over-swing.
-        boolean combatTickReady = ai ? bot.tickDelay(3) : true;
-        if (combatTickReady) {
+        boolean combatTickReady = movementMode == MovementMode.FULL_REPLACEMENT_NN ? bot.tickDelay(3) : true;
+        if (!movementController && combatTickReady) {
             Location botEyeLoc = botPlayer.getEyeLocation();
             Location playerEyeLoc = livingTarget.getEyeLocation();
             Location playerLoc = livingTarget.getLocation();
@@ -221,7 +232,10 @@ public class LegacyAgent extends Agent {
 
             boolean bothXZ = withinTargetXZ || sameXZ;
 
-            if (checkAt(bot, block, botPlayer)) return;
+            if (checkAt(bot, block, botPlayer)) {
+                executeMovementControllerCombat(bot, livingTarget, movementController);
+                return;
+            }
 
             // Gate/obstacle handlers kick off block-break animations. Previously
             // they returned early, so the bot stopped walking entirely while the
@@ -231,27 +245,61 @@ public class LegacyAgent extends Agent {
             checkFenceAndGates(bot, loc.getBlock(), botPlayer);
             checkObstacles(bot, loc.getBlock(), botPlayer);
 
-            if (checkDown(bot, botPlayer, livingTarget.getLocation(), bothXZ)) return;
+            if (checkDown(bot, botPlayer, livingTarget.getLocation(), bothXZ)) {
+                executeMovementControllerCombat(bot, livingTarget, movementController);
+                return;
+            }
 
-            if ((withinTargetXZ || sameXZ) && checkUp(bot, livingTarget, botPlayer, target, withinTargetXZ, sameXZ)) return;
+            if ((withinTargetXZ || sameXZ) && checkUp(bot, livingTarget, botPlayer, target, withinTargetXZ, sameXZ)) {
+                executeMovementControllerCombat(bot, livingTarget, movementController);
+                return;
+            }
 
             if (bothXZ) sideResult = checkSide(bot, livingTarget, botPlayer);
 
             switch (sideResult) {
                 case 1:
                     resetHand(bot, livingTarget, botPlayer);
-                    if (!noJump.contains(botPlayer) && !waterGround) move(bot, livingTarget, loc, target, ai);
+                    if (movementController) {
+                        movementRouter.move(bot, livingTarget, loc, target, movementMode, !noJump.contains(botPlayer) && !waterGround);
+                        executeMovementControllerCombat(bot, livingTarget, true);
+                    } else if (!noJump.contains(botPlayer) && !waterGround) {
+                        movementRouter.move(bot, livingTarget, loc, target, movementMode, true);
+                    }
                     return;
 
                 case 2:
-                    if (!waterGround) move(bot, livingTarget, loc, target, ai);
+                    if (movementController) {
+                        movementRouter.move(bot, livingTarget, loc, target, movementMode, !waterGround);
+                    } else if (!waterGround) {
+                        movementRouter.move(bot, livingTarget, loc, target, movementMode, true);
+                    }
             }
         } else if (LegacyMats.WATER.contains(loc.getBlock().getType())) {
             swim(bot, target, botPlayer, livingTarget, LegacyMats.WATER.contains(loc.clone().add(0, -1, 0).getBlock().getType()));
         }
+
+        executeMovementControllerCombat(bot, livingTarget, movementController);
     }
 
-    private void move(Terminator bot, LivingEntity livingTarget, Location loc, Location target, boolean ai) {
+    void move(Terminator bot, LivingEntity livingTarget, Location loc, Location target, MovementMode movementMode, boolean allowMovement) {
+        if (movementMode == MovementMode.MOVEMENT_CONTROLLER_NN) {
+            if (allowMovement && !bot.tryMovementControllerMove(livingTarget)) {
+                moveLegacy(bot, livingTarget, loc, target, false);
+            }
+            return;
+        }
+
+        moveLegacy(bot, livingTarget, loc, target, movementMode == MovementMode.FULL_REPLACEMENT_NN);
+    }
+
+    private void executeMovementControllerCombat(Terminator bot, LivingEntity livingTarget, boolean movementController) {
+        if (movementController) {
+            bot.executePlannedCombat(livingTarget);
+        }
+    }
+
+    private void moveLegacy(Terminator bot, LivingEntity livingTarget, Location loc, Location target, boolean ai) {
         Vector position = loc.toVector();
         Vector vel = target.toVector().subtract(position).normalize();
 
@@ -312,7 +360,7 @@ public class LegacyAgent extends Agent {
                         bot.jump(vel);
                     } else {
                         bot.walk(vel.clone().setY(0));
-                        scheduler.runTaskLater(plugin, () -> bot.jump(vel), 10);
+                        scheduleTaskLater(() -> bot.jump(vel), 10);
                     }
 
                     return;
@@ -339,7 +387,7 @@ public class LegacyAgent extends Agent {
                         bot.jump(vel);
                     } else {
                         bot.walk(vel.clone().setY(0));
-                        scheduler.runTaskLater(plugin, () -> bot.jump(vel), 10);
+                        scheduleTaskLater(() -> bot.jump(vel), 10);
                     }
 
                     return;
@@ -350,7 +398,18 @@ public class LegacyAgent extends Agent {
         bot.jump(vel);
     }
 
-    private void fallDamageCheck(Terminator bot) {
+    MovementMode movementMode(Terminator bot) {
+        if (!bot.hasNeuralNetwork()) return MovementMode.LEGACY;
+        return bot.usesMovementController() ? MovementMode.MOVEMENT_CONTROLLER_NN : MovementMode.FULL_REPLACEMENT_NN;
+    }
+
+    enum MovementMode {
+        LEGACY,
+        FULL_REPLACEMENT_NN,
+        MOVEMENT_CONTROLLER_NN
+    }
+
+    void fallDamageCheck(Terminator bot) {
         if (!bot.isFalling()) return;
 
         Material itemType = bot.getDimension() == World.Environment.NETHER
@@ -467,7 +526,7 @@ public class LegacyAgent extends Agent {
             world.playSound(loc, sound, 1, 1);
 
             if (itemType == Material.WATER_BUCKET) {
-                scheduler.runTaskLater(plugin, () -> {
+                scheduleTaskLater(() -> {
                     Block block = loc.getBlock();
 
                     boolean waterloggedNow = !nether && block.getBlockData() instanceof Waterlogged
@@ -506,6 +565,7 @@ public class LegacyAgent extends Agent {
             BukkitRunnable task = miningAnim.get(playerNPC);
             if (task != null) {
                 task.cancel();
+                taskList.remove(task);
                 miningAnim.remove(playerNPC);
             }
         }
@@ -521,15 +581,72 @@ public class LegacyAgent extends Agent {
         bot.addVelocity(vector);
     }
 
-    private void stopMining(Terminator bot) {
+    void stopMining(Terminator bot) {
         LivingEntity playerNPC = bot.getBukkitEntity();
         if (miningAnim.containsKey(playerNPC)) {
             BukkitRunnable task = miningAnim.get(playerNPC);
             if (task != null) {
                 task.cancel();
+                taskList.remove(task);
                 miningAnim.remove(playerNPC);
             }
         }
+    }
+
+    void clearIdleTracking(Terminator bot) {
+        LivingEntity botEntity = bot.getBukkitEntity();
+        // Idle (no target) -- clear any pending stuck counter so we don't
+        // jolt the bot when they legitimately have nowhere to go.
+        stuckTicks.remove(botEntity);
+        stuckLastLoc.remove(botEntity);
+    }
+
+    LegacyBlockCheck blockCheck() {
+        return blockCheck;
+    }
+
+    @Override
+    public void onBotRemoved(Terminator bot) {
+        if (bot == null) return;
+
+        noFace.remove(bot);
+        slow.remove(bot);
+        boatCooldown.remove(bot);
+        fallDamageCooldown.remove(bot);
+
+        LivingEntity entity = null;
+        try {
+            entity = bot.getBukkitEntity();
+        } catch (RuntimeException ignored) {
+        }
+
+        if (entity != null) {
+            BukkitRunnable miningTask = miningAnim.remove(entity);
+            if (miningTask != null) {
+                if (!miningTask.isCancelled()) {
+                    miningTask.cancel();
+                }
+                taskList.remove(miningTask);
+            }
+            noJump.remove(entity);
+            btList.remove(entity);
+            btCheck.remove(entity);
+            towerList.remove(entity);
+            stuckTicks.remove(entity);
+            stuckLastLoc.remove(entity);
+            if (botsInPlayerList != null) {
+                botsInPlayerList.remove(entity);
+            }
+
+            LivingEntity finalEntity = entity;
+            boats.removeIf(boat -> boat == null
+                    || !boat.isValid()
+                    || boat.getPassengers().contains(finalEntity));
+        }
+    }
+
+    void scheduleLegacyTaskLater(Runnable action, long delayTicks) {
+        scheduleTaskLater(action, delayTicks);
     }
 
     private byte checkSide(Terminator npc, LivingEntity target, LivingEntity playerNPC) {  // make it so they don't jump when checking side
@@ -819,7 +936,7 @@ public class LegacyAgent extends Agent {
         if (level != null) {
         	if (level == LegacyLevel.BELOW) {
                 noJump.add(player);
-                scheduler.runTaskLater(plugin, () -> {
+                scheduleTaskLater(() -> {
                 	noJump.remove(player);
                 }, 15);
                 
@@ -879,6 +996,7 @@ public class LegacyAgent extends Agent {
                     BukkitRunnable task = miningAnim.get(playerNPC);
                     if (task != null) {
                         task.cancel();
+                        taskList.remove(task);
                         miningAnim.remove(playerNPC);
                     }
                 }
@@ -887,12 +1005,12 @@ public class LegacyAgent extends Agent {
 
                 // maybe put this in lower if statement onGround()
                 if (m0 != Material.WATER)
-	                scheduler.runTaskLater(plugin, () -> {
+	                scheduleTaskLater(() -> {
 	                    npc.sneak();
 	                    npc.punch();
 	                    npc.look(BlockFace.DOWN);
 	
-	                    scheduler.runTaskLater(plugin, () -> {
+	                    scheduleTaskLater(() -> {
 	                        npc.look(BlockFace.DOWN);
 	                    }, 1);
 	
@@ -909,7 +1027,7 @@ public class LegacyAgent extends Agent {
                     if (target.getLocation().distance(playerNPC.getLocation()) < 16) {
                         if (noJump.contains(playerNPC)) {
 
-                            scheduler.runTaskLater(plugin, () -> {
+                            scheduleTaskLater(() -> {
                                 npc.setVelocity(new Vector(0, 0.5, 0));
                             }, 1);
 
@@ -1042,7 +1160,7 @@ public class LegacyAgent extends Agent {
             if (!fallDamageCooldown.contains(npc)) {
                 fallDamageCooldown.add(npc);
 
-                scheduler.runTaskLater(plugin, () -> {
+                scheduleTaskLater(() -> {
                     fallDamageCooldown.remove(npc);
                 }, 10);
             }
@@ -1101,7 +1219,7 @@ public class LegacyAgent extends Agent {
         if (level.isSideDown() || level.isSideDown2()) {
             bot.setBotPitch(69);
 
-            scheduler.runTaskLater(plugin, () -> {
+            scheduleTaskLater(() -> {
                 btCheck.put(player, true);
             }, 5);
         } else if (level.isSideUp()) {
@@ -1121,6 +1239,7 @@ public class LegacyAgent extends Agent {
                             && bot.getBukkitEntity().getWorld() == player.getWorld()
                             && bot.getLocation().distance(player.getLocation()) <= 5.0) {
                         cancel();
+                        taskList.remove(this);
                         miningAnim.remove(player);
                         return;
                     }
@@ -1188,6 +1307,7 @@ public class LegacyAgent extends Agent {
 
                     if (player.isDead() || cur == null || (!block.equals(cur) || block.getType() != cur.getType())) {
                         this.cancel();
+                        taskList.remove(this);
 
                         TerminatorPlusAPI.getInternalBridge().sendBlockDestructionPacket(crackList.get(block), block, -1);
 
@@ -1200,6 +1320,7 @@ public class LegacyAgent extends Agent {
 
                     if (i == 9) {
                         this.cancel();
+                        taskList.remove(this);
 
                         TerminatorPlusAPI.getInternalBridge().sendBlockDestructionPacket(crackList.get(block), block, -1);
 
@@ -1214,7 +1335,7 @@ public class LegacyAgent extends Agent {
                         if (wrapper.getLevel() == LegacyLevel.ABOVE) {
                             noJump.add(player);
 
-                            scheduler.runTaskLater(plugin, () -> {
+                            scheduleTaskLater(() -> {
                                 noJump.remove(player);
                             }, 15);
                         }
@@ -1261,7 +1382,7 @@ public class LegacyAgent extends Agent {
         loc.getBlock().setType(Material.WATER);
         world.playSound(loc, Sound.ITEM_BUCKET_EMPTY, 1, 1);
 
-        scheduler.runTaskLater(plugin, () -> {
+        scheduleTaskLater(() -> {
             Block block = loc.getBlock();
 
             if (block.getType() == Material.WATER) {
@@ -1272,7 +1393,7 @@ public class LegacyAgent extends Agent {
         }, 5);
     }
 
-    private void miscellaneousChecks(Terminator bot, LivingEntity target) {
+    void miscellaneousChecks(Terminator bot, LivingEntity target) {
         LivingEntity botPlayer = bot.getBukkitEntity();
         World world = botPlayer.getWorld();
         String worldName = world.getName();
@@ -1382,14 +1503,14 @@ public class LegacyAgent extends Agent {
 
                 Boat boat = (Boat) world.spawnEntity(place, EntityType.OAK_BOAT);
 
-                scheduler.runTaskLater(plugin, () -> {
+                scheduleTaskLater(() -> {
                     if (!boat.isDead()) {
                         boats.remove(boat);
                         boat.remove();
                     }
                 }, 20);
 
-                scheduler.runTaskLater(plugin, () -> {
+                scheduleTaskLater(() -> {
                     bot.look(BlockFace.DOWN);
                 }, 1);
 
@@ -1407,7 +1528,7 @@ public class LegacyAgent extends Agent {
                 move.setY(0.42);
                 bot.setVelocity(move);
 
-                scheduler.runTaskLater(plugin, () -> {
+                scheduleTaskLater(() -> {
                     boatCooldown.remove(bot);
                     if (bot.isBotAlive()) {
                         bot.faceLocation(target.getLocation());
@@ -1426,6 +1547,7 @@ public class LegacyAgent extends Agent {
             BukkitRunnable task = miningAnim.get(playerNPC);
             if (task != null) {
                 task.cancel();
+                taskList.remove(task);
                 miningAnim.remove(playerNPC);
             }
         }
@@ -1511,7 +1633,7 @@ public class LegacyAgent extends Agent {
         this.goal = goal;
     }
 
-    private LivingEntity locateTarget(Terminator bot, Location loc, EnumTargetGoal... targetGoal) {
+    LivingEntity locateTarget(Terminator bot, Location loc, EnumTargetGoal... targetGoal) {
         LivingEntity result = null;
 
         EnumTargetGoal g = goal;
@@ -1668,7 +1790,31 @@ public class LegacyAgent extends Agent {
     @Override
     public void stopAllTasks() {
     	super.stopAllTasks();
-    	
+
+        miningAnim.values().stream()
+                .filter(task -> task != null && !task.isCancelled())
+                .forEach(BukkitRunnable::cancel);
+        miningAnim.clear();
+
+        boats.removeIf(boat -> {
+            if (boat != null && !boat.isDead()) {
+                boat.remove();
+            }
+            return true;
+        });
+
+        noFace.clear();
+        noJump.clear();
+        slow.clear();
+        btList.clear();
+        btCheck.clear();
+        towerList.clear();
+        stuckTicks.clear();
+        stuckLastLoc.clear();
+        boatCooldown.clear();
+        fallDamageCooldown.clear();
+        botsInPlayerList = null;
+
     	Iterator<Entry<Block, Short>> itr = crackList.entrySet().iterator();
     	while(itr.hasNext()) {
     		Block block = itr.next().getKey();

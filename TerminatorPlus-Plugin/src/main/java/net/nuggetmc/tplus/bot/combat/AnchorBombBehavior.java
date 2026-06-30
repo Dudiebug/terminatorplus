@@ -70,6 +70,8 @@ public final class AnchorBombBehavior implements WeaponBehavior {
             return 0;
         }
 
+        bot.getActionController().recordDirectShortcut(bot, BotActionState.ANCHOR_SEQUENCE,
+                "direct-anchor-place-charge-explode", inv.findMainInventory(Material.RESPAWN_ANCHOR));
         placeAt.setType(Material.RESPAWN_ANCHOR);
         consumeOne(inv, Material.RESPAWN_ANCHOR);
         consumeOne(inv, Material.GLOWSTONE);

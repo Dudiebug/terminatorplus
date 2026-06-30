@@ -689,6 +689,11 @@ public class BotCommand extends CommandInstance {
         if (target.equalsIgnoreCase("all")) {
             if (turnOn) {
                 net.nuggetmc.tplus.bot.combat.CombatDebugger.enableAll();
+                for (Terminator t : manager.fetch()) {
+                    if (t instanceof Bot bot) {
+                        net.nuggetmc.tplus.bot.combat.CombatDebugger.inventorySnapshotNow(bot, "debug-enable");
+                    }
+                }
                 sender.sendMessage(ChatColor.GREEN + "Full debug enabled for ALL bots.");
                 sender.sendMessage(ChatColor.GRAY + "Logs: " + debugDir + ChatColor.DARK_GRAY + " (combat-all.log + per-bot files)");
             } else {
@@ -704,8 +709,12 @@ public class BotCommand extends CommandInstance {
             return;
         }
         for (Bot b : matches) {
-            if (turnOn) net.nuggetmc.tplus.bot.combat.CombatDebugger.enable(b.getUUID());
-            else net.nuggetmc.tplus.bot.combat.CombatDebugger.disable(b.getUUID());
+            if (turnOn) {
+                net.nuggetmc.tplus.bot.combat.CombatDebugger.enable(b.getUUID());
+                net.nuggetmc.tplus.bot.combat.CombatDebugger.inventorySnapshotNow(b, "debug-enable");
+            } else {
+                net.nuggetmc.tplus.bot.combat.CombatDebugger.disable(b.getUUID());
+            }
         }
         sender.sendMessage((turnOn ? ChatColor.GREEN + "Enabled" : ChatColor.YELLOW + "Disabled")
                 + ChatColor.RESET + " combat debug for " + matches.size() + " bot(s) named "
@@ -964,9 +973,74 @@ public class BotCommand extends CommandInstance {
         }
     }
 
+    public static boolean applyNamedLoadoutToBot(Bot bot, String name) {
+        String key = name == null ? "" : name.toLowerCase();
+        ItemStack[] kit = buildLoadout(key);
+        if (kit == null) return false;
+        applyLoadoutToBot(bot, kit, !"clear".equals(key));
+        return true;
+    }
+
+    public static boolean isNamedLoadout(String name) {
+        return buildLoadout(name == null ? "" : name.toLowerCase()) != null;
+    }
+
     @Autofill
     public List<String> loadoutAutofill(CommandSender sender, String[] args) {
         if (args.length == 2) return new ArrayList<>(Arrays.asList(LOADOUT_NAMES));
+        if (args.length == 3) return manager.fetchNames();
+        return new ArrayList<>();
+    }
+
+    @Command(
+            name = "loadoutmix",
+            desc = "Apply rotating combat loadouts. Usage: /bot loadoutmix <alltypes|core|problem> [bot-prefix]",
+            autofill = "loadoutMixAutofill"
+    )
+    public void loadoutMix(CommandSender sender, @Arg("mix") String mix, @OptArg("bot-prefix") String botPrefix) {
+        String key = mix == null ? "" : mix.toLowerCase();
+        String[] loadouts = loadoutMixFor(key);
+        if (loadouts == null) {
+            sender.sendMessage(ChatColor.RED + "Unknown loadout mix: " + ChatColor.YELLOW + key);
+            sender.sendMessage("Available: " + ChatColor.YELLOW + String.join(", ", LOADOUT_MIX_NAMES));
+            return;
+        }
+
+        List<Bot> bots = new ArrayList<>();
+        for (Terminator t : manager.fetch()) {
+            if (!(t instanceof Bot bot)) continue;
+            if (botPrefix != null && !botPrefix.isEmpty() && !bot.getBotName().startsWith(botPrefix)) continue;
+            bots.add(bot);
+        }
+        bots.sort(Comparator.comparing(Bot::getBotName, BotCommand::compareNatural));
+        if (bots.isEmpty()) {
+            sender.sendMessage(ChatColor.RED + "No bots matched"
+                    + (botPrefix == null || botPrefix.isEmpty() ? "." : " prefix " + ChatColor.YELLOW + botPrefix));
+            return;
+        }
+
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (int i = 0; i < bots.size(); i++) {
+            Bot bot = bots.get(i);
+            String loadout = loadouts[i % loadouts.length];
+            ItemStack[] kit = buildLoadout(loadout);
+            if (kit == null) continue;
+            applyLoadoutToBot(bot, kit, true);
+            net.nuggetmc.tplus.bot.combat.CombatDebugger.log(bot, "loadout-assign",
+                    "mix=" + key + " loadout=" + loadout + " index=" + (i + 1) + "/" + bots.size());
+            net.nuggetmc.tplus.bot.combat.CombatDebugger.inventorySnapshotNow(bot, "loadout-assign:" + loadout);
+            counts.merge(loadout, 1, Integer::sum);
+        }
+
+        sender.sendMessage("Applied loadout mix " + ChatColor.YELLOW + key + ChatColor.RESET
+                + " to " + ChatColor.BLUE + bots.size() + ChatColor.RESET + " bot(s)"
+                + (botPrefix == null || botPrefix.isEmpty() ? "." : " with prefix " + ChatColor.GREEN + botPrefix + ChatColor.RESET + "."));
+        sender.sendMessage(ChatColor.GRAY + "Distribution: " + ChatColor.YELLOW + describeCounts(counts));
+    }
+
+    @Autofill
+    public List<String> loadoutMixAutofill(CommandSender sender, String[] args) {
+        if (args.length == 2) return new ArrayList<>(Arrays.asList(LOADOUT_MIX_NAMES));
         if (args.length == 3) return manager.fetchNames();
         return new ArrayList<>();
     }
@@ -975,9 +1049,76 @@ public class BotCommand extends CommandInstance {
             "sword", "mace", "trident", "windcharge", "skydiver",
             "crystalpvp", "anchorbomb", "pvp", "hybrid",
             // Minecraft Wiki PvP kit taxonomy (cart + UHC intentionally excluded).
-            "vanilla", "axe", "smp", "pot", "spear",
+            "vanilla", "axe", "smp", "pot", "spear", "projectile",
             "clear"
     };
+
+    private static final String[] LOADOUT_MIX_NAMES = {"alltypes", "core", "problem"};
+
+    private static final String[] LOADOUT_MIX_ALL_TYPES = {
+            "sword", "mace", "trident", "windcharge", "skydiver",
+            "crystalpvp", "anchorbomb", "pvp", "hybrid",
+            "vanilla", "axe", "smp", "pot", "spear", "projectile"
+    };
+
+    private static final String[] LOADOUT_MIX_CORE = {
+            "sword", "axe", "smp", "mace", "trident", "spear", "pot", "projectile"
+    };
+
+    private static final String[] LOADOUT_MIX_PROBLEM = {
+            "mace", "mace", "mace",
+            "axe", "axe", "axe",
+            "smp", "smp",
+            "vanilla", "hybrid"
+    };
+
+    private static String[] loadoutMixFor(String key) {
+        return switch (key) {
+            case "alltypes", "all", "balanced" -> LOADOUT_MIX_ALL_TYPES;
+            case "core" -> LOADOUT_MIX_CORE;
+            case "problem", "combatdata", "bugs" -> LOADOUT_MIX_PROBLEM;
+            default -> null;
+        };
+    }
+
+    private static String describeCounts(Map<String, Integer> counts) {
+        StringBuilder out = new StringBuilder();
+        boolean first = true;
+        for (Entry<String, Integer> entry : counts.entrySet()) {
+            if (!first) out.append(", ");
+            first = false;
+            out.append(entry.getKey()).append('=').append(entry.getValue());
+        }
+        return out.toString();
+    }
+
+    private static int compareNatural(String left, String right) {
+        int li = trailingNumberStart(left);
+        int ri = trailingNumberStart(right);
+        String lp = left.substring(0, li);
+        String rp = right.substring(0, ri);
+        int prefix = lp.compareToIgnoreCase(rp);
+        if (prefix != 0) return prefix;
+        if (li < left.length() && ri < right.length()) {
+            try {
+                int ln = Integer.parseInt(left.substring(li));
+                int rn = Integer.parseInt(right.substring(ri));
+                int number = Integer.compare(ln, rn);
+                if (number != 0) return number;
+            } catch (NumberFormatException ignored) {
+                // Fall through to lexical compare.
+            }
+        }
+        return left.compareToIgnoreCase(right);
+    }
+
+    private static int trailingNumberStart(String value) {
+        int i = value.length();
+        while (i > 0 && Character.isDigit(value.charAt(i - 1))) {
+            i--;
+        }
+        return i;
+    }
 
     /**
      * Build a 41-slot loadout array for a named preset.
@@ -1221,6 +1362,28 @@ public class BotCommand extends CommandInstance {
                 kit[37] = new ItemStack(Material.NETHERITE_LEGGINGS);
                 kit[38] = new ItemStack(Material.NETHERITE_CHESTPLATE);
                 kit[39] = new ItemStack(Material.NETHERITE_HELMET);
+                kit[40] = new ItemStack(Material.SHIELD);
+            }
+            case "projectile", "archer" -> {
+                kit[0] = new ItemStack(Material.BOW);
+                kit[1] = new ItemStack(Material.CROSSBOW);
+                kit[2] = new ItemStack(Material.NETHERITE_SWORD);
+                ItemStack arrows = new ItemStack(Material.ARROW);
+                arrows.setAmount(64);
+                kit[3] = arrows;
+                ItemStack tipped = new ItemStack(Material.TIPPED_ARROW);
+                tipped.setAmount(32);
+                kit[4] = tipped;
+                ItemStack pearls = new ItemStack(Material.ENDER_PEARL);
+                pearls.setAmount(4);
+                kit[5] = pearls;
+                ItemStack projectileGaps = new ItemStack(Material.GOLDEN_APPLE);
+                projectileGaps.setAmount(4);
+                kit[6] = projectileGaps;
+                kit[36] = new ItemStack(Material.CHAINMAIL_BOOTS);
+                kit[37] = new ItemStack(Material.CHAINMAIL_LEGGINGS);
+                kit[38] = new ItemStack(Material.CHAINMAIL_CHESTPLATE);
+                kit[39] = new ItemStack(Material.CHAINMAIL_HELMET);
                 kit[40] = new ItemStack(Material.SHIELD);
             }
             case "clear" -> {

@@ -70,6 +70,8 @@ public final class WindChargeBehavior implements WeaponBehavior {
 
         bot.faceLocation(target.getLocation());
         bot.punch();
+        bot.getActionController().recordDirectShortcut(bot, BotActionState.USING_WIND_CHARGE,
+                "direct-windcharge-spawn", slot);
 
         spawn.getWorld().spawn(spawn, WindCharge.class, w -> {
             w.setVelocity(aim.multiply(SPEED));
@@ -179,6 +181,8 @@ public final class WindChargeBehavior implements WeaponBehavior {
         Location spawn = bot.getLocation().add(plan.placementOffset);
         Vector velocity = plan.velocity.clone();
         bot.punch();
+        bot.getActionController().recordDirectShortcut(bot, BotActionState.USING_WIND_CHARGE,
+                "direct-windcharge-boost-spawn", bot.getBotInventory().findMainInventory(Material.WIND_CHARGE));
         spawn.getWorld().spawn(spawn, WindCharge.class, w -> {
             w.setShooter(bot.getBukkitEntity());
             w.setVelocity(velocity);

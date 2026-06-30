@@ -6,6 +6,8 @@ import com.google.gson.JsonParser;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,7 +27,14 @@ public class MojangAPI {
     // spike still freezes the server for the first lookup. The full fix is an
     // async CompletableFuture API and hopping back to main for the caller; that's
     // a signature change through every caller so it lands in a separate commit.
-    private static final Map<String, String[]> CACHE = new ConcurrentHashMap<>();
+    private static final int MAX_CACHE_ENTRIES = 256;
+    private static final Map<String, String[]> CACHE = Collections.synchronizedMap(
+            new LinkedHashMap<String, String[]>(128, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, String[]> eldest) {
+                    return size() > MAX_CACHE_ENTRIES;
+                }
+            });
     private static final Map<String, CompletableFuture<String[]>> IN_FLIGHT = new ConcurrentHashMap<>();
     private static final ExecutorService LOOKUP_EXECUTOR = Executors.newFixedThreadPool(2, runnable -> {
         Thread thread = new Thread(runnable, "tplus-mojang-skin");
@@ -57,6 +66,9 @@ public class MojangAPI {
         if (cached != null) {
             return CompletableFuture.completedFuture(cached);
         }
+        if (LOOKUP_EXECUTOR.isShutdown()) {
+            return CompletableFuture.completedFuture(getSkin(name));
+        }
         return IN_FLIGHT.computeIfAbsent(name, key ->
                 CompletableFuture.supplyAsync(() -> getSkin(key), LOOKUP_EXECUTOR)
                         .whenComplete((result, error) -> IN_FLIGHT.remove(key)));
@@ -74,5 +86,12 @@ public class MojangAPI {
         } catch (IOException | IllegalStateException e) {
             return null;
         }
+    }
+
+    public static void shutdown() {
+        IN_FLIGHT.values().forEach(future -> future.cancel(true));
+        IN_FLIGHT.clear();
+        CACHE.clear();
+        LOOKUP_EXECUTOR.shutdownNow();
     }
 }

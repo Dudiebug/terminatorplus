@@ -50,6 +50,8 @@ public final class EnderPearlBehavior implements WeaponBehavior {
         }
         bot.faceLocation(target.getLocation());
         bot.punch();
+        bot.getActionController().recordDirectShortcut(bot, BotActionState.USING_PEARL,
+                "direct-pearl-spawn", slot);
 
         Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
         // Lead the target slightly based on their horizontal velocity.

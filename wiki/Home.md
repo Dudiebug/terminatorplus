@@ -1,24 +1,53 @@
 # TerminatorPlus Wiki
 
-TerminatorPlus is a Paper plugin that spawns server-side player bots with combat AI, a full editable inventory, and a preset system. Unlike basic NPC plugins, each bot is an NMS `ServerPlayer` subclass — it takes and deals real damage, uses real items, and reacts to its surroundings.
+Current strategy: one strong 1v1 PvP bot versus one skilled human PvPer on
+`mc-26.1.2`.
+
+Prioritize movement, spacing, vanilla hit timing, sword/axe/shield fundamentals,
+defensive recovery, punish logic, and controlled advanced tools. Movement is
+combat-informed but not combat-authoritative.
+
+Older wiki pages are preserved as legacy/reference documentation unless a page
+explicitly says it has been rewritten for the current strategy.
 
 ## Pages
 
+- [Current Strategy](Current-Strategy)
+- [Combat Movement Contract](Combat-Movement-Contract)
+- [Duel Testing](Duel-Testing)
+- [Legacy Status](Legacy-Status)
 - [Installation](Installation)
 - [Quick Start](Quick-Start)
 - [Commands](Commands)
 - [Loadouts](Loadouts)
 - [Combat Behaviors](Combat-Behaviors)
+- [Movement Network](Movement-Network)
+- [Movement Brain Bank](Movement-Brain-Bank)
+- [AI Training](AI-Training)
+- [Brain Persistence](Brain-Persistence)
+- [Configuration](Configuration)
 - [Presets](Presets)
 - [Inventory GUI](Inventory-GUI)
-- [Neural Network Mode](Neural-Network-Mode)
 - [API](API)
 - [Troubleshooting](Troubleshooting)
 - [Changelog](Changelog)
+- [Release Notes 5.1.1](Release-Notes-5.1.1)
 
-## What's New
+## Movement Brain Bank
 
-- **Weapon-aware combat AI** — bots use swords, maces, tridents with momentum, wind charges, ender pearls, end crystals, respawn anchors, cobwebs, totems, and elytra gliding with firework boosts.
-- **Full inventory editor** — `/bot inventory <bot-name>` opens a 54-slot chest you can edit like a real inventory.
-- **Presets** — save a bot's loadout and behavior settings to YAML, then re-apply to any bot.
-- **Neural-network training mode is preserved** — the AI pipeline only kicks in for non-training bots, so fitness scoring stays deterministic.
+- Movement brains are locomotion-only; `CombatDirector` retains full authority
+  over combat.
+- Movement routing uses `MovementBranchFamily`: lock, intent branch, range/role
+  fallback, then `general_fallback`.
+- Brain persistence uses `ai/movement/manifest.json` plus per-family files under
+  `ai/movement/brains/`.
+- Legacy `ai/brain.json` imports as `general_fallback` when compatible.
+- `/ai reinforcement ...` defaults to movement training and automatically samples weighted loadouts from
+  `movement_balanced` or curriculum mixes.
+- Mixed reinforcement trains eligible specialist brains from the same population
+  when those bots captured matching route samples.
+- Training rounds default to a 1-minute cap through
+  `ai.training.max-round-minutes`.
+- `/ai evaluate` exports repeatable seed/scenario reports with route/family
+  distributions and fallback state.
+

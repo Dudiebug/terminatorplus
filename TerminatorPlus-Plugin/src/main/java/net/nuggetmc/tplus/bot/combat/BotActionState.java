@@ -1,0 +1,21 @@
+package net.nuggetmc.tplus.bot.combat;
+
+public enum BotActionState {
+    IDLE,
+    USING_CONSUMABLE,
+    DRINKING_POTION,
+    THROWING_PROJECTILE,
+    MINING,
+    PLACING_BLOCK,
+    BLOCKING,
+    DRAWING_BOW,
+    CHARGING_CROSSBOW,
+    THROWING_TRIDENT,
+    USING_WIND_CHARGE,
+    USING_PEARL,
+    CRYSTAL_SEQUENCE,
+    ANCHOR_SEQUENCE,
+    FALL_CLUTCH,
+    COOLDOWN_RECOVERY,
+    MELEE_ATTACK
+}
