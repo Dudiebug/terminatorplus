@@ -65,7 +65,7 @@ Then retry:
 Current strategy target:
 
 ```text
-mc-26.1.2 = primary active target
+mc-26.2 = primary active target
 mc-1.21.11 = compatibility/older branch
 master = display branch
 ```

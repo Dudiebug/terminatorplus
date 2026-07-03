@@ -2,7 +2,7 @@
 
 > Legacy/reference notice:
 > This page may describe the old general TerminatorPlus strategy.
-> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
+> Current strategy is 1v1 PvP bot quality on `mc-26.2`.
 > Use this page for technical reference only until it is verified against source code and runtime behavior.
 
 
@@ -16,7 +16,7 @@ Alias: `/bot inv <bot-name>`.
 
 ## Slot map
 
-The top 5 rows (45 slots) mirror the bot's real inventory. The bottom row (9 slots) is locked — it's reserved decoration.
+The top 5 rows (45 slots) mirror the bot's real inventory. The bottom row (9 slots) is locked â€” it's reserved decoration.
 
 ```
 Row 1 (slots  0 .. 8): Hotbar (slot 0 = selected-hotbar slot index)
@@ -37,7 +37,7 @@ Row 6 (slots 45 ..53): locked (decorative glass panes)
 
 - **Click / drag**: normal Bukkit inventory behavior, with the usual stack-splitting shortcuts.
 - **Shift-click**: moves items between hotbar and storage as normal.
-- **Armor slots**: only accept the matching material class — putting a sword in the helmet slot is refused by vanilla.
+- **Armor slots**: only accept the matching material class â€” putting a sword in the helmet slot is refused by vanilla.
 - **Locked slots**: any attempt to drop items into the bottom row is cancelled server-side.
 
 ## Saving
@@ -49,7 +49,7 @@ Close the GUI (Escape / `E`) to push changes back to the bot:
 3. Writes back via NMS `Inventory.setItem` so NBT (enchantments, custom names, durability) survives.
 4. Re-syncs the selected hotbar slot via packet so the bot's main hand reflects the change.
 
-There's no explicit "save" button — the close handler does it.
+There's no explicit "save" button â€” the close handler does it.
 
 ## Why 54 slots?
 
@@ -59,9 +59,9 @@ Bukkit chest inventories come in 27- or 54-slot sizes. 45 slots of editable spac
 
 Typical workflow:
 
-1. `/bot create T1 + /bot loadout pvp T1` — get a starting kit.
-2. `/bot inventory T1` — fine-tune (add custom enchanted gear, edit durability, etc.).
-3. `/bot preset save mykit T1` — snapshot.
+1. `/bot create T1 + /bot loadout pvp T1` â€” get a starting kit.
+2. `/bot inventory T1` â€” fine-tune (add custom enchanted gear, edit durability, etc.).
+3. `/bot preset save mykit T1` â€” snapshot.
 
 See [Presets](Presets) for how the snapshot is stored.
 

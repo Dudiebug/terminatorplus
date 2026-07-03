@@ -2,19 +2,19 @@
 
 > Legacy/reference notice:
 > This page may describe the old general TerminatorPlus strategy.
-> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
+> Current strategy is 1v1 PvP bot quality on `mc-26.2`.
 > Use this page for technical reference only until it is verified against source code and runtime behavior.
 
 
 ## Requirements
 
-- Paper 26.1.2. Current 6.0.x release jars are built only for the `mc26.1.2` target.
+- Paper 26.2. Current 6.1.x release jars are built only for the `mc26.2` target.
 - Java 25.
 - Spigot and CraftBukkit are not supported.
 
 ## Install
 
-1. Download the latest `TerminatorPlus-6.0.x-BETA-mc26.1.2.jar` from the releases page.
+1. Download the latest `TerminatorPlus-6.1.x-BETA-mc26.2.jar` from the releases page.
 2. Drop `TerminatorPlus-<version>.jar` into `plugins/`.
 3. Start or restart the server.
 4. Check the console banner for the server version and required target version.

@@ -1,19 +1,18 @@
-# TerminatorPlus — Multi-version ports
+# TerminatorPlus - Release Publishing
 
-Four branches + jars are staged locally. GitHub Credential Manager on this box uses browser-based auth, which can't complete unattended, so the push/release step was deferred for you to run.
+The active release branch is `mc-26.2`.
 
-## To publish (≈1 minute)
+## To publish
 
-1. Create a Personal Access Token at https://github.com/settings/tokens with `repo` scope.
-2. In a bash shell:
+From the repository root:
 
-   ```bash
-   cd C:/Users/dudie/Documents/terminatorplus
-   export GITHUB_TOKEN=ghp_...
-   bash publish/publish-releases.sh
-   ```
+```bash
+./gradlew build -q
+bash publish/publish-releases.sh
+```
 
-The script pushes all four branches and creates four pre-release releases on `Dudiebug/terminatorplus`, each with the matching plugin + API jars attached.
+The script pushes `mc-26.2`, creates or updates `v6.1.1-mc26.2`, and attaches
+`build/libs/TerminatorPlus-6.1.1-BETA-mc26.2.jar`.
 
 ## Branches
 
@@ -22,7 +21,8 @@ The script pushes all four branches and creates four pre-release releases on `Du
 | `mc-1.21.11`   | `paper-api:1.21.11-R0.1-SNAPSHOT` (Spigot-reobf, Java 21) | `TerminatorPlus-4.5.2-BETA-mc1.21.11.jar`        |
 | `mc-26.1`      | `paper-api:26.1.1.build.+` (Mojang-mapped, Java 25)        | `TerminatorPlus-4.5.2-BETA-mc26.1.jar`           |
 | `mc-26.1.1`    | `paper-api:26.1.1.build.+` (Mojang-mapped, Java 25)        | `TerminatorPlus-4.5.2-BETA-mc26.1.1.jar`         |
-| `mc-26.1.2`    | `paper-api:26.1.2.build.+` (Mojang-mapped, Java 25)        | `TerminatorPlus-4.5.2-BETA-mc26.1.2.jar`         |
+| `mc-26.1.2`    | `paper-api:26.1.2.build.+` (Mojang-mapped, Java 25)        | `TerminatorPlus-6.1.0-BETA-mc26.1.2.jar`         |
+| `mc-26.2`      | `paper-api:26.2.build.+` (Mojang-mapped, Java 25)          | `TerminatorPlus-6.1.1-BETA-mc26.2.jar`           |
 
 `mc-26.1` targets the 26.1.1 dev bundle because Paper never published a base `26.1.build.X` dev bundle — they jumped straight to 26.1.1.
 
@@ -32,6 +32,8 @@ The script pushes all four branches and creates four pre-release releases on `Du
 - **Gradle wrapper** bumped 8.11.1 → 9.0.0 (required by paperweight 2.0).
 - **26.x reobf removed.** Paper 26.1+ runs Mojang-mapped; `reobfJar`/`reobfArtifactConfiguration` deleted on the 26.x branches. Top-level `implementation(project(":TerminatorPlus-Plugin", "reobf"))` → `implementation(project(":TerminatorPlus-Plugin"))`.
 - **Java 25** on 26.x branches; Java 21 retained on mc-1.21.11.
+- **26.2 dependency update.** The active branch uses `paper-api:26.2.build.+`
+  and `paperDevBundle("26.2.build.+")`.
 - **Paper API changes fixed:**
   - `Material.CHAIN` split into `IRON_CHAIN` + `COPPER_CHAIN` (1.21.11 Paper change).
   - `EntityType.BOAT` gone; now per-wood type (using `OAK_BOAT`).

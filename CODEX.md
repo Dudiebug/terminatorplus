@@ -31,15 +31,17 @@ Update or flag the stale doc in a scoped docs task.
 
 ## Active branch target
 
-- Primary active target: `mc-26.1.2`.
-- Current 1v1 PvP strategy work starts from `mc-26.1.2`.
-- `master` is the default/display branch only, not the current development
-  source of truth.
+- Primary active target: `mc-26.2`.
+- Current 1v1 PvP strategy work starts from `mc-26.2`.
+- `mc-26.2` is the intended default branch.
+- `master` is legacy/display only, not the current development source of truth.
+- `mc-26.1.2` is older compatibility/reference unless a task explicitly scopes
+  that branch.
 - `mc-1.21.11` is older compatibility/reference unless a task explicitly scopes
   that branch.
 
-Do not route current-strategy work through the old
-`mc-1.21.11 -> mc-26.1.2 -> master` flow.
+Do not route current-strategy work through the old multi-branch compatibility
+flow.
 
 ## Build rules
 
@@ -87,7 +89,7 @@ explicitly asks.
 ## Branch rules
 
 - Work on the branch named by the task. For current 1v1 strategy, that branch is
-  `mc-26.1.2`.
+  `mc-26.2`.
 - Do not treat `master` as the development source of truth.
 - Do not treat `mc-1.21.11` as primary for current strategy work.
 - If compatibility work is explicitly scoped, verify the relevant branch before
@@ -166,7 +168,7 @@ executor/adaptor boundaries.
 ## Current 1v1 PvP strategy
 
 TerminatorPlus is focused on one strong 1v1 PvP bot versus one skilled human
-PvPer on the `mc-26.1.2` target branch.
+PvPer on the `mc-26.2` target branch.
 
 The current priority is duel quality:
 
@@ -244,6 +246,8 @@ A change is acceptable only when:
 ## Things not to do
 
 - Do not use `master` as current source of truth.
+- Do not use `mc-26.1.2` as current source of truth unless a task explicitly
+  scopes older compatibility work.
 - Do not treat `mc-1.21.11` as primary for current strategy work.
 - Do not follow old branch-flow guidance that starts current work on
   `mc-1.21.11`.

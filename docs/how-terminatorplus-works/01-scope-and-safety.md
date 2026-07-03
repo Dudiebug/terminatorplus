@@ -1,7 +1,7 @@
 # 1. Scope and Safety
 
 This guide documents how TerminatorPlus currently works, using the
-`mc-26.1.2` branch direction as the intended source of truth.
+`mc-26.2` branch direction as the intended source of truth.
 
 ## What this documentation is for
 
@@ -21,7 +21,7 @@ The audience is:
 
 ## Branch and evidence rules
 
-This guide is written against the `mc-26.1.2` line of development.
+This guide is written against the `mc-26.2` line of development.
 
 That means:
 

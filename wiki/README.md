@@ -11,7 +11,7 @@ Current strategy:
 - advanced tools only after fundamentals are proven
 - movement is combat-informed, not combat-authoritative
 
-Primary target branch: `mc-26.1.2`.
+Primary target branch: `mc-26.2`.
 
 The existing wiki is preserved as legacy/reference documentation unless a page
 explicitly says it has been rewritten for the current strategy. Use old pages

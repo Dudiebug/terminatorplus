@@ -20,7 +20,7 @@ import java.util.Arrays;
 
 public class TerminatorPlus extends JavaPlugin {
 
-    public static final String REQUIRED_VERSION = "26.1.2";
+    public static final String REQUIRED_VERSION = "26.2";
 
     private static TerminatorPlus instance;
     private static String version;

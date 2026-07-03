@@ -6,7 +6,7 @@ The goal is one strong bot versus one skilled human PvPer in a controlled duel
 arena. Work should improve actual duel behavior or protect the repo from
 regressions.
 
-Primary target branch: `mc-26.1.2`.
+Primary target branch: `mc-26.2`.
 
 ## Priority Order
 

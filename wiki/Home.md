@@ -1,7 +1,7 @@
 # TerminatorPlus Wiki
 
 Current strategy: one strong 1v1 PvP bot versus one skilled human PvPer on
-`mc-26.1.2`.
+`mc-26.2`.
 
 Prioritize movement, spacing, vanilla hit timing, sword/axe/shield fundamentals,
 defensive recovery, punish logic, and controlled advanced tools. Movement is

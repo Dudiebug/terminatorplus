@@ -2,7 +2,7 @@
 
 > Legacy/reference notice:
 > This page may describe the old general TerminatorPlus strategy.
-> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
+> Current strategy is 1v1 PvP bot quality on `mc-26.2`.
 > Use this page for technical reference only until it is verified against source code and runtime behavior.
 
 
@@ -12,7 +12,7 @@ TerminatorPlus was originally built around population-based reinforcement learni
 
 | Mode | Damage source | Weapon director |
 | --- | --- | --- |
-| **Normal** (`/bot create`) | Vanilla `Player.attack()` — real crits, shields, enchants | `CombatDirector` runs every tick |
+| **Normal** (`/bot create`) | Vanilla `Player.attack()` â€” real crits, shields, enchants | `CombatDirector` runs every tick |
 | **Training** (`/ai random`, `/ai reinforcement`) | Legacy deterministic damage table | `CombatDirector` is **bypassed** |
 
 The switch is `Bot.hasNeuralNetwork()`. At the top of `CombatDirector.tick()`:
@@ -32,11 +32,11 @@ When `false` is returned, the caller falls back to the legacy damage code path, 
 /ai info <bot>      # inspect a bot's network
 ```
 
-Training mode is independent of the `/bot` command surface — `/bot create` still spawns non-training bots, and those will use the combat director.
+Training mode is independent of the `/bot` command surface â€” `/bot create` still spawns non-training bots, and those will use the combat director.
 
 ## Why bypass the director for training?
 
-- **Reproducibility**: the legacy damage table is deterministic — same input produces same output. The vanilla attack pipeline is not (knockback resistance RNG, crits, etc.), which corrupts fitness signals.
+- **Reproducibility**: the legacy damage table is deterministic â€” same input produces same output. The vanilla attack pipeline is not (knockback resistance RNG, crits, etc.), which corrupts fitness signals.
 - **Speed**: `CombatDirector` runs a dozen behaviors and cooldown checks per tick. Skipping it reduces training overhead.
 - **Known baseline**: historical fitness scores from earlier revisions remain comparable.
 
@@ -48,7 +48,7 @@ If you want a bot created by the training pipeline to use the combat director, y
 
 ## Interaction with presets
 
-Presets only capture inventory and behavior settings — not neural-network weights. Applying a preset to a training bot doesn't affect its network; applying a preset to a normal bot doesn't create a network. The two systems are independent.
+Presets only capture inventory and behavior settings â€” not neural-network weights. Applying a preset to a training bot doesn't affect its network; applying a preset to a normal bot doesn't create a network. The two systems are independent.
 
 ## Future work
 

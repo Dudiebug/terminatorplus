@@ -2,7 +2,7 @@
 
 > Legacy/reference notice:
 > This page may describe the old general TerminatorPlus strategy.
-> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
+> Current strategy is 1v1 PvP bot quality on `mc-26.2`.
 > Use this page for technical reference only until it is verified against source code and runtime behavior.
 
 
@@ -133,7 +133,7 @@ These are public classes, but the movement system is still evolving. Pin to a sp
 
 ## Compatibility
 
-- Current 6.0.x jars are built for Paper 26.1.2 with Java 25.
+- Current 6.1.x jars are built for Paper 26.2 with Java 25.
 - Internal changes happen behind the `Terminator` interface; breaking API changes are called out in the [Changelog](Changelog).
 - Bots are real `ServerPlayer`s, so standard Bukkit APIs such as `bot.getBukkitEntity()` mostly work. Prefer `Terminator` methods for stability.
 

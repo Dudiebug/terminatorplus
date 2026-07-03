@@ -2,7 +2,7 @@
 
 > Legacy/reference notice:
 > This page may describe the old general TerminatorPlus strategy.
-> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
+> Current strategy is 1v1 PvP bot quality on `mc-26.2`.
 > Use this page for technical reference only until it is verified against source code and runtime behavior.
 
 
@@ -99,7 +99,7 @@ See [Configuration](Configuration) for the current full reference.
 
 ## Compatibility
 
-- Current 5.2.x release jars target Paper 26.1.2 only.
+- Historical 5.2.x release jars target Paper 26.1.2 only.
 - Java 25.
 - Brain files from earlier versions may be incompatible. Use `/ai brain reset` to start fresh if validation fails.
 

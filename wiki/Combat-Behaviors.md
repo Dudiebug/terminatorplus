@@ -2,11 +2,11 @@
 
 > Legacy/reference notice:
 > This page may describe the old general TerminatorPlus strategy.
-> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
+> Current strategy is 1v1 PvP bot quality on `mc-26.2`.
 > Use this page for technical reference only until it is verified against source code and runtime behavior.
 
 
-The **CombatDirector** owns all combat decisions. Every tick it evaluates a priority pipeline and commits to the first matching weapon behavior. The movement neural network (if active) handles footwork only — it never selects weapons or triggers attacks.
+The **CombatDirector** owns all combat decisions. Every tick it evaluates a priority pipeline and commits to the first matching weapon behavior. The movement neural network (if active) handles footwork only â€” it never selects weapons or triggers attacks.
 
 ## Priority pipeline
 
@@ -14,18 +14,18 @@ Highest first. The director commits to the first behavior that matches and retur
 
 | # | Behavior | Condition | Cooldown |
 | --: | --- | --- | --- |
-| 0 | Mid-attack commit | Bot is mid-mace-fall or mid-trident-charge | — |
+| 0 | Mid-attack commit | Bot is mid-mace-fall or mid-trident-charge | â€” |
 | 1 | Crystal PvP | Not Nether, has kit, distance <= 6 | 30t |
 | 2 | Anchor Bomb | Nether, has kit, distance <= 5 | 50t |
 | 3 | Mace Smash | Grounded, has mace, distance <= 3.5 | 80t |
-| 4 | Sword Melee | Distance <= 3.5 | — |
+| 4 | Sword Melee | Distance <= 3.5 | â€” |
 | 5 | Trident Throw | Has trident, 5 <= distance <= 28 | 60t |
 | 6 | Ender Pearl | Has pearl, 14 <= distance <= 35 | 80t |
 | 7 | Wind Charge | Has wind charge, distance >= 4 | 40t |
 | 8 | Cobweb | Has cobweb, target fleeing, distance <= 4.5 | 30t |
 | 9 | Heal | Health < 40% | 100t |
 
-Passive (not in priority — always run): **Elytra Glide**, **Totem Swap**.
+Passive (not in priority â€” always run): **Elytra Glide**, **Totem Swap**.
 
 Cooldowns are measured in server ticks (1t = 50ms).
 
@@ -76,7 +76,7 @@ Enable combat trace logging with `/bot combatdebug <name|all> on`. Available fie
 - Trigger: grounded + mace in hotbar + target <= 3.5 blocks + cooldown ready.
 - Jumps, waits to reach peak, dives onto target. Fall-damage stacking applies via vanilla.
 - While airborne the director commits to mace regardless of other weapons.
-- Requires smash-ready charge (0.848) — lower threshold than melee because the fall provides extra damage scaling.
+- Requires smash-ready charge (0.848) â€” lower threshold than melee because the fall provides extra damage scaling.
 
 ### Trident Throw
 
@@ -131,10 +131,10 @@ Enable combat trace logging with `/bot combatdebug <name|all> on`. Available fie
 
 With the movement-controller neural network active, the flow is:
 
-1. **CombatDirector.plan()** — evaluates the combat situation and produces a **CombatIntent** (desired range, urgency, crit/sprint/hold hints). Does not execute attacks.
+1. **CombatDirector.plan()** â€” evaluates the combat situation and produces a **CombatIntent** (desired range, urgency, crit/sprint/hold hints). Does not execute attacks.
 2. **MovementBrainRouter / MovementNetwork** receives the CombatIntent as part of its 37-value input with one-hot branch-family fields, then produces movement outputs only.
-3. **MovementOutputApplier** — applies movement to the bot, updates **MovementState**.
-4. **CombatDirector.execute()** — reads MovementState (is the bot sprinting? falling? retreating?) and decides whether to commit to an attack, throw, or wait.
+3. **MovementOutputApplier** â€” applies movement to the bot, updates **MovementState**.
+4. **CombatDirector.execute()** â€” reads MovementState (is the bot sprinting? falling? retreating?) and decides whether to commit to an attack, throw, or wait.
 
 The NN cooperates with the Director's requests but makes its own movement decisions. The Director validates timing windows using the NN's reported state before executing combat.
 

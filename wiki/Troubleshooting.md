@@ -2,13 +2,13 @@
 
 > Legacy/reference notice:
 > This page may describe the old general TerminatorPlus strategy.
-> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
+> Current strategy is 1v1 PvP bot quality on `mc-26.2`.
 > Use this page for technical reference only until it is verified against source code and runtime behavior.
 
 
 ## Version Mismatch
 
-Current 6.0.x release jars target Paper 26.1.2 only. Spigot and CraftBukkit are
+Current 6.1.x release jars target Paper 26.2 only. Spigot and CraftBukkit are
 not supported.
 
 ## Movement-Bank Bot Does Not Move

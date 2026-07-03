@@ -2,7 +2,7 @@
 
 > Legacy/reference notice:
 > This page may describe the old general TerminatorPlus strategy.
-> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
+> Current strategy is 1v1 PvP bot quality on `mc-26.2`.
 > Use this page for technical reference only until it is verified against source code and runtime behavior.
 
 
@@ -16,7 +16,7 @@ plugins/TerminatorPlus/presets/<preset-name>.yml
 
 ```
 /bot preset save <preset> <bot>
-/bot preset apply <preset> [bot]    # bot optional → apply to all
+/bot preset apply <preset> [bot]    # bot optional â†’ apply to all
 /bot preset list
 /bot preset delete <preset>         # requires terminatorplus.admin
 ```
@@ -25,13 +25,13 @@ plugins/TerminatorPlus/presets/<preset-name>.yml
 
 Everything a new bot needs to replay the same kit:
 
-- **Every item slot** (0–40): hotbar, storage, armor, offhand — with full NBT.
+- **Every item slot** (0â€“40): hotbar, storage, armor, offhand â€” with full NBT.
 - **Selected hotbar slot** (which item the bot is holding).
 - **Behavior settings**:
-  - `goal` — target-selection goal (`PLAYER`, `NEAREST`, `NEAREST_PLAYER`, etc.)
-  - `mob-target` — whether hostile mobs target this bot.
-  - `add-player-list` — whether new bots show up in the tab list.
-  - `shield` — whether the bot is actively blocking.
+  - `goal` â€” target-selection goal (`PLAYER`, `NEAREST`, `NEAREST_PLAYER`, etc.)
+  - `mob-target` â€” whether hostile mobs target this bot.
+  - `add-player-list` â€” whether new bots show up in the tab list.
+  - `shield` â€” whether the bot is actively blocking.
 
 ## File format
 
@@ -63,8 +63,8 @@ Only non-empty slots are written; missing keys deserialize as `AIR`.
 
 | Range | Meaning |
 | --- | --- |
-| 0–8 | Hotbar |
-| 9–35 | Storage |
+| 0â€“8 | Hotbar |
+| 9â€“35 | Storage |
 | 36 | Boots |
 | 37 | Leggings |
 | 38 | Chestplate (or elytra) |
@@ -73,7 +73,7 @@ Only non-empty slots are written; missing keys deserialize as `AIR`.
 
 ## Editing by hand
 
-You can open a preset file in any text editor. To drop an item, delete its key. To add one, you need a valid Base64 blob — the easiest way to produce one is:
+You can open a preset file in any text editor. To drop an item, delete its key. To add one, you need a valid Base64 blob â€” the easiest way to produce one is:
 
 1. `/bot create T1`
 2. Edit T1's inventory with `/bot inventory T1` (place the exact item you want).

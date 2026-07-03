@@ -2,8 +2,28 @@
 
 > Legacy/reference notice:
 > This page may describe the old general TerminatorPlus strategy.
-> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
+> Current strategy is 1v1 PvP bot quality on `mc-26.2`.
 > Use this page for technical reference only until it is verified against source code and runtime behavior.
+
+## 6.1.1 - Paper 26.2 Compatibility
+
+See [Release Notes 6.1.1](Release-Notes-6.1.1) for the full patch notes.
+
+### Changed
+
+- Updated the active build target from Paper 26.1.2 to Paper 26.2.
+- Updated the plugin version to `6.1.1-BETA-mc26.2`.
+- Updated Paper API and Paperweight dev bundle coordinates to `26.2.build.+`.
+- Updated current docs, wiki install notes, release helper metadata, and CI
+  comments for the new active `mc-26.2` branch.
+
+### Notes
+
+- Build passed with `./gradlew build -q`.
+- No combat, movement, training, or brain persistence behavior was intentionally
+  changed.
+- Runtime gameplay claims remain `needs runtime test` until verified in a live
+  Paper 26.2 duel.
 
 ## 6.1.0 - Legal Action Migration and Live Duel Metrics
 

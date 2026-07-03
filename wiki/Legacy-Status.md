@@ -9,7 +9,7 @@ written for the old broad-feature strategy:
 - flashy tools
 - wiki pages as broad user-facing strategy
 
-Current strategy is narrower: one strong 1v1 PvP bot on `mc-26.1.2`.
+Current strategy is narrower: one strong 1v1 PvP bot on `mc-26.2`.
 
 ## Rule
 
