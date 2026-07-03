@@ -1,7 +1,9 @@
 package net.nuggetmc.tplus.bot.movement;
 
 import net.nuggetmc.tplus.bot.Bot;
+import net.nuggetmc.tplus.bot.combat.CombatActionCategory;
 import net.nuggetmc.tplus.bot.combat.CombatIntent;
+import net.nuggetmc.tplus.bot.combat.MovementBranchFamily;
 import net.nuggetmc.tplus.bot.combat.MovementObjective;
 import org.bukkit.entity.LivingEntity;
 
@@ -27,6 +29,10 @@ public final class MovementBaselinePolicy {
         boolean tooClose = estimatedDistance < minSafeRange || rangeError < -0.45;
         boolean outsideMaxRange = estimatedDistance > maxUsefulRange;
         boolean dangerRetreat = safeIntent.botHealthFraction() < 0.35f && safeIntent.healthAdvantage() < -0.15;
+
+        if (isMaceIntent(safeIntent)) {
+            return mace(safeIntent, rangeError, urgency, tooClose, outsideMaxRange, obstructed, dangerRetreat);
+        }
 
         if (safeIntent.movementObjective() == MovementObjective.HOLD || safeIntent.wantsHoldPosition()) {
             return hold(urgency);
@@ -97,6 +103,54 @@ public final class MovementBaselinePolicy {
         return new MovementOutput(forward, 0.25, jump, 0.45, 0.0, 0.0, urgency, 0.0);
     }
 
+    private static MovementOutput mace(
+            CombatIntent intent,
+            double rangeError,
+            double urgency,
+            boolean tooClose,
+            boolean outsideMaxRange,
+            boolean obstructed,
+            boolean dangerRetreat
+    ) {
+        CombatActionCategory category = intent.actionCategory();
+        boolean committed = intent.isCommitted()
+                || category == CombatActionCategory.MACE_AIRBORNE
+                || category == CombatActionCategory.AERIAL_DIVE;
+        boolean inUsefulRange = !outsideMaxRange && rangeError >= -1.0;
+        boolean clearVerticalSetup = intent.openSkyAboveBot() && inUsefulRange && !intent.targetHasIFrames();
+
+        if (!committed && dangerRetreat && tooClose && intent.botHealthFraction() < 0.22f) {
+            return retreat(Math.max(urgency, 0.85), true);
+        }
+        if (outsideMaxRange) {
+            return approach(rangeError, Math.max(urgency, 0.75), true);
+        }
+
+        return switch (category) {
+            case MACE_CHARGE -> {
+                double jump = clearVerticalSetup && intent.botAttackStrength() >= 0.85 ? 0.7 : 0.15;
+                double forward = rangeError > 0.75 ? 0.45 : tooClose ? -0.15 : 0.05;
+                double retreat = tooClose ? 0.25 : 0.0;
+                double strafe = obstructed ? 0.45 : 0.15;
+                double hold = jump >= 0.65 ? 0.0 : 0.65;
+                yield new MovementOutput(forward, strafe, jump, 0.35, retreat, 0.0, Math.max(urgency, 0.65), hold);
+            }
+            case MACE_SMASH -> {
+                double jump = clearVerticalSetup ? 0.75 : 0.15;
+                double forward = rangeError > 0.75 ? 0.5 : tooClose ? -0.2 : 0.1;
+                double retreat = tooClose ? 0.3 : 0.0;
+                yield new MovementOutput(forward, obstructed ? 0.35 : 0.15, jump, 0.4, retreat, 0.0,
+                        Math.max(urgency, 0.75), 0.0);
+            }
+            case MACE_AIRBORNE, AERIAL_DIVE -> {
+                double forward = rangeError > 0.5 ? 0.55 : rangeError < -0.8 ? -0.2 : 0.25;
+                yield new MovementOutput(forward, obstructed ? 0.25 : 0.1, 0.0, 0.25, 0.0, 0.0,
+                        Math.max(urgency, 0.8), 0.0);
+            }
+            default -> verticalSetup(rangeError, Math.max(urgency, 0.65), intent.openSkyAboveBot(), false);
+        };
+    }
+
     private static MovementOutput rangedLos(
             double rangeError,
             double urgency,
@@ -125,6 +179,14 @@ public final class MovementBaselinePolicy {
             case RETREAT, DISENGAGE, EXPLOSIVE_ESCAPE, PEARL_DISENGAGE -> false;
             case COBWEB_PRESSURE -> dangerRetreat;
             default -> true;
+        };
+    }
+
+    private static boolean isMaceIntent(CombatIntent intent) {
+        if (intent.branchFamily() == MovementBranchFamily.MACE) return true;
+        return switch (intent.actionCategory()) {
+            case MACE_CHARGE, MACE_AIRBORNE, MACE_SMASH, AERIAL_DIVE -> true;
+            default -> false;
         };
     }
 
