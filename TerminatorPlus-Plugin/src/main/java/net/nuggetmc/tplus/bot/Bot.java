@@ -36,7 +36,6 @@ import net.nuggetmc.tplus.api.event.BotKilledByPlayerEvent;
 import net.nuggetmc.tplus.api.utils.*;
 import net.nuggetmc.tplus.bot.combat.BotCombatTiming;
 import net.nuggetmc.tplus.bot.combat.BotActionState;
-import net.nuggetmc.tplus.bot.combat.CombatActionCategory;
 import net.nuggetmc.tplus.bot.combat.CombatDirector;
 import net.nuggetmc.tplus.bot.combat.CombatDebugger;
 import net.nuggetmc.tplus.bot.combat.CombatIntent;
@@ -422,20 +421,6 @@ public class Bot extends ServerPlayer implements Terminator {
         CombatDirector director = plugin.getCombatDirector();
         if (director == null) return false;
         return director.execute(this, target, getMovementState());
-    }
-
-    @Override
-    public boolean shouldHoldMovementForCombat(org.bukkit.entity.LivingEntity target) {
-        CombatIntent intent = getCombatIntent();
-        if (intent == null) return false;
-        if (intent.wantsHoldPosition()) return true;
-        if (intent.isCommitted() && intent.movementLocked(getAliveTicks())) return true;
-
-        CombatActionCategory category = intent.actionCategory();
-        return category == CombatActionCategory.MACE_SMASH
-                || category == CombatActionCategory.MACE_CHARGE
-                || category == CombatActionCategory.MACE_AIRBORNE
-                || category == CombatActionCategory.AERIAL_DIVE;
     }
 
     @Override

@@ -313,11 +313,6 @@ public class LegacyAgent extends Agent {
         Vector vel = target.toVector().subtract(position).normalize();
 
         if (bot.tickDelay(5)) bot.faceLocation(livingTarget.getLocation());
-        if (bot.shouldHoldMovementForCombat(livingTarget)) {
-            bot.stand();
-            bot.faceLocation(livingTarget.getLocation());
-            return;
-        }
         if (!bot.isBotOnGround()) return; // calling this a second time later on
 
         bot.stand(); // eventually create a memory system so packets do not have to be sent every tick
