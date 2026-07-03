@@ -35,14 +35,20 @@ public final class WindChargeBehavior implements WeaponBehavior {
     public static final String PEARL_COMBO_COOLDOWN_KEY = "wind_pearl_combo";
     private static final int PEARL_COMBO_COOLDOWN = 100;
     private static final int PEARL_COMBO_PEARL_COOLDOWN = 60;
-    private static final int PEARL_COMBO_RELEASE_TICKS = 4;
-    private static final int PEARL_COMBO_MONITOR_TICKS = 14;
+    private static final int PEARL_COMBO_MIN_RELEASE_TICKS = 4;
+    private static final int PEARL_COMBO_MAX_RELEASE_TICKS = 28;
+    private static final int PEARL_COMBO_MONITOR_GRACE_TICKS = 8;
+    private static final int PEARL_COMBO_MAX_MONITOR_TICKS = 36;
     private static final double PEARL_COMBO_MIN_DISTANCE = 30.0;
     private static final double PEARL_COMBO_MAX_DISTANCE = 42.0;
-    private static final double PEARL_COMBO_WIND_SPEED = 0.95;
-    private static final double PEARL_COMBO_PEARL_SPEED = 1.9;
-    private static final double PEARL_COMBO_LEAD_TICKS = 2.0;
-    private static final double PEARL_COMBO_CONTACT_RADIUS_SQ = 1.35 * 1.35;
+    private static final double PEARL_COMBO_WIND_SPEED = 1.20;
+    private static final double PEARL_COMBO_PEARL_SPEED = 1.95;
+    private static final double PEARL_COMBO_TARGET_LEAD_FACTOR = 0.35;
+    private static final double PEARL_COMBO_TARGET_LEAD_MAX_TICKS = 10.0;
+    private static final double PEARL_COMBO_INTERCEPT_MIN_TICKS = 1.0;
+    private static final double PEARL_COMBO_INTERCEPT_MAX_TICKS = 32.0;
+    private static final double PEARL_COMBO_PEARL_GRAVITY_COMPENSATION = 0.03;
+    private static final double PEARL_COMBO_CONTACT_RADIUS_SQ = 1.25 * 1.25;
 
     // -- Self-propulsion wind charge --
     public static final String BOOST_COOLDOWN_KEY = "windcharge_boost";
@@ -198,55 +204,48 @@ public final class WindChargeBehavior implements WeaponBehavior {
         if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, alive)) return false;
         if (!bot.getBotCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, alive)) return false;
         if (!bot.getBotInventory().hasEnderPearl()) return false;
-        if (bot.getBotInventory().findMainInventory(Material.WIND_CHARGE) < 0) return false;
+        if (!bot.getBotInventory().hasWindCharge()) return false;
         if (!bot.getActionController().canStart(bot, BotActionState.USING_PEARL, "wind-pearl-combo")) return false;
 
-        int previousSlot = bot.getBotInventory().getSelectedHotbarSlot();
-        int windSlot = bot.getBotInventory().selectMaterial(Material.WIND_CHARGE);
-        if (windSlot < 0) {
-            CombatDebugger.log(bot, "wind-pearl-skip", "reason=no-selectable-wind");
-            bot.getBotInventory().restoreSelectedSlotOrBestWeapon(previousSlot);
-            return false;
-        }
-
         Location windSpawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
-        Vector windAim = comboPoint(bot, target).subtract(windSpawn.toVector());
-        if (windAim.lengthSquared() < 1.0e-6) {
-            CombatDebugger.log(bot, "wind-pearl-skip", "reason=zero-wind-aim");
-            bot.getBotInventory().restoreSelectedSlotOrBestWeapon(previousSlot);
-            return false;
-        }
-        WindCharge charge = spawnComboCharge(bot, windSpawn, windAim.normalize());
-        if (!bot.getBotInventory().decrementMainInventorySlot(windSlot, 1)) {
-            CombatDebugger.log(bot, "wind-pearl-cancel", "reason=no-wind-stack");
-            charge.remove();
-            bot.getBotInventory().restoreSelectedSlotOrBestWeapon(previousSlot);
-            return false;
-        }
+        PearlComboPlan plan = buildPearlComboPlan(bot, target, windSpawn);
+        if (plan == null) return false;
 
+        int previousSlot = bot.getBotInventory().getSelectedHotbarSlot();
+        int windSlot = bot.getBotInventory().findMainInventory(Material.WIND_CHARGE);
+        if (windSlot >= 0) {
+            bot.getBotInventory().selectMainInventorySlot(windSlot);
+        }
         int pearlSlot = bot.getBotInventory().selectMaterial(Material.ENDER_PEARL);
         if (pearlSlot < 0) {
-            CombatDebugger.log(bot, "wind-pearl-cancel", "reason=no-selectable-pearl");
-            charge.remove();
+            CombatDebugger.log(bot, "wind-pearl-skip", "reason=no-selectable-pearl");
             bot.getBotInventory().restoreSelectedSlotOrBestWeapon(previousSlot);
             return false;
         }
 
+        final WindCharge[] chargeRef = new WindCharge[1];
         final int selectedPearlSlot = pearlSlot;
         boolean started = bot.getActionController().start(bot, BotActionState.USING_PEARL,
-                PEARL_COMBO_RELEASE_TICKS, selectedPearlSlot, "wind-pearl-combo", () -> {
-                    releasePearlAtCharge(bot, target, charge, selectedPearlSlot, previousSlot, distance);
+                plan.releaseTicks(), selectedPearlSlot, "wind-pearl-combo", () -> {
+                    releasePearlAtCharge(bot, target, chargeRef[0], selectedPearlSlot, previousSlot,
+                            distance, plan.monitorTicks());
                 });
         if (!started) {
-            CombatDebugger.log(bot, "wind-pearl-cancel",
-                    "reason=action-busy active=" + bot.getActionController().state());
-            if (charge.isValid()) charge.remove();
             bot.getBotInventory().restoreSelectedSlotOrBestWeapon(previousSlot);
             return false;
         }
 
         bot.faceLocation(target.getLocation());
         bot.punch();
+        chargeRef[0] = spawnComboCharge(bot, windSpawn, plan.windAim());
+        if (!bot.getBotInventory().decrementMaterialOrOffhand(Material.WIND_CHARGE)) {
+            CombatDebugger.log(bot, "wind-pearl-cancel", "reason=no-wind-stack");
+            if (chargeRef[0].isValid()) chargeRef[0].remove();
+            bot.getActionController().interrupt(bot, "wind-pearl-no-wind-stack");
+            bot.getBotInventory().restoreSelectedSlotOrBestWeapon(previousSlot);
+            return false;
+        }
+
         windSpawn.getWorld().playSound(windSpawn, Sound.ENTITY_WIND_CHARGE_THROW, 1f, 1.05f);
         bot.getBotCooldowns().set(PEARL_COMBO_COOLDOWN_KEY, PEARL_COMBO_COOLDOWN, alive);
         bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, alive);
@@ -255,22 +254,48 @@ public final class WindChargeBehavior implements WeaponBehavior {
         CombatDebugger.log(bot, "wind-pearl-start",
                 "dist=" + String.format("%.2f", distance)
                         + " windSlot=" + windSlot
-                        + " pearlSlot=" + selectedPearlSlot);
+                        + " pearlSlot=" + selectedPearlSlot
+                        + " release=" + plan.releaseTicks()
+                        + " windTicks=" + String.format("%.2f", plan.windTravelTicks())
+                        + " pearlTicks=" + String.format("%.2f", plan.pearlTravelTicks()));
         return true;
     }
 
-    private static Vector comboPoint(Bot bot, LivingEntity target) {
-        Vector fromTargetToBot = bot.getLocation().toVector().subtract(target.getEyeLocation().toVector()).setY(0);
+    private static PearlComboPlan buildPearlComboPlan(Bot bot, LivingEntity target, Location windSpawn) {
+        Vector roughContact = comboPoint(bot, target, 0.0);
+        double roughWindTicks = roughContact.distance(windSpawn.toVector()) / PEARL_COMBO_WIND_SPEED;
+        double targetLeadTicks = Math.min(PEARL_COMBO_TARGET_LEAD_MAX_TICKS,
+                Math.max(0.0, roughWindTicks * PEARL_COMBO_TARGET_LEAD_FACTOR));
+        Vector contactPoint = comboPoint(bot, target, targetLeadTicks);
+        Vector windToContact = contactPoint.clone().subtract(windSpawn.toVector());
+        double distance = windToContact.length();
+        if (distance < 1.0e-6) return null;
+
+        double windTravelTicks = distance / PEARL_COMBO_WIND_SPEED;
+        double pearlTravelTicks = distance / PEARL_COMBO_PEARL_SPEED;
+        int releaseTicks = clamp((int) Math.round(windTravelTicks - pearlTravelTicks),
+                PEARL_COMBO_MIN_RELEASE_TICKS, PEARL_COMBO_MAX_RELEASE_TICKS);
+        int monitorTicks = clamp((int) Math.ceil(pearlTravelTicks + PEARL_COMBO_MONITOR_GRACE_TICKS),
+                8, PEARL_COMBO_MAX_MONITOR_TICKS);
+
+        return new PearlComboPlan(windToContact.normalize(), releaseTicks, monitorTicks,
+                windTravelTicks, pearlTravelTicks);
+    }
+
+    private static Vector comboPoint(Bot bot, LivingEntity target, double leadTicks) {
+        Vector predictedEye = target.getEyeLocation().toVector()
+                .add(target.getVelocity().clone().multiply(Math.max(0.0, leadTicks)));
+        Vector fromTargetToBot = bot.getLocation().toVector().subtract(predictedEye).setY(0);
         if (fromTargetToBot.lengthSquared() > 1.0e-6) {
             fromTargetToBot.normalize().multiply(1.25);
         }
-        return target.getEyeLocation().toVector().add(fromTargetToBot).add(new Vector(0, -0.25, 0));
+        return predictedEye.add(fromTargetToBot).add(new Vector(0, -0.25, 0));
     }
 
     private static WindCharge spawnComboCharge(Bot bot, Location spawn, Vector aim) {
         return spawn.getWorld().spawn(spawn, WindCharge.class, w -> {
             w.setShooter(bot.getBukkitEntity());
-            w.setVelocity(aim.multiply(PEARL_COMBO_WIND_SPEED));
+            w.setVelocity(aim.clone().multiply(PEARL_COMBO_WIND_SPEED));
         });
     }
 
@@ -280,9 +305,10 @@ public final class WindChargeBehavior implements WeaponBehavior {
             WindCharge charge,
             int plannedPearlSlot,
             int restoreSlot,
-            double plannedDistance
+            double plannedDistance,
+            int monitorTicks
     ) {
-        if (!target.isValid() || !charge.isValid()) {
+        if (!target.isValid() || charge == null || !charge.isValid()) {
             CombatDebugger.log(bot, "wind-pearl-cancel", "reason=target-or-charge-invalid slot=" + plannedPearlSlot);
             bot.getBotInventory().restoreSelectedSlotOrBestWeapon(restoreSlot);
             return;
@@ -296,11 +322,9 @@ public final class WindChargeBehavior implements WeaponBehavior {
         }
 
         Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
-        Vector contactPoint = charge.getLocation().toVector()
-                .add(charge.getVelocity().clone().multiply(PEARL_COMBO_LEAD_TICKS));
-        Vector aim = contactPoint.subtract(spawn.toVector());
-        if (aim.lengthSquared() < 1.0e-6) {
-            CombatDebugger.log(bot, "wind-pearl-cancel", "reason=zero-pearl-aim slot=" + pearlSlot);
+        Vector pearlVelocity = solvePearlInterceptVelocity(spawn, charge);
+        if (pearlVelocity == null) {
+            CombatDebugger.log(bot, "wind-pearl-cancel", "reason=no-intercept slot=" + pearlSlot);
             bot.getBotInventory().restoreSelectedSlotOrBestWeapon(restoreSlot);
             return;
         }
@@ -311,7 +335,7 @@ public final class WindChargeBehavior implements WeaponBehavior {
                 "wind-pearl-release", pearlSlot);
         EnderPearl pearl = spawn.getWorld().spawn(spawn, EnderPearl.class, p -> {
             p.setShooter(bot.getBukkitEntity());
-            p.setVelocity(aim.normalize().multiply(PEARL_COMBO_PEARL_SPEED));
+            p.setVelocity(pearlVelocity);
             p.setHasLeftShooter(true);
             p.setHasBeenShot(true);
         });
@@ -320,10 +344,63 @@ public final class WindChargeBehavior implements WeaponBehavior {
         CombatDebugger.log(bot, "wind-pearl-throw",
                 "dist=" + String.format("%.2f", plannedDistance)
                         + " slot=" + pearlSlot
+                        + " speed=" + String.format("%.2f", pearlVelocity.length())
                         + " chargeValid=" + charge.isValid());
         bot.getBotInventory().decrementMainInventorySlot(pearlSlot, 1);
         bot.getBotInventory().restoreSelectedSlotOrBestWeapon(restoreSlot);
-        monitorPearlCombo(bot, pearl, charge, PEARL_COMBO_MONITOR_TICKS);
+        monitorPearlCombo(bot, pearl, charge, monitorTicks);
+    }
+
+    private static Vector solvePearlInterceptVelocity(Location spawn, WindCharge charge) {
+        Vector origin = spawn.toVector();
+        Vector chargePosition = charge.getLocation().toVector();
+        Vector chargeVelocity = charge.getVelocity();
+        double ticks = solveLinearInterceptTicks(origin, chargePosition, chargeVelocity, PEARL_COMBO_PEARL_SPEED);
+        ticks = clamp(ticks, PEARL_COMBO_INTERCEPT_MIN_TICKS, PEARL_COMBO_INTERCEPT_MAX_TICKS);
+
+        for (int i = 0; i < 3; i++) {
+            Vector aimPoint = predictChargePoint(chargePosition, chargeVelocity, ticks);
+            aimPoint.setY(aimPoint.getY() + gravityCompensation(ticks));
+            ticks = clamp(aimPoint.distance(origin) / PEARL_COMBO_PEARL_SPEED,
+                    PEARL_COMBO_INTERCEPT_MIN_TICKS, PEARL_COMBO_INTERCEPT_MAX_TICKS);
+        }
+
+        Vector aimPoint = predictChargePoint(chargePosition, chargeVelocity, ticks);
+        aimPoint.setY(aimPoint.getY() + gravityCompensation(ticks));
+        Vector velocity = aimPoint.subtract(origin);
+        if (velocity.lengthSquared() < 1.0e-6) return null;
+        return velocity.normalize().multiply(PEARL_COMBO_PEARL_SPEED);
+    }
+
+    private static double solveLinearInterceptTicks(Vector origin, Vector targetPosition, Vector targetVelocity, double speed) {
+        Vector delta = targetPosition.clone().subtract(origin);
+        double a = targetVelocity.lengthSquared() - speed * speed;
+        double b = 2.0 * delta.dot(targetVelocity);
+        double c = delta.lengthSquared();
+        if (c < 1.0e-6) return 0.0;
+        if (Math.abs(a) < 1.0e-6) {
+            if (Math.abs(b) < 1.0e-6) return Math.sqrt(c) / speed;
+            double linear = -c / b;
+            return linear > 0.0 && Double.isFinite(linear) ? linear : Math.sqrt(c) / speed;
+        }
+
+        double discriminant = b * b - 4.0 * a * c;
+        if (discriminant < 0.0) return Math.sqrt(c) / speed;
+        double root = Math.sqrt(discriminant);
+        double t1 = (-b - root) / (2.0 * a);
+        double t2 = (-b + root) / (2.0 * a);
+        double best = Double.POSITIVE_INFINITY;
+        if (t1 > 0.0 && Double.isFinite(t1)) best = t1;
+        if (t2 > 0.0 && Double.isFinite(t2)) best = Math.min(best, t2);
+        return Double.isFinite(best) ? best : Math.sqrt(c) / speed;
+    }
+
+    private static Vector predictChargePoint(Vector position, Vector velocity, double ticks) {
+        return position.clone().add(velocity.clone().multiply(ticks));
+    }
+
+    private static double gravityCompensation(double ticks) {
+        return 0.5 * PEARL_COMBO_PEARL_GRAVITY_COMPENSATION * ticks * ticks;
     }
 
     private static void monitorPearlCombo(Bot bot, EnderPearl pearl, WindCharge charge, int ticksLeft) {
@@ -353,8 +430,12 @@ public final class WindChargeBehavior implements WeaponBehavior {
         } catch (RuntimeException ex) {
             CombatDebugger.log(bot, "wind-pearl-contact-fallback", "reason=" + ex.getClass().getSimpleName());
         }
-        if (charge.isValid()) {
-            charge.explode();
+        try {
+            if (charge.isValid()) {
+                charge.explode();
+            }
+        } catch (RuntimeException ex) {
+            CombatDebugger.log(bot, "wind-pearl-explode-fallback", "reason=" + ex.getClass().getSimpleName());
         }
         CombatDebugger.log(bot, "wind-pearl-contact",
                 "apiContact=" + apiContact + " dist=" + String.format("%.2f", Math.sqrt(distanceSq)));
@@ -377,4 +458,21 @@ public final class WindChargeBehavior implements WeaponBehavior {
         spawn.getWorld().playSound(spawn, Sound.ENTITY_WIND_CHARGE_THROW, 1f, 1f);
         bot.getBotCooldowns().set(BOOST_COOLDOWN_KEY, BOOST_COOLDOWN, bot.getAliveTicks());
     }
+
+    private static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private static double clamp(double value, double min, double max) {
+        if (!Double.isFinite(value)) return min;
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private record PearlComboPlan(
+            Vector windAim,
+            int releaseTicks,
+            int monitorTicks,
+            double windTravelTicks,
+            double pearlTravelTicks
+    ) {}
 }
