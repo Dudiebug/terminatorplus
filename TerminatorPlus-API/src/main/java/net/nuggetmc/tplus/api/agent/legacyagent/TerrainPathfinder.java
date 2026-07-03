@@ -9,7 +9,6 @@ import org.bukkit.util.Vector;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -32,7 +31,7 @@ final class TerrainPathfinder {
     Optional<NavPath> findBestPath(Terminator bot, LivingEntity target) {
         World world = bot.getBukkitEntity().getWorld();
         NavNode start = NavNode.from(bot.getLocation());
-        GoalRegion goal = GoalRegion.from(bot, target, config);
+        GoalRegion goal = GoalRegion.from(target, config);
 
         Optional<NavPath> noBreak = search(world, start, goal, SearchMode.NO_BREAK);
         if (noBreak.isPresent()) return noBreak;
@@ -182,18 +181,14 @@ final class TerrainPathfinder {
     }
 
     private record GoalRegion(Location target, Location predictedTarget, double radius, double losRadius) {
-        static GoalRegion from(Terminator bot, LivingEntity target, NavigationConfig config) {
+        static GoalRegion from(LivingEntity target, NavigationConfig config) {
             Location current = target.getLocation();
             Location predicted = current.clone();
             Vector velocity = target.getVelocity().clone().setY(0);
+            velocity.multiply(config.targetPredictTicks());
             double maxLead = 4.0;
             if (velocity.lengthSquared() > maxLead * maxLead) {
                 velocity.normalize().multiply(maxLead);
-            } else {
-                velocity.multiply(config.targetPredictTicks());
-                if (velocity.lengthSquared() > maxLead * maxLead) {
-                    velocity.normalize().multiply(maxLead);
-                }
             }
             predicted.add(velocity);
             predicted.setY(current.getY());
@@ -204,11 +199,12 @@ final class TerrainPathfinder {
             if (!terrain.canOccupyNow(world, node)) return false;
             Location feet = node.center(world);
             double distanceSq = feet.distanceSquared(target);
-            if (distanceSq <= radius * radius) return true;
-            if (distanceSq > losRadius * losRadius) return false;
+            double maxGoal = Math.max(radius, losRadius);
+            if (distanceSq > maxGoal * maxGoal) return false;
 
             Location eye = feet.clone().add(0.0, 1.62, 0.0);
-            return LegacyUtils.checkFreeSpace(eye, target.clone().add(0.0, 1.0, 0.0));
+            Location targetEye = target.clone().add(0.0, 1.0, 0.0);
+            return LegacyUtils.checkFreeSpace(eye, targetEye);
         }
     }
 }
