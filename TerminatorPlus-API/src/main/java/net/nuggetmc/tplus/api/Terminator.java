@@ -167,6 +167,10 @@ public interface Terminator {
         return combatTick(target);
     }
 
+    default boolean shouldHoldMovementForCombat(LivingEntity target) {
+        return false;
+    }
+
     default MovementTrainingSnapshot movementTrainingSnapshot(LivingEntity target) {
         return MovementTrainingSnapshot.unavailable();
     }
