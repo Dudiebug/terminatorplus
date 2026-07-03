@@ -18,6 +18,29 @@ ai:
       quarantine-bad-files: true
       legacy-import-behavior: import-compatible-or-reset
       debug-logging: false
+  navigation:
+    # Terrain-aware legacy baseline. The navigator searches for a no-break route
+    # first, then only allows planned mining if no walk/climb/openable route can
+    # satisfy the target goal.
+    enabled: true
+    # Movement-controller NN still gets the first move attempt. If it cannot
+    # produce movement, this navigator replaces the old direct legacy fallback.
+    apply-to-movement-controller-fallback: true
+    # When no route can be found, do not fall back to the old local obstruction
+    # mining logic. The bot will use exploratory recovery instead.
+    suppress-legacy-fallback: true
+    allow-break-fallback: true
+    open-doors: true
+    open-trapdoors: true
+    open-gates: true
+    avoid-hazards: true
+    max-nodes: 1800
+    replan-interval-ticks: 8
+    target-predict-ticks: 6
+    max-drop-blocks: 3
+    max-search-distance: 48.0
+    goal-radius: 3.3
+    line-of-sight-goal-radius: 5.5
   training:
     # Per-generation reinforcement round cap in minutes. Set 0 for unlimited.
     max-round-minutes: 1
