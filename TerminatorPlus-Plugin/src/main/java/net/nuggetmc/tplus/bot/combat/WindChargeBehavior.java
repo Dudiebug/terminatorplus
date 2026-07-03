@@ -1,9 +1,10 @@
 package net.nuggetmc.tplus.bot.combat;
 
 import net.nuggetmc.tplus.bot.Bot;
-import org.bukkit.Material;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.Sound;
+import org.bukkit.entity.EnderPearl;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.WindCharge;
 import org.bukkit.util.Vector;
@@ -29,6 +30,19 @@ public final class WindChargeBehavior implements WeaponBehavior {
     private static final double MIN_DISTANCE = 4.0;
     private static final double MAX_DISTANCE = 30.0;
     private static final double SPEED = 1.6;
+
+    // -- Wind charge + ender pearl combo --
+    public static final String PEARL_COMBO_COOLDOWN_KEY = "wind_pearl_combo";
+    private static final int PEARL_COMBO_COOLDOWN = 100;
+    private static final int PEARL_COMBO_PEARL_COOLDOWN = 60;
+    private static final int PEARL_COMBO_RELEASE_TICKS = 4;
+    private static final int PEARL_COMBO_MONITOR_TICKS = 14;
+    private static final double PEARL_COMBO_MIN_DISTANCE = 30.0;
+    private static final double PEARL_COMBO_MAX_DISTANCE = 42.0;
+    private static final double PEARL_COMBO_WIND_SPEED = 0.95;
+    private static final double PEARL_COMBO_PEARL_SPEED = 1.9;
+    private static final double PEARL_COMBO_LEAD_TICKS = 2.0;
+    private static final double PEARL_COMBO_CONTACT_RADIUS_SQ = 1.35 * 1.35;
 
     // -- Self-propulsion wind charge --
     public static final String BOOST_COOLDOWN_KEY = "windcharge_boost";
@@ -120,6 +134,8 @@ public final class WindChargeBehavior implements WeaponBehavior {
             return;
         }
 
+        if (tryPearlCombo(bot, target, distance)) return;
+
         if (distance < BOOST_MIN_DISTANCE || distance > BOOST_MAX_DISTANCE) return;
         if (!bot.isBotOnGround()) return;
         if (!bot.getBotInventory().hasWindCharge()) return;
@@ -171,6 +187,177 @@ public final class WindChargeBehavior implements WeaponBehavior {
         bot.getLocation().getWorld().playSound(bot.getLocation(),
                 Sound.BLOCK_BEACON_POWER_SELECT, 0.6f, 2.0f);
 
+    }
+
+    private boolean tryPearlCombo(Bot bot, LivingEntity target, double distance) {
+        int alive = bot.getAliveTicks();
+        if (distance < PEARL_COMBO_MIN_DISTANCE || distance > PEARL_COMBO_MAX_DISTANCE) return false;
+        if (!bot.isBotOnGround()) return false;
+        if (bot.getCombatState().getPhase() != CombatState.Phase.IDLE) return false;
+        if (!bot.getBotCooldowns().ready(PEARL_COMBO_COOLDOWN_KEY, alive)) return false;
+        if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, alive)) return false;
+        if (!bot.getBotCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, alive)) return false;
+        if (!bot.getBotInventory().hasEnderPearl()) return false;
+        if (bot.getBotInventory().findMainInventory(Material.WIND_CHARGE) < 0) return false;
+        if (!bot.getActionController().canStart(bot, BotActionState.USING_PEARL, "wind-pearl-combo")) return false;
+
+        int previousSlot = bot.getBotInventory().getSelectedHotbarSlot();
+        int windSlot = bot.getBotInventory().selectMaterial(Material.WIND_CHARGE);
+        if (windSlot < 0) {
+            CombatDebugger.log(bot, "wind-pearl-skip", "reason=no-selectable-wind");
+            bot.getBotInventory().restoreSelectedSlotOrBestWeapon(previousSlot);
+            return false;
+        }
+
+        Location windSpawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
+        Vector windAim = comboPoint(bot, target).subtract(windSpawn.toVector());
+        if (windAim.lengthSquared() < 1.0e-6) {
+            CombatDebugger.log(bot, "wind-pearl-skip", "reason=zero-wind-aim");
+            bot.getBotInventory().restoreSelectedSlotOrBestWeapon(previousSlot);
+            return false;
+        }
+        WindCharge charge = spawnComboCharge(bot, windSpawn, windAim.normalize());
+        if (!bot.getBotInventory().decrementMainInventorySlot(windSlot, 1)) {
+            CombatDebugger.log(bot, "wind-pearl-cancel", "reason=no-wind-stack");
+            charge.remove();
+            bot.getBotInventory().restoreSelectedSlotOrBestWeapon(previousSlot);
+            return false;
+        }
+
+        int pearlSlot = bot.getBotInventory().selectMaterial(Material.ENDER_PEARL);
+        if (pearlSlot < 0) {
+            CombatDebugger.log(bot, "wind-pearl-cancel", "reason=no-selectable-pearl");
+            charge.remove();
+            bot.getBotInventory().restoreSelectedSlotOrBestWeapon(previousSlot);
+            return false;
+        }
+
+        final int selectedPearlSlot = pearlSlot;
+        boolean started = bot.getActionController().start(bot, BotActionState.USING_PEARL,
+                PEARL_COMBO_RELEASE_TICKS, selectedPearlSlot, "wind-pearl-combo", () -> {
+                    releasePearlAtCharge(bot, target, charge, selectedPearlSlot, previousSlot, distance);
+                });
+        if (!started) {
+            CombatDebugger.log(bot, "wind-pearl-cancel",
+                    "reason=action-busy active=" + bot.getActionController().state());
+            if (charge.isValid()) charge.remove();
+            bot.getBotInventory().restoreSelectedSlotOrBestWeapon(previousSlot);
+            return false;
+        }
+
+        bot.faceLocation(target.getLocation());
+        bot.punch();
+        windSpawn.getWorld().playSound(windSpawn, Sound.ENTITY_WIND_CHARGE_THROW, 1f, 1.05f);
+        bot.getBotCooldowns().set(PEARL_COMBO_COOLDOWN_KEY, PEARL_COMBO_COOLDOWN, alive);
+        bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, alive);
+        bot.getBotCooldowns().set(EnderPearlBehavior.COOLDOWN_KEY, PEARL_COMBO_PEARL_COOLDOWN, alive);
+        bot.getCombatState().markExecuted(alive);
+        CombatDebugger.log(bot, "wind-pearl-start",
+                "dist=" + String.format("%.2f", distance)
+                        + " windSlot=" + windSlot
+                        + " pearlSlot=" + selectedPearlSlot);
+        return true;
+    }
+
+    private static Vector comboPoint(Bot bot, LivingEntity target) {
+        Vector fromTargetToBot = bot.getLocation().toVector().subtract(target.getEyeLocation().toVector()).setY(0);
+        if (fromTargetToBot.lengthSquared() > 1.0e-6) {
+            fromTargetToBot.normalize().multiply(1.25);
+        }
+        return target.getEyeLocation().toVector().add(fromTargetToBot).add(new Vector(0, -0.25, 0));
+    }
+
+    private static WindCharge spawnComboCharge(Bot bot, Location spawn, Vector aim) {
+        return spawn.getWorld().spawn(spawn, WindCharge.class, w -> {
+            w.setShooter(bot.getBukkitEntity());
+            w.setVelocity(aim.multiply(PEARL_COMBO_WIND_SPEED));
+        });
+    }
+
+    private static void releasePearlAtCharge(
+            Bot bot,
+            LivingEntity target,
+            WindCharge charge,
+            int plannedPearlSlot,
+            int restoreSlot,
+            double plannedDistance
+    ) {
+        if (!target.isValid() || !charge.isValid()) {
+            CombatDebugger.log(bot, "wind-pearl-cancel", "reason=target-or-charge-invalid slot=" + plannedPearlSlot);
+            bot.getBotInventory().restoreSelectedSlotOrBestWeapon(restoreSlot);
+            return;
+        }
+
+        int pearlSlot = bot.getBotInventory().selectMaterial(Material.ENDER_PEARL);
+        if (pearlSlot < 0) {
+            CombatDebugger.log(bot, "wind-pearl-cancel", "reason=no-pearl slot=" + plannedPearlSlot);
+            bot.getBotInventory().restoreSelectedSlotOrBestWeapon(restoreSlot);
+            return;
+        }
+
+        Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
+        Vector contactPoint = charge.getLocation().toVector()
+                .add(charge.getVelocity().clone().multiply(PEARL_COMBO_LEAD_TICKS));
+        Vector aim = contactPoint.subtract(spawn.toVector());
+        if (aim.lengthSquared() < 1.0e-6) {
+            CombatDebugger.log(bot, "wind-pearl-cancel", "reason=zero-pearl-aim slot=" + pearlSlot);
+            bot.getBotInventory().restoreSelectedSlotOrBestWeapon(restoreSlot);
+            return;
+        }
+
+        bot.faceLocation(charge.getLocation());
+        bot.punch();
+        bot.getActionController().recordDirectShortcut(bot, BotActionState.USING_PEARL,
+                "wind-pearl-release", pearlSlot);
+        EnderPearl pearl = spawn.getWorld().spawn(spawn, EnderPearl.class, p -> {
+            p.setShooter(bot.getBukkitEntity());
+            p.setVelocity(aim.normalize().multiply(PEARL_COMBO_PEARL_SPEED));
+            p.setHasLeftShooter(true);
+            p.setHasBeenShot(true);
+        });
+
+        spawn.getWorld().playSound(spawn, Sound.ENTITY_ENDER_PEARL_THROW, 1f, 1f);
+        CombatDebugger.log(bot, "wind-pearl-throw",
+                "dist=" + String.format("%.2f", plannedDistance)
+                        + " slot=" + pearlSlot
+                        + " chargeValid=" + charge.isValid());
+        bot.getBotInventory().decrementMainInventorySlot(pearlSlot, 1);
+        bot.getBotInventory().restoreSelectedSlotOrBestWeapon(restoreSlot);
+        monitorPearlCombo(bot, pearl, charge, PEARL_COMBO_MONITOR_TICKS);
+    }
+
+    private static void monitorPearlCombo(Bot bot, EnderPearl pearl, WindCharge charge, int ticksLeft) {
+        if (pearl == null || charge == null) return;
+        if (!pearl.isValid() || !charge.isValid()) return;
+        if (pearl.getWorld() != charge.getWorld()) return;
+
+        double distanceSq = pearl.getLocation().distanceSquared(charge.getLocation());
+        if (distanceSq <= PEARL_COMBO_CONTACT_RADIUS_SQ) {
+            resolvePearlCombo(bot, pearl, charge, distanceSq);
+            return;
+        }
+
+        if (ticksLeft <= 0) {
+            CombatDebugger.log(bot, "wind-pearl-miss",
+                    "dist=" + String.format("%.2f", Math.sqrt(distanceSq)));
+            return;
+        }
+        bot.scheduleBotTask(() -> monitorPearlCombo(bot, pearl, charge, ticksLeft - 1), 1L);
+    }
+
+    private static void resolvePearlCombo(Bot bot, EnderPearl pearl, WindCharge charge, double distanceSq) {
+        boolean apiContact = false;
+        try {
+            pearl.hitEntity(charge);
+            apiContact = true;
+        } catch (RuntimeException ex) {
+            CombatDebugger.log(bot, "wind-pearl-contact-fallback", "reason=" + ex.getClass().getSimpleName());
+        }
+        if (charge.isValid()) {
+            charge.explode();
+        }
+        CombatDebugger.log(bot, "wind-pearl-contact",
+                "apiContact=" + apiContact + " dist=" + String.format("%.2f", Math.sqrt(distanceSq)));
     }
 
     private static void executePlan(Bot bot, WindChargeMovePlan plan) {
