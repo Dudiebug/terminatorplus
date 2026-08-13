@@ -81,7 +81,7 @@ public class LegacyAgent extends Agent {
     }
 
     private static boolean checkSideBreak(Material type) {
-        return !LegacyMats.BREAK.contains(type);// && !LegacyMats.LEAVES.contains(type);
+        return !LegacyMats.BREAK.contains(type);
     }
 
     @Override
@@ -100,10 +100,7 @@ public class LegacyAgent extends Agent {
 
         final LivingEntity botEntity = bot.getBukkitEntity();
 
-        Location prev = null;
-        if (btList.containsKey(botEntity)) {
-            prev = btList.get(botEntity);
-        }
+        Location prev = btList.get(botEntity);
 
         Location loc = botEntity.getLocation();
 
@@ -166,7 +163,6 @@ public class LegacyAgent extends Agent {
 
         survivalController.beforeMovement(bot, livingTarget);
 
-        LivingEntity botPlayer = bot.getBukkitEntity();
         Location target = offsets ? livingTarget.getLocation().add(bot.getOffset()) : livingTarget.getLocation();
 
         MovementMode movementMode = movementRouter.mode(bot);
@@ -191,7 +187,7 @@ public class LegacyAgent extends Agent {
         // does not over-swing.
         boolean combatTickReady = movementMode == MovementMode.FULL_REPLACEMENT_NN ? bot.tickDelay(3) : true;
         if (!movementController && combatTickReady) {
-            Location botEyeLoc = botPlayer.getEyeLocation();
+            Location botEyeLoc = botEntity.getEyeLocation();
             Location playerEyeLoc = livingTarget.getEyeLocation();
             Location playerLoc = livingTarget.getLocation();
 
@@ -211,15 +207,15 @@ public class LegacyAgent extends Agent {
 
         boolean withinTargetXZ = false, sameXZ = false;
 
-        if (btCheck.containsKey(botPlayer)) sameXZ = btCheck.get(botPlayer);
+        if (btCheck.containsKey(botEntity)) sameXZ = btCheck.get(botEntity);
 
-        if (waterGround || bot.isBotOnGround() || onBoat(botPlayer)) {
+        if (waterGround || bot.isBotOnGround() || onBoat(botEntity)) {
             byte sideResult = 1;
 
-            if (towerList.containsKey(botPlayer)) {
+            if (towerList.containsKey(botEntity)) {
                 if (loc.getBlockY() > livingTarget.getLocation().getBlockY()) {
-                    towerList.remove(botPlayer);
-                    resetHand(bot, livingTarget, botPlayer);
+                    towerList.remove(botEntity);
+                    resetHand(bot, livingTarget, botEntity);
                 }
             }
 
@@ -232,7 +228,7 @@ public class LegacyAgent extends Agent {
 
             boolean bothXZ = withinTargetXZ || sameXZ;
 
-            if (checkAt(bot, block, botPlayer)) {
+            if (checkAt(bot, block, botEntity)) {
                 executeMovementControllerCombat(bot, livingTarget, movementController);
                 return;
             }
@@ -242,28 +238,28 @@ public class LegacyAgent extends Agent {
             // block was being broken — in a corner with something in front of
             // the bot, that's a lockup. Fall through to move() so the bot keeps
             // pressing into the path while the block crumbles.
-            checkFenceAndGates(bot, loc.getBlock(), botPlayer);
-            checkObstacles(bot, loc.getBlock(), botPlayer);
+            checkFenceAndGates(bot, loc.getBlock(), botEntity);
+            checkObstacles(bot, loc.getBlock(), botEntity);
 
-            if (checkDown(bot, botPlayer, livingTarget.getLocation(), bothXZ)) {
+            if (checkDown(bot, botEntity, livingTarget.getLocation(), bothXZ)) {
                 executeMovementControllerCombat(bot, livingTarget, movementController);
                 return;
             }
 
-            if ((withinTargetXZ || sameXZ) && checkUp(bot, livingTarget, botPlayer, target, withinTargetXZ, sameXZ)) {
+            if ((withinTargetXZ || sameXZ) && checkUp(bot, livingTarget, botEntity, target, withinTargetXZ, sameXZ)) {
                 executeMovementControllerCombat(bot, livingTarget, movementController);
                 return;
             }
 
-            if (bothXZ) sideResult = checkSide(bot, livingTarget, botPlayer);
+            if (bothXZ) sideResult = checkSide(bot, livingTarget, botEntity);
 
             switch (sideResult) {
                 case 1:
-                    resetHand(bot, livingTarget, botPlayer);
+                    resetHand(bot, livingTarget, botEntity);
                     if (movementController) {
-                        movementRouter.move(bot, livingTarget, loc, target, movementMode, !noJump.contains(botPlayer) && !waterGround);
+                        movementRouter.move(bot, livingTarget, loc, target, movementMode, !noJump.contains(botEntity) && !waterGround);
                         executeMovementControllerCombat(bot, livingTarget, true);
-                    } else if (!noJump.contains(botPlayer) && !waterGround) {
+                    } else if (!noJump.contains(botEntity) && !waterGround) {
                         movementRouter.move(bot, livingTarget, loc, target, movementMode, true);
                     }
                     return;
@@ -276,7 +272,7 @@ public class LegacyAgent extends Agent {
                     }
             }
         } else if (LegacyMats.WATER.contains(loc.getBlock().getType())) {
-            swim(bot, target, botPlayer, livingTarget, LegacyMats.WATER.contains(loc.clone().add(0, -1, 0).getBlock().getType()));
+            swim(bot, target, botEntity, livingTarget, LegacyMats.WATER.contains(loc.clone().add(0, -1, 0).getBlock().getType()));
         }
 
         executeMovementControllerCombat(bot, livingTarget, movementController);
@@ -1352,7 +1348,7 @@ public class LegacyAgent extends Agent {
                     }
 
                     if (block.getType() == Material.BARRIER || block.getType() == Material.BEDROCK || block.getType() == Material.END_PORTAL_FRAME
-                    		|| block.getType() == Material.STRUCTURE_BLOCK || block.getType() == Material.STRUCTURE_BLOCK
+                        || block.getType() == Material.STRUCTURE_BLOCK
                     		|| block.getType() == Material.COMMAND_BLOCK || block.getType() == Material.REPEATING_COMMAND_BLOCK
                     		|| block.getType() == Material.CHAIN_COMMAND_BLOCK)
                         return;
@@ -1450,7 +1446,6 @@ public class LegacyAgent extends Agent {
     void miscellaneousChecks(Terminator bot, LivingEntity target) {
         LivingEntity botPlayer = bot.getBukkitEntity();
         World world = botPlayer.getWorld();
-        String worldName = world.getName();
         Location loc = bot.getLocation();
 
         if (bot.isBotOnFire()) {
@@ -1535,8 +1530,6 @@ public class LegacyAgent extends Agent {
 
                         Block place = loc.clone().add(0, -1, 0).getBlock();
                         if (LegacyMats.WATER.contains(place.getType())) {
-                            Location mlgLoc = place.getLocation();
-
                             bot.attemptBlockPlace(place.getLocation(), Material.COBBLESTONE, true);
                         }
                     }

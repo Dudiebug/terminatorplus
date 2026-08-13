@@ -66,14 +66,3 @@ Important interpretation rules:
 - "archive candidate" here usually means docs/strategy archive first, not code
   deletion
 - "possibly unused" means the reference evidence was incomplete or indirect
-
-## Most important high-level conclusion
-
-The plugin's runtime is still built around protected legacy scaffolding plus
-newer duel-aligned subsystems.
-
-So the safest next action is still:
-
-- improve docs clarity
-- narrow default strategy presentation
-- preserve runtime systems until tests and deeper mapping justify change

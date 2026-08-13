@@ -35,18 +35,7 @@ Recommended reading order:
 15. [15-old-horsenuggets-legacy-map.md](./15-old-horsenuggets-legacy-map.md)
 16. [16-present-but-maybe-not-doing-anything.md](./16-present-but-maybe-not-doing-anything.md)
 
-What this guide is optimized for:
-
-- Understanding the runtime from plugin enable to bot removal.
-- Understanding which systems are current, legacy, protected, optional, or
-  suspicious.
-- Understanding where the plugin is NMS-sensitive and where runtime tests are
-  required before changes.
-- Understanding the current narrow 1v1 direction without pretending the legacy
-  stack has already been removed.
-
-What this guide deliberately does not do:
-
-- It does not recommend deleting runtime code now.
-- It does not assume build success means gameplay success.
-- It does not assume old docs are correct when source disagrees.
+Use the sequence above for source-grounded runtime context, then use the
+classification pages (14–16) to separate current, legacy, optional, training,
+and uncertain surfaces. This guide documents behavior; it does not authorize
+runtime deletion, and source/build evidence outranks old wiki claims.

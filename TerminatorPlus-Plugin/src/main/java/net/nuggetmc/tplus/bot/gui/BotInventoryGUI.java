@@ -32,7 +32,6 @@ import org.bukkit.inventory.PlayerInventory;
 public final class BotInventoryGUI implements InventoryHolder {
 
     public static final int SIZE = 54;
-    private static final int[] ARMOR_GUI_SLOTS = {36, 37, 38, 39, 40};
 
     private final Bot bot;
     private final Inventory inventory;
@@ -82,12 +81,7 @@ public final class BotInventoryGUI implements InventoryHolder {
 
     /** Push GUI state back onto the bot (call when closing). */
     public void syncToBot() {
-        ItemStack[] mainSnapshot = new ItemStack[36];
-        for (int i = 0; i < 36; i++) {
-            ItemStack it = inventory.getItem(i);
-            mainSnapshot[i] = it == null ? null : it.clone();
-        }
-        bot.getBotInventory().applyMainInventorySnapshot(mainSnapshot);
+        bot.getBotInventory().applyMainInventorySnapshot(inventory.getContents());
 
         // Armor + offhand go through bot.setItem() so ClientboundSetEquipmentPacket is sent.
         bot.setItem(safe(inventory.getItem(36)), org.bukkit.inventory.EquipmentSlot.HEAD);
@@ -110,8 +104,7 @@ public final class BotInventoryGUI implements InventoryHolder {
     }
 
     public static boolean isArmorOrOffhand(int slot) {
-        for (int s : ARMOR_GUI_SLOTS) if (s == slot) return true;
-        return false;
+        return slot >= 36 && slot < 41;
     }
 
     private static ItemStack safe(ItemStack it) {

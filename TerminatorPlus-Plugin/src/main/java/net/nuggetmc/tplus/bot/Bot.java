@@ -4,8 +4,6 @@ import com.mojang.authlib.GameProfile;
 import com.mojang.datafixers.util.Pair;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.*;
-import net.minecraft.network.syncher.EntityDataAccessor;
-import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerLevel;
@@ -18,7 +16,6 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.MoverType;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.phys.AABB;
@@ -150,7 +147,6 @@ public class Bot extends ServerPlayer implements Terminator {
             inPlayerList = true;
         }
 
-        //this.entityData.set(new EntityDataAccessor<>(16, EntityDataSerializers.BYTE), (byte) 0xFF);
     }
 
     public BukkitTask scheduleBotTask(Runnable action, long delayTicks) {
@@ -245,7 +241,12 @@ public class Bot extends ServerPlayer implements Terminator {
     private void renderAll() {
         Packet<?>[] packets = getRenderPacketsNoInfo();
         this.entityData.set(net.minecraft.world.entity.player.Player.DATA_PLAYER_MODE_CUSTOMISATION, (byte) 0x7F);
-        Bukkit.getOnlinePlayers().forEach(p -> renderNoInfo(((CraftPlayer) p).getHandle().connection, packets, false));
+        Bukkit.getOnlinePlayers().forEach(p -> {
+            ServerGamePacketListenerImpl connection = ((CraftPlayer) p).getHandle().connection;
+            connection.send(packets[0]);
+            connection.send(packets[1]);
+            connection.send(packets[2]);
+        });
     }
 
     private void render(ServerGamePacketListenerImpl connection, Packet<?>[] packets, boolean login) {
@@ -257,17 +258,6 @@ public class Bot extends ServerPlayer implements Terminator {
             scheduleBotTask(() -> connection.send(packets[3]), 10);
         } else {
             connection.send(packets[3]);
-        }
-    }
-
-    private void renderNoInfo(ServerGamePacketListenerImpl connection, Packet<?>[] packets, boolean login) {
-        connection.send(packets[0]);
-        connection.send(packets[1]);
-
-        if (login) {
-            scheduleBotTask(() -> connection.send(packets[2]), 10);
-        } else {
-            connection.send(packets[2]);
         }
     }
 
@@ -287,7 +277,6 @@ public class Bot extends ServerPlayer implements Terminator {
         return new Packet[]{
                 new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER, this),
                 new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER, this),
-                //new ClientboundSetEntityDataPacket(this.getId(), this.entityData, true),
                 new ClientboundSetEntityDataPacket(this.getId(), NMSUtils.getEntityData(this.entityData)),
                 new ClientboundRotateHeadPacket(this, (byte) ((this.yHeadRot * 256f) / 360f))
         };
@@ -296,7 +285,6 @@ public class Bot extends ServerPlayer implements Terminator {
     private Packet<?>[] getRenderPacketsNoInfo() {
         return new Packet[]{
                 new ClientboundAddEntityPacket(this.getId(), this.getUUID(), this.getX(), this.getY(), this.getZ(), this.getXRot(), this.getYRot(), this.getType(), 0, this.getDeltaMovement(), this.getYHeadRot()),
-                //new ClientboundSetEntityDataPacket(this.getId(), this.entityData, true),
                 new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER, this),
                 new ClientboundSetEntityDataPacket(this.getId(), this.entityData.packDirty()),
                 new ClientboundRotateHeadPacket(this, (byte) ((this.yHeadRot * 256f) / 360f))
@@ -324,7 +312,7 @@ public class Bot extends ServerPlayer implements Terminator {
     }
 
     @Override
-    public void addVelocity(Vector vector) { // This can cause lag? (maybe i fixed it with the new static method)
+    public void addVelocity(Vector vector) {
         if (MathUtils.isNotFinite(vector)) {
             velocity = vector;
             return;
@@ -685,7 +673,7 @@ public class Bot extends ServerPlayer implements Terminator {
         return this.isOnFire();
     }
 
-    private void fallDamageCheck() { // TODO create a better bot event system in the future, also have bot.getAgent()
+    private void fallDamageCheck() {
         if (groundTicks != 0 && noFallTicks == 0 && !(oldVelocity.getY() >= -0.8) && isFallBlocked()) {
             actionController.recordDirectShortcut(this, BotActionState.FALL_CLUTCH,
                     "legacy-environment-fall-block", botInventory.getSelectedHotbarSlot());
@@ -761,7 +749,6 @@ public class Bot extends ServerPlayer implements Terminator {
         actionController.recordPrimaryAction(this, BotActionState.BLOCKING, "shield-start", 40);
         CombatDebugger.log(this, "shield-start", "off=" + offhandType());
         startUsingItem(InteractionHand.OFF_HAND);
-        //sendPacket(new ClientboundSetEntityDataPacket(getId(), entityData, true));
         sendPacket(new ClientboundSetEntityDataPacket(getId(), entityData.packDirty()));
     }
 
@@ -772,7 +759,6 @@ public class Bot extends ServerPlayer implements Terminator {
         scheduleBotTask(() -> this.blockUse = false, cooldown);
         CombatDebugger.log(this, "shield-stop",
                 "cooldown=" + cooldown + " wasBlocking=" + wasBlocking + " off=" + offhandType());
-        //sendPacket(new ClientboundSetEntityDataPacket(getId(), entityData, true));
         sendPacket(new ClientboundSetEntityDataPacket(getId(), entityData.packDirty()));
     }
 
@@ -791,7 +777,7 @@ public class Bot extends ServerPlayer implements Terminator {
     private void updateLocation() {
         double y;
 
-        MathUtils.clean(velocity); // TODO lag????
+        MathUtils.clean(velocity);
 
         if (isBotInWater()) {
             y = Math.min(velocity.getY() + 0.1, 0.1);
@@ -1123,8 +1109,6 @@ public class Bot extends ServerPlayer implements Terminator {
     private void dieCheck() {
         if (removeOnDeath) {
 
-            // I replaced HashSet with ConcurrentHashMap.newKeySet which creates a "ConcurrentHashSet"
-            // this should fix the concurrentmodificationexception mentioned above, I used the ConcurrentHashMap.newKeySet to make a "ConcurrentHashSet"
             plugin.getManager().remove(this);
 
             scheduleBotTask(this::removeBot, 20);
@@ -1282,12 +1266,12 @@ public class Bot extends ServerPlayer implements Terminator {
     private TrainingDamageClassification classifyTrainingDamage(DamageSource source, Entity attacker) {
         Entity direct = source == null ? null : source.getDirectEntity();
         String directType = direct == null ? "" : direct.getBukkitEntity().getType().name();
-        if (directType.contains("TRIDENT")) return trainingDamage("trident", "direct", directType, heldType(attacker));
+        if (directType.contains("TRIDENT")) return trainingDamage("trident", "direct", directType, heldMaterial(attacker).name());
         if (directType.contains("CRYSTAL") || directType.contains("TNT") || directType.contains("EXPLOSIVE")) {
-            return trainingDamage("explosive", "direct", directType, heldType(attacker));
+            return trainingDamage("explosive", "direct", directType, heldMaterial(attacker).name());
         }
         if (directType.contains("ARROW") || directType.contains("FIREBALL") || directType.contains("WIND_CHARGE")) {
-            return trainingDamage("projectile", "direct", directType, heldType(attacker));
+            return trainingDamage("projectile", "direct", directType, heldMaterial(attacker).name());
         }
 
         Material held = heldMaterial(attacker);
@@ -1312,10 +1296,6 @@ public class Bot extends ServerPlayer implements Terminator {
             return player.getBukkitEntity().getInventory().getItemInMainHand().getType();
         }
         return Material.AIR;
-    }
-
-    private static String heldType(Entity attacker) {
-        return heldMaterial(attacker).name();
     }
 
     private static TrainingDamageClassification trainingDamage(String bucket, String classificationSource, String directType, String heldType) {
@@ -1492,13 +1472,11 @@ public class Bot extends ServerPlayer implements Terminator {
     @Override
     public void swim() {
         getBukkitEntity().setSwimming(true);
-        registerPose(Pose.SWIMMING);
     }
 
     @Override
     public void sneak() {
         getBukkitEntity().setSneaking(true);
-        registerPose(Pose.CROUCHING);
     }
 
     @Override
@@ -1506,13 +1484,6 @@ public class Bot extends ServerPlayer implements Terminator {
         Player player = getBukkitEntity();
         player.setSneaking(false);
         player.setSwimming(false);
-
-        registerPose(Pose.STANDING);
-    }
-
-    private void registerPose(Pose pose) {
-        //entityData.set(new EntityDataAccessor<>(6, EntityDataSerializers.POSE), pose);
-        //sendPacket(new ClientboundSetEntityDataPacket(getId(), entityData, false));
     }
 
     @Override

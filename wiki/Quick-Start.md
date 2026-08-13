@@ -1,9 +1,7 @@
 # Quick Start
 
-> Legacy/reference notice:
-> This page may describe the old general TerminatorPlus strategy.
-> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
-> Use this page for technical reference only until it is verified against source code and runtime behavior.
+> See [Legacy Status](Legacy-Status) for this page's reference status and
+> [Current Strategy](Current-Strategy) for the current target.
 
 
 ## Spawn and Equip
@@ -34,30 +32,10 @@ movement path unless it was spawned by `/ai movement`.
 /ai stop
 ```
 
-Movement training assigns weighted loadouts automatically from
-`ai.training.loadout-mix`. The default `movement_balanced` mix keeps crystal,
-anchor, and all-chaos kits low-weight while still sampling them. You do not
-need to put `movement` in the command; empty mode already means
-movement-controller training.
-
-By default each generation round is capped at 1 minute by
-`ai.training.max-round-minutes`. Add a final minute value to override it for one
-session. Because the optional arguments are positional, keep `movement` or an
-options string in the mode slot when you pass a minute override:
-
-```text
-/ai reinforcement 120 TrainBot Steve movement 5
-```
-
-To train a specialist:
-
-```text
-/ai reinforcement 120 TrainBot Steve family=mace:mix=mace_curriculum
-```
-
-Mixed mode updates every eligible family represented in the loadout mix, but
-only from bots that captured matching route samples for that family. Curriculum
-mode focuses all candidates on the configured family brain.
+Movement training defaults to the movement-controller mode and uses the
+configured weighted loadout mix. See [AI Training](AI-Training) for modes,
+curriculum families, and command options, and [Configuration](Configuration) for
+the defaults.
 
 ## Spawn Movement-Bank Bots
 
@@ -78,14 +56,9 @@ only; `CombatDirector` remains responsible for all combat actions.
 Reports are written under `plugins/TerminatorPlus/ai/movement/evaluations/` and
 include seed/scenario metadata, schema versions, loadout distribution, active
 branch-family distribution, fallback counts, route switch probes, and reward
-component summaries.
+component summaries. See [Movement Brain Bank](Movement-Brain-Bank) for the full
+report field and variant reference.
 
 ## Next
 
-- [Commands](Commands)
-- [Loadouts](Loadouts)
-- [Combat Behaviors](Combat-Behaviors)
-- [Movement Network](Movement-Network)
-- [Movement Brain Bank](Movement-Brain-Bank)
-- [AI Training](AI-Training)
-
+See [Home](Home) for the full wiki index.

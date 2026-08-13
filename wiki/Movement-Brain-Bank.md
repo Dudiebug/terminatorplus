@@ -1,9 +1,7 @@
 # Movement Brain Bank
 
-> Legacy/reference notice:
-> This page may describe the old general TerminatorPlus strategy.
-> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
-> Use this page for technical reference only until it is verified against source code and runtime behavior.
+> See [Legacy Status](Legacy-Status) for this page's reference status and
+> [Current Strategy](Current-Strategy) for the current target.
 
 
 TerminatorPlus movement AI is split into combat ownership and movement ownership.
@@ -53,6 +51,7 @@ ai/movement/brains/explosive_survival.json
 ai/movement/brains/projectile_ranged.json
 ```
 
+
 The manifest records the manifest schema version, observation schema hash, action
 schema hash, route table version, default brain, route-to-file table, training
 build version, and legacy import metadata. Each brain file stores its own family,
@@ -65,9 +64,9 @@ specialist files exist. Bad manifests or bad brain files are backed up or
 quarantined according to config, and the loader keeps any valid subset plus a
 safe fallback.
 
-## Commands
+## Command behavior
 
-`/ai brain status|load|save|reset` is bank-aware.
+See [Commands](Commands) for full `/ai` syntax. Bank-specific behavior:
 
 - `status` shows manifest/schema hashes, route table version, fallback state,
   missing optional experts, loadout mix, curriculum family, and active session.
@@ -76,68 +75,11 @@ safe fallback.
   name is supplied.
 - `reset` creates a fresh `general_fallback` bank and backs up existing files.
 
-`/ai movement <amount> <name> [skin] [loc]` spawns fighting bots that use the
-loaded movement bank. They are not training bots; `CombatDirector` still handles
-combat.
+## Training
 
-`/ai reinforcement ...` defaults to movement-controller training, automatically
-samples weighted named loadouts for training bots, and records assigned
-loadout/family telemetry. With the default config, each generation is capped at
-1 minute by `ai.training.max-round-minutes`. Use `legacy` explicitly for the old
-full-replacement training pipeline.
-
-## Training Mixes
-
-The default movement-training mix is `movement_balanced`:
-
-```yaml
-sword: 12
-axe: 12
-smp: 12
-pot: 8
-mace: 10
-spear: 8
-trident: 8
-windcharge: 6
-skydiver: 5
-hybrid: 6
-vanilla: 5
-pvp: 3
-crystalpvp: 3
-anchorbomb: 2
-```
-
-`pvp + crystalpvp + anchorbomb` total 8%. That keeps explosive survival visible
-without letting crystal/anchor chaos dominate every generation.
-
-Curriculum mixes exist for `melee`, `mace`, `trident`, `mobility`, and
-`explosive_survival`. Set `ai.training.curriculum-family` to train a specialist
-family. Leave it as `general_fallback` for mixed training.
-
-Mixed training seeds each bot from its assigned loadout family, scores the bot
-with the reward profile for the movement family it actually used, and updates
-every eligible specialist brain represented in the round. A specialist is saved
-only when matching route samples were captured for that family. Curriculum mode
-forces all candidates to update the configured family brain.
-
-## Reward Profiles
-
-Reward scoring is family-specific:
-
-- `general_fallback`: balanced damage delta, survival, range control, low
-  fallback rate, low route thrash.
-- `melee`: melee threat range, legal crit/sprint-hit setup, hit conversion.
-- `mace`: charge/launch/airborne/smash conversion and low self-fall damage.
-- `trident_ranged`: charge completion, line of sight, throw range, hit rate.
-- `spear_melee`: close trident pressure and stable melee spacing.
-- `mobility`: gap close, escape from bad range, vertical setup, safe handoff.
-- `explosive_survival`: target explosive damage, safe blast spacing, escape,
-  low self-damage.
-- `projectile_ranged`: line-of-sight control, lateral strafing, projectile
-  hit/interrupt success.
-
-Rollout exports include per-family totals and component keys where training has
-recorded them.
+See [AI Training](AI-Training) for loadout mixes, curriculum families, and
+reward profiles. The authoritative config keys and defaults are in
+[Configuration](Configuration).
 
 ## Evaluation
 
@@ -185,36 +127,10 @@ rate, mobility gap-close success, safe explosive execution, and projectile
 hit/interrupt success are present in the JSON schema but remain `null` in
 report-only exports until a live arena evaluator records them.
 
-## Config Keys
+## Configuration
 
-```yaml
-ai:
-  movement:
-    enabled: true
-    mode: movement_controller
-    layer-shape: [37, 32, 16, 8]
-    legacy-brain-path: ai/brain.json
-    bank:
-      enabled: true
-      manifest-path: ai/movement/manifest.json
-      brains-directory: ai/movement/brains
-      fallback-brain-name: general_fallback
-      autosave-best-brain: true
-      save-only-improved-brain: true
-      quarantine-bad-files: true
-      legacy-import-behavior: import-compatible-or-reset
-      debug-logging: false
-  training:
-    max-round-minutes: 1
-    loadout-mix: movement_balanced
-    curriculum-family: general_fallback
-    loadout-mixes: {}
-  evaluation:
-    default-variant: branch_family_latched
-    default-scenario: all
-    default-seeds: [1337, 7331, 424242]
-    export-directory: ai/movement/evaluations
-```
+See [Configuration](Configuration) for movement-bank, training, and evaluation
+keys and defaults.
 
 ## Regression Guard
 
@@ -226,4 +142,3 @@ banned combat-authority calls. It is wired into `check` and therefore into
 .\gradlew.bat checkMovementOnlyContract -q
 .\gradlew.bat build -q
 ```
-

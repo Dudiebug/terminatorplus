@@ -21,53 +21,9 @@ map.
 | Old wiki strategy tone | Talks like a wide feature plugin rather than a narrow duel bot | No, as primary truth | Archive/relabel first |
 | Some advanced tactical overlays | Broad combat toolbox rather than strict fundamentals-first baseline | Yes today | Keep runtime, later classify as optional or modular |
 
-## How to use this map correctly
+## Interpretation
 
-The right interpretation is not:
-
-- "legacy means remove it now"
-
-The right interpretation is:
-
-- some subsystems clearly reflect an older broad-plugin design
-- many of them are still on the runtime path
-- the first safe step is to archive them from the default strategy/docs, not
-  from code
-
-## Strong examples of current strategy mismatch
-
-The clearest mismatch areas are:
-
-- broad non-player target goals
-- multi-bot/admin sandbox command surfaces
-- loadout-mix and variety-heavy behavior
-- broad wiki pages that read as if all these features are equally central
-
-Those are the cleanest first archive candidates because they can be
-reclassified in docs without risking runtime breakage.
-
-## Runtime-critical legacy is still real
-
-The biggest mistake a future maintainer could make is assuming that because a
-class is named `Legacy*`, it is already dormant.
-
-That is false here.
-
-Examples:
-
-- `LegacyAgent` is still the live top-level orchestrator
-- `LegacyBlockCheck` still protects survival/clutch behavior
-- `LegacyMats` still influences non-legacy code paths too
-
-So the plugin currently contains legacy-shaped code that is also runtime-core.
-
-## The practical archive lesson
-
-The safest archive approach is:
-
-- archive old strategy presentation first
-- isolate broad/admin/training features in docs
-- keep runtime legacy systems visible as protected dependencies
-
-That gives the repo a more honest narrative without pretending migration is
-already finished.
+`legacy` is a history/strategy label, not a deletion signal: `LegacyAgent`,
+`LegacyBlockCheck`, and `LegacyMats` remain runtime-relevant. Use this table
+with the [status matrix](./14-active-vs-legacy-vs-unused-matrix.md) and archive
+docs before considering code changes.

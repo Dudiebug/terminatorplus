@@ -1,9 +1,7 @@
 # Commands
 
-> Legacy/reference notice:
-> This page may describe the old general TerminatorPlus strategy.
-> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
-> Use this page for technical reference only until it is verified against source code and runtime behavior.
+> See [Legacy Status](Legacy-Status) for this page's reference status and
+> [Current Strategy](Current-Strategy) for the current target.
 
 
 All bot management commands live under `/bot` (alias `/npc`). AI training is under `/ai`. Environment configuration is under `/botenvironment` (alias `/botenv`). Plugin info is under `/terminatorplus` (alias `/tplus`).
@@ -27,7 +25,7 @@ Open a 54-slot chest GUI that mirrors the bot's inventory. Edits save on close. 
 ### `/bot give <item> [bot-name] [slot]`
 - One arg: sets the default item for every bot.
 - Two args: drop the item into the first empty hotbar slot on the named bot.
-- Three args: place into the specified inventory slot (0--8 hotbar, 9--35 storage, 36 boots, 37 legs, 38 chest, 39 head, 40 offhand).
+- Three args: place into the specified inventory slot. See the [Inventory GUI slot map](Inventory-GUI#slot-map).
 
 ### `/bot armor <tier>`
 Apply an armor tier to every bot. Tiers: `none`, `leather`, `chain`, `gold`, `iron`, `diamond`, `netherite`.

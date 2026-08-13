@@ -43,10 +43,6 @@ public class MCLogs {
         String maxMemory = String.format("%.2f", (double) Runtime.getRuntime().maxMemory() / 1024 / 1024) + "MB";
 
         String info = String.format(FORMAT, pluginVersion, serverVersion, serverSoftware, serverPlugins, serverTPS, freeMemory, maxMemory, TerminatorPlus.isCorrectVersion(), TerminatorPlus.REQUIRED_VERSION);
-        return pasteText(info);
-    }
-
-    private static String pasteText(String text) throws IOException {
         URL url = new URL("https://api.mclo.gs/1/log"); // application/x-www-form-urlencoded
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("POST");
@@ -54,7 +50,7 @@ public class MCLogs {
         connection.setDoOutput(true);
 
         try (OutputStream os = connection.getOutputStream()) {
-            os.write(("content=" + text).getBytes());
+            os.write(("content=" + info).getBytes());
         }
 
         String response = new BufferedReader(new InputStreamReader(connection.getInputStream())).readLine();

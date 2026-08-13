@@ -20,14 +20,13 @@ import java.util.List;
  * detonate it. The behavior is deliberately conservative so the bot does not
  * spend resources or mutate terrain unless the final explosion is survivable.
  */
-public final class CrystalBehavior implements WeaponBehavior {
+public final class CrystalBehavior {
 
     public static final String COOLDOWN_KEY = "crystal";
     public static final double MIN_DISTANCE = 4.5;
     public static final double MAX_DISTANCE = 7.0;
     private static final int COOLDOWN = 30;
 
-    @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
         int alive = bot.getAliveTicks();
         if (distance < MIN_DISTANCE || distance > MAX_DISTANCE) {

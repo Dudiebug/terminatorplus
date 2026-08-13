@@ -4,7 +4,6 @@ plugins {
     id("net.nuggetmc.java-conventions")
 }
 
-group = "net.nuggetmc"
 description = "TerminatorPlus"
 
 java {

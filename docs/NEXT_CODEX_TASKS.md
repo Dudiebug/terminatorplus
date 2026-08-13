@@ -13,8 +13,6 @@ compatibility redirect.
 - `CLAUDE.md`
 - `README.md`
 - `docs/WORKFLOW.md`
-- `docs/SUBAGENTS.md`
-- `docs/IMPLEMENTATION_PROMPTS.md`
 - `docs/DEPRECATION_PLAN.md`
 - `docs/DUEL_CORE_V2.md`
 - `docs/CODEBASE_ARCHIVE_CANDIDATES.md`

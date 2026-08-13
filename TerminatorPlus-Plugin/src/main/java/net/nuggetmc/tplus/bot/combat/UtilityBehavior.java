@@ -10,14 +10,13 @@ import org.bukkit.util.Vector;
  * Low-priority anti-mobility: if the target is moving away from the bot
  * at a good clip, drop a cobweb at their feet to slow them down.
  */
-public final class UtilityBehavior implements WeaponBehavior {
+public final class UtilityBehavior {
 
     public static final String COOLDOWN_KEY = "cobweb";
     private static final int COOLDOWN = 30;
     private static final double MAX_DISTANCE = 4.5;
     private static final double FLEE_VELOCITY = 0.25;
 
-    @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
         int alive = bot.getAliveTicks();
         if (distance > MAX_DISTANCE) {

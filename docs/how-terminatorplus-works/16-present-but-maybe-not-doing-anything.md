@@ -33,25 +33,8 @@ Terms used here:
 | Old wiki claims around broad behavior | Source and current docs direction do not fully match some old wiki pages | Documentation drift from prior strategy | Page-by-page wiki/source audit | Archive/relabel docs first |
 | Mixed-mode training strings about fallback update behavior | Some user-facing text appears behind current persistence behavior | String/docs drift rather than necessarily dead code | Run training flow and inspect saved bank outputs | Correct docs and messages later |
 
-## What not to do with this list
+## Next step
 
-Do not:
-
-- mass-delete these items
-- assume they are harmless just because they appear unused
-- assume they are safe to remove without runtime/build/reference proof
-
-In this repo, a surprising amount of behavior is mode-gated, command-gated, or
-admin-gated rather than obviously dead.
-
-## Best next use of this list
-
-The right follow-up for this list is:
-
-1. docs reclassification
-2. explicit reference search tickets
-3. runtime proof tasks for suspicious command or behavior surfaces
-4. only then possible cleanup work
-
-This keeps the repo honest without turning uncertainty into accidental
-deletion.
+Treat each row as a proof queue: run the reference search or runtime exercise
+named in the table before considering cleanup; until then, leave uncertain code
+in place.

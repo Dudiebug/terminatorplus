@@ -9,26 +9,15 @@ import org.bukkit.entity.WindCharge;
 import org.bukkit.util.Vector;
 
 /**
- * Wind charges have two roles for bots:
- * <ul>
- *   <li><b>Combat zoning</b> ({@link #ticksFor}): lobbed at the target's eye for
- *       knockback when no trident is available. Runs in the combat dispatch path
- *       at 4–30 block range.</li>
- *   <li><b>Self-propulsion</b> ({@link #tickMovementBoost}): deliberately thrown to
- *       launch the bot in a calculated direction (up over a ledge, down onto a
- *       target, or forward across a flat gap). Runs only OUTSIDE combat range,
- *       uses a short windup so the throw reads as a deliberate build, and is
- *       paced by a long cooldown (~6s) so the bot isn't constantly blasting itself.</li>
- * </ul>
+ * Wind charges are deliberately thrown to launch the bot in a calculated direction
+ * (up over a ledge, down onto a target, or forward across a flat gap). This runs
+ * only outside combat range, uses a short windup so the throw reads as a deliberate
+ * build, and is paced by a long cooldown so the bot is not constantly blasting itself.
  */
-public final class WindChargeBehavior implements WeaponBehavior {
+public final class WindChargeBehavior {
 
-    // -- Combat (offensive) wind charge --
+    // Shared with deliberate offensive wind-charge plays.
     public static final String COOLDOWN_KEY = "windcharge";
-    private static final int COOLDOWN = 55;
-    private static final double MIN_DISTANCE = 4.0;
-    private static final double MAX_DISTANCE = 30.0;
-    private static final double SPEED = 1.6;
 
     // -- Self-propulsion wind charge --
     public static final String BOOST_COOLDOWN_KEY = "windcharge_boost";
@@ -42,48 +31,6 @@ public final class WindChargeBehavior implements WeaponBehavior {
     private static final double BOOST_MAX_DISTANCE = 28.0;
     /** Vertical delta that triggers an up/down launch instead of a horizontal one. */
     private static final double VERTICAL_TRIGGER = 3.0;
-
-    @Override
-    public int ticksFor(Bot bot, LivingEntity target, double distance) {
-        int alive = bot.getAliveTicks();
-        if (distance < MIN_DISTANCE || distance > MAX_DISTANCE) {
-            CombatDebugger.log(bot, "wind-skip", "reason=range dist=" + String.format("%.2f", distance));
-            return 0;
-        }
-        if (!bot.getBotCooldowns().ready(COOLDOWN_KEY, alive)) {
-            CombatDebugger.log(bot, "wind-skip", "reason=cooldown left=" + bot.getBotCooldowns().remaining(COOLDOWN_KEY, alive));
-            return 0;
-        }
-        int slot = bot.getBotInventory().findMainInventory(Material.WIND_CHARGE);
-        if (slot < 0) {
-            CombatDebugger.log(bot, "wind-skip", "reason=no-wind-charge");
-            return 0;
-        }
-        slot = bot.getBotInventory().selectMainInventorySlot(slot);
-        if (slot < 0) {
-            CombatDebugger.log(bot, "wind-skip", "reason=no-selectable-slot");
-            return 0;
-        }
-
-        Location spawn = bot.getLocation().add(0, bot.getBukkitEntity().getEyeHeight() - 0.1, 0);
-        Vector aim = target.getEyeLocation().toVector().subtract(spawn.toVector()).normalize();
-
-        bot.faceLocation(target.getLocation());
-        bot.punch();
-        bot.getActionController().recordDirectShortcut(bot, BotActionState.USING_WIND_CHARGE,
-                "direct-windcharge-spawn", slot);
-
-        spawn.getWorld().spawn(spawn, WindCharge.class, w -> {
-            w.setVelocity(aim.multiply(SPEED));
-            w.setShooter(bot.getBukkitEntity());
-        });
-
-        spawn.getWorld().playSound(spawn, Sound.ENTITY_WIND_CHARGE_THROW, 1f, 1f);
-        CombatDebugger.log(bot, "wind-throw", "mode=combat dist=" + String.format("%.2f", distance));
-        bot.getBotInventory().decrementMainInventorySlot(slot, 1);
-        bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, alive);
-        return COOLDOWN;
-    }
 
     /**
      * Self-boost: plans a calculated wind-charge throw and fires it after a short windup.

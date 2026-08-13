@@ -35,12 +35,6 @@ import java.util.Random;
 
 public class AICommand extends CommandInstance implements AIManager {
 
-    /*
-     * ideas
-     * ability to export neural network data to a text file, and also load from them
-     * maybe also have a custom extension like .tplus and encrypt it in base64
-     */
-
     private final TerminatorPlus plugin;
     private final BotManagerImpl manager;
     private final BukkitScheduler scheduler;
@@ -75,34 +69,8 @@ public class AICommand extends CommandInstance implements AIManager {
             sender.sendMessage(ChatColor.RED + "Usage: /ai random <amount> <name> [skin] [spawnLoc: [player Player]/[x,y,z]]");
             return;
         }
-        Location location = (sender instanceof Player) ? ((Player) sender).getLocation() : new Location(Bukkit.getWorlds().get(0), 0, 0, 0);
-        if (loc != null && !loc.isEmpty()) {
-            Player player = Bukkit.getPlayer(loc);
-            if (player != null) {
-                location = player.getLocation();
-            } else {
-                String[] split = loc.split(" ");
-                if (split.length >= 3) {
-                    try {
-                        double x = Double.parseDouble(split[0]);
-                        double y = Double.parseDouble(split[1]);
-                        double z = Double.parseDouble(split[2]);
-                        World world = Bukkit.getWorld(split.length >= 4 ? split[3] : location.getWorld().getName());
-                        location = new Location(world, x, y, z);
-                    } catch (NumberFormatException e) {
-                        sender.sendMessage("The location '" + ChatColor.YELLOW + loc + ChatColor.RESET + "' is not valid!");
-                        return;
-                    }
-                } else {
-                    sender.sendMessage("The location '" + ChatColor.YELLOW + loc + ChatColor.RESET + "' is not valid!");
-                    return;
-                }
-            }
-        } else {
-            if (!(sender instanceof Player)) {
-                sender.sendMessage("Spawning bot at 0, 0, 0 in world " + location.getWorld().getName() + " because no location was specified.");
-            }
-        }
+        Location location = parseSpawnLocation(sender, loc);
+        if (location == null) return;
         manager.createBots(sender, name, skin, amount, NeuralNetwork.RANDOM, location);
     }
 
@@ -380,19 +348,16 @@ public class AICommand extends CommandInstance implements AIManager {
         }
     }
 
-    @Autofill
     public List<String> infoAutofill(CommandSender sender, String[] args) {
         return args.length == 2 ? manager.fetchNames() : new ArrayList<>();
     }
 
-    @Autofill
     public List<String> brainAutofill(CommandSender sender, String[] args) {
         if (args.length == 2) return new ArrayList<>(List.of("status", "load", "save", "reset"));
         if (args.length == 3 && args[1].equalsIgnoreCase("save")) return manager.fetchNames();
         return new ArrayList<>();
     }
 
-    @Autofill
     public List<String> evaluateAutofill(CommandSender sender, String[] args) {
         if (args.length == 2) {
             List<String> values = new ArrayList<>();
@@ -425,7 +390,7 @@ public class AICommand extends CommandInstance implements AIManager {
                     "Skipped " + family + " autosave; best fitness did not improve.");
         }
 
-        movementBank = movementBankWithFamily(config, family, network, metadata, rolloutStats, "training-session");
+        movementBank = movementBankWithBrain(config, family, network, metadata, rolloutStats, "training-session");
         movementBrain = movementBank == null ? null : movementBank.fallbackNetwork();
         movementBrainMetadata = movementBank == null
                 ? MovementBrainPersistence.TrainingMetadata.manual()
@@ -435,8 +400,8 @@ public class AICommand extends CommandInstance implements AIManager {
                     "Updated in-memory " + family + " movement brain; autosave is disabled.");
         }
 
-        MovementBrainPersistence.BankSaveResult result = saveFamilyIntoBank(config, family, network, metadata,
-                rolloutStats, "training-autosave");
+        MovementBrainPersistence.BankSaveResult result = MovementBrainPersistence.saveBank(plugin, config,
+                movementBankWithBrain(config, family, network, metadata, rolloutStats, "training-autosave"));
         if (!result.saved()) {
             return new MovementBrainPersistence.SaveFeedback(false,
                     "Movement brain autosave failed: " + ChatColor.RED + result.message());
@@ -480,7 +445,8 @@ public class AICommand extends CommandInstance implements AIManager {
         MovementTrainingConfig config = movementConfig();
         MovementBrainPersistence.BankSaveResult result = bankToSave != null && botName != null && !botName.isBlank()
                 ? MovementBrainPersistence.saveBank(plugin, config, bankToSave)
-                : saveFallbackIntoBank(config, brain, metadata, "manual-save");
+                : MovementBrainPersistence.saveBank(plugin, config,
+                        movementBankWithBrain(config, MovementBrainBank.FALLBACK_BRAIN_NAME, brain, metadata, null, "manual-save"));
         if (!result.saved()) {
             sender.sendMessage(ChatColor.RED + "Failed to save movement brain: " + result.message());
             return;
@@ -493,57 +459,7 @@ public class AICommand extends CommandInstance implements AIManager {
         sender.sendMessage("Saved movement brain bank to " + ChatColor.YELLOW + result.manifestPath() + ChatColor.RESET + ".");
     }
 
-    private MovementBrainPersistence.BankSaveResult saveFallbackIntoBank(
-            MovementTrainingConfig config,
-            MovementNetwork brain,
-            MovementBrainPersistence.TrainingMetadata metadata,
-            String source
-    ) {
-        MovementBrainBank base = movementBank != null
-                ? movementBank
-                : MovementBrainBank.empty(config.fallbackBrainName(), plugin.getDescription().getVersion());
-        MovementBrainBank.Brain fallback = new MovementBrainBank.Brain(
-                MovementBrainBank.FALLBACK_BRAIN_NAME,
-                MovementBrainBank.FALLBACK_BRAIN_NAME,
-                brain,
-                metadata == null ? MovementBrainPersistence.TrainingMetadata.manual() : metadata,
-                MovementBrainBank.NormalizationStats.none(),
-                MovementBrainBank.RolloutStats.empty(),
-                source,
-                plugin.getDescription().getVersion()
-        );
-        MovementBrainBank updated = base.withBrain(fallback);
-        return MovementBrainPersistence.saveBank(plugin, config, updated);
-    }
-
-    private MovementBrainPersistence.BankSaveResult saveFamilyIntoBank(
-            MovementTrainingConfig config,
-            String familyId,
-            MovementNetwork brain,
-            MovementBrainPersistence.TrainingMetadata metadata,
-            MovementBrainBank.RolloutStats rolloutStats,
-            String source
-    ) {
-        MovementBrainBank base = movementBank != null
-                ? movementBank
-                : MovementBrainBank.empty(config.fallbackBrainName(), plugin.getDescription().getVersion());
-        String family = MovementTrainingConfig.normalizeFamilyId(familyId);
-        String brainName = brainNameForFamily(family);
-        MovementBrainBank.Brain familyBrain = new MovementBrainBank.Brain(
-                brainName,
-                family,
-                brain,
-                metadata == null ? MovementBrainPersistence.TrainingMetadata.manual() : metadata,
-                MovementBrainBank.NormalizationStats.none(),
-                rolloutStats == null ? MovementBrainBank.RolloutStats.empty() : rolloutStats,
-                source,
-                plugin.getDescription().getVersion()
-        );
-        MovementBrainBank updated = base.withBrain(familyBrain);
-        return MovementBrainPersistence.saveBank(plugin, config, updated);
-    }
-
-    private MovementBrainBank movementBankWithFamily(
+    private MovementBrainBank movementBankWithBrain(
             MovementTrainingConfig config,
             String familyId,
             MovementNetwork brain,
@@ -621,11 +537,6 @@ public class AICommand extends CommandInstance implements AIManager {
         if (result.backupPath() != null) {
             sender.sendMessage("Previous brain backed up to " + ChatColor.YELLOW + result.backupPath() + ChatColor.RESET + ".");
         }
-    }
-
-    private MovementNetwork ensureMovementBrain(CommandSender sender) {
-        MovementBrainBank bank = ensureMovementBank(sender);
-        return bank == null ? null : bank.fallbackNetwork();
     }
 
     private MovementBrainBank ensureMovementBank(CommandSender sender) {

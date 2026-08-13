@@ -23,11 +23,9 @@ import java.util.Set;
 
 public class LegacyBlockCheck {
 
-    private final Plugin plugin;
     private final LegacyAgent agent;
 
     public LegacyBlockCheck(LegacyAgent agent, Plugin plugin) {
-        this.plugin = plugin;
         this.agent = agent;
     }
 
@@ -52,7 +50,7 @@ public class LegacyBlockCheck {
         return bot.getLocation().distanceSquared(target.getLocation()) <= 16.0; // 4-block radius
     }
 
-    private void placeFinal(Terminator bot, LivingEntity player, Location loc) {
+    private void placeFinal(Location loc) {
         if (loc.getBlock().getType() != Material.COBBLESTONE) {
             for (Player all : Bukkit.getOnlinePlayers())
                 all.playSound(loc, Sound.BLOCK_STONE_PLACE, SoundCategory.BLOCKS, 1, 1);
@@ -76,9 +74,9 @@ public class LegacyBlockCheck {
         Block under = loc.clone().add(0, -1, 0).getBlock();
 
         if (LegacyMats.SPAWN.contains(under.getType())) {
-            placeFinal(bot, player, loc.clone().add(0, -1, 0));
+            placeFinal(loc.clone().add(0, -1, 0));
             agent.scheduleLegacyTaskLater(() -> {
-                placeFinal(bot, player, block.getLocation());
+                placeFinal(block.getLocation());
             }, 2);
         }
 
@@ -87,15 +85,10 @@ public class LegacyBlockCheck {
                 loc.clone().add(0, 0, 1).getBlock(),
                 loc.clone().add(0, 0, -1).getBlock()));
 
-        boolean a = false;
-        for (Block side : face) {
-            if (!LegacyMats.SPAWN.contains(side.getType())) {
-                a = true;
-            }
-        }
+        boolean a = face.stream().anyMatch(side -> !LegacyMats.SPAWN.contains(side.getType()));
 
         if (a) {
-            placeFinal(bot, player, block.getLocation());
+            placeFinal(block.getLocation());
             return;
         }
 
@@ -104,17 +97,12 @@ public class LegacyBlockCheck {
                 loc.clone().add(0, -1, 1).getBlock(),
                 loc.clone().add(0, -1, -1).getBlock()));
 
-        boolean b = false;
-        for (Block side : edge) {
-            if (!LegacyMats.SPAWN.contains(side.getType())) {
-                b = true;
-            }
-        }
+        boolean b = edge.stream().anyMatch(side -> !LegacyMats.SPAWN.contains(side.getType()));
 
         if (b && LegacyMats.SPAWN.contains(under.getType())) {
-            placeFinal(bot, player, loc.clone().add(0, -1, 0));
+            placeFinal(loc.clone().add(0, -1, 0));
             agent.scheduleLegacyTaskLater(() -> {
-                placeFinal(bot, player, block.getLocation());
+                placeFinal(block.getLocation());
             }, 2);
             return;
         }
@@ -130,7 +118,7 @@ public class LegacyBlockCheck {
 
             Block b1 = loc.clone().add(1, -1, 0).getBlock();
             if (LegacyMats.SPAWN.contains(b1.getType())) {
-                placeFinal(bot, player, b1.getLocation());
+                placeFinal(b1.getLocation());
             }
 
             t = true;
@@ -139,7 +127,7 @@ public class LegacyBlockCheck {
 
             Block b1 = loc.clone().add(-1, -1, 0).getBlock();
             if (LegacyMats.SPAWN.contains(b1.getType())) {
-                placeFinal(bot, player, b1.getLocation());
+                placeFinal(b1.getLocation());
             }
 
             t = true;
@@ -151,21 +139,21 @@ public class LegacyBlockCheck {
                 if (LegacyMats.SPAWN.contains(b2.getType())) {
                     for (Player all : Bukkit.getOnlinePlayers())
                         all.playSound(loc, Sound.BLOCK_STONE_PLACE, SoundCategory.BLOCKS, 1, 1);
-                    placeFinal(bot, player, b2.getLocation());
+                    placeFinal(b2.getLocation());
                 }
             }, 1);
 
             agent.scheduleLegacyTaskLater(() -> {
                 for (Player all : Bukkit.getOnlinePlayers())
                     all.playSound(loc, Sound.BLOCK_STONE_PLACE, SoundCategory.BLOCKS, 1, 1);
-                placeFinal(bot, player, block.getLocation());
+                placeFinal(block.getLocation());
             }, 3);
             return;
         }
 
         for (Player all : Bukkit.getOnlinePlayers())
             all.playSound(loc, Sound.BLOCK_STONE_PLACE, SoundCategory.BLOCKS, 1, 1);
-        placeFinal(bot, player, block.getLocation());
+        placeFinal(block.getLocation());
     }
     
     public boolean tryPreMLG(Terminator bot, Location botLoc) {
@@ -202,7 +190,6 @@ public class LegacyBlockCheck {
             		Material type = below.getBlock().getType();
             		if (LegacyMats.isSolid(type) || LegacyMats.canStandOn(type))
             			return false;
-            		below = below.clone();
             	}
             	below.setY(bot.getLocation().getBlockY() - blocksBelow);
             	below2Set.add(below.getBlock().getLocation());

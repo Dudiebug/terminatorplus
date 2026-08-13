@@ -176,15 +176,7 @@ truth.
 
 ## Runtime data locations
 
-Documented runtime write locations include:
-
-- `plugins/TerminatorPlus/presets/*.yml`
-- `plugins/TerminatorPlus/ai/movement/manifest.json`
-- `plugins/TerminatorPlus/ai/movement/brains/*.json`
-- `plugins/TerminatorPlus/ai/movement/evaluations/`
-- `plugins/TerminatorPlus/debug/*.log`
-
-These paths matter because they show which systems are not just theoretical.
-If a feature persists data or logs into the plugin data folder, it is usually a
-real maintained subsystem, even if it is not part of the primary current
-strategy.
+See [13-runtime-config-data-files.md](./13-runtime-config-data-files.md) for
+the canonical path map. The module-level distinction is that plugin-managed
+persistent data and debug outputs are real runtime surfaces, but their
+presence alone does not make them part of the primary duel strategy.

@@ -41,7 +41,7 @@ The script pushes all four branches and creates four pre-release releases on `Du
   - `Connection.send(Packet, PacketSendListener, ...)` → `ChannelFutureListener`.
   - `ChunkPos` became a record; `.x` / `.z` → `.x()` / `.z()`.
   - `org.apache.commons.lang.StringUtils` no longer shipped; replaced with `String.join`.
-  - `com.googlecode.json-simple:json-simple` dropped from transitive paper-api deps on 1.21.11+; declared explicitly.
+  - User-cache parsing uses Paper's Gson API; the standalone `json-simple` dependency is no longer needed.
 - **MockConnection** reflection rewritten to resolve `packetListener` / `disconnectListener` by field type + declaration order, so it works on both Spigot-reobf'd (1.21.x) and Mojang-mapped (26.x) runtimes without hardcoded obf letters.
 
 ## Not tested

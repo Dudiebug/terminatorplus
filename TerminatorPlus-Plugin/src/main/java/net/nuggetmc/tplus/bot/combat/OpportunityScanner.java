@@ -68,55 +68,6 @@ import java.util.Locale;
  * <p><b>Stateless.</b> Per-bot state lives on Bot (CombatState, Cooldowns).
  * The scanner instance can be shared across all bots.
  *
- * <p><b>Opportunity catalog (37 plays):</b>
- * <pre>
- *   TIER S -- game-enders
- *     1.  CRYSTAL_TRAP        airborne enemy + crystal kit
- *     2.  KNOCKUP_CRYSTAL     ground enemy + wind + crystal (chains into #1)
- *     3.  HIT_CRYSTAL         KB-sword + crystal (no wind needed)
- *     4.  LEDGE_CRYSTAL       enemy near void + crystal (push them off)
- *     5.  STUN_SLAM           shielded enemy + axe + mace (disable then smash)
- *     6.  AERIAL_STRIKE       open sky + wind + elytra + trident
- *     7.  PEARL_FLASH_CRYSTAL pearl + crystal (i-frame teleport into burst)
- *     8.  FACE_PLACE          enemy throwing pearl + obsidian + crystal
- *
- *   TIER A -- cobweb traps and tipped arrows
- *     9.  HEAD_WEB            target near wall + cobweb (head-locks them)
- *    10.  HIT_WEB             airborne target + cobweb at landing prediction
- *    11.  FOOT_PIN            sprinting-away target + cobweb at feet
- *    12.  WEB_BUBBLE          low HP + 2 cobwebs (self-encase to heal)
- *    13.  WEB_DRAIN           target in cobweb + lava bucket (deny escape)
- *    14.  TIPPED_HARMING      crossbow/bow + harming arrows + close
- *    15.  TIPPED_SLOWNESS     bow + slowness arrows + fleeing target
- *    16.  TIPPED_WEAKNESS     bow + weakness arrows + outgear scenario
- *    17.  TIPPED_SLOW_FALL    bow + slow-fall arrows + airborne target
- *    18.  TIPPED_POISON       bow + poison arrows + extended fight
- *    19.  CROSSBOW_PIERCE     piercing crossbow + shielded target
- *
- *   TIER B -- interrupts, splash potions, self-buffs
- *    20.  INTERRUPT_EAT       enemy eating + wind/projectile/splash
- *    21.  INTERRUPT_BOW       enemy drawing bow + wind/projectile
- *    22.  INTERRUPT_POTION    enemy drinking potion + wind/projectile
- *    23.  SPLASH_HEAL_SELF    bot low HP + healing splash potion
- *    24.  SPLASH_HARMING      target low + harming splash + close
- *    25.  SPLASH_POISON       extended fight + poison splash
- *    26.  SPLASH_WEAKNESS     close range + weakness splash
- *    27.  SPLASH_SLOWNESS     pursuing + slowness splash
- *    28.  STRENGTH_BUFF       pre-engage + strength potion
- *    29.  SPEED_BUFF          long-range engage + speed potion
- *    30.  FIRE_RES_BUFF       lava/fire nearby + fire-res potion
- *    31.  FIREWORK_BLAST      crossbow + firework rocket
- *
- *   TIER C -- terrain plays
- *    32.  LAVA_PIN            close + lava bucket + non-water target
- *    33.  FIRE_ZONE           flint+steel/fire charge area denial
- *    34.  WATER_DOUSE_SELF    bot on fire + water bucket
- *    35.  TNT_TRAP            target in cobweb + TNT + igniter
- *
- *   TIER D -- finisher and maintenance
- *    36.  FINISHER            target HP < 15% + closing tools
- *    37.  ARMOR_REPAIR        safe distance + XP bottle + low durability
- * </pre>
  */
 public final class OpportunityScanner {
 
@@ -352,7 +303,7 @@ public final class OpportunityScanner {
         int alive = bot.getAliveTicks();
 
         if (snap.targetBlocking && snap.distance <= MELEE_RANGE
-                && hasAxe(inv) && snap.botOnGround
+                && findAxeSlot(inv) >= 0 && snap.botOnGround
                 && bot.getBotCooldowns().ready(STUN_SLAM_CD, alive)
                 && BotCombatTiming.shouldPlanNormalMelee(bot, target)) {
             return ScannerPlan.of(ScannerPlay.STUN_SLAM);
@@ -861,7 +812,7 @@ public final class OpportunityScanner {
         // blocking, keep trying to put an axe hit through instead of swapping
         // to mace/crystal/wind and letting the shield soak the pressure.
         if (snap.targetBlocking && snap.distance <= MELEE_RANGE
-                && hasAxe(inv) && snap.botOnGround
+                && findAxeSlot(inv) >= 0 && snap.botOnGround
                 && bot.getBotCooldowns().ready(STUN_SLAM_CD, alive)) {
             if (!BotCombatTiming.shouldPlanNormalMelee(bot, target)) {
                 chargeSkip(bot, "STUN_SLAM");
@@ -925,21 +876,6 @@ public final class OpportunityScanner {
                 && bot.getBotCooldowns().ready(LEDGE_CRYSTAL_CD, alive)) {
             if (executeCrystalTrap(bot, target)) {
                 bot.getBotCooldowns().set(LEDGE_CRYSTAL_CD, 50, alive);
-                return true;
-            }
-        }
-
-        // 5. STUN_SLAM -- shielded target + axe.
-        //    Break the shield first; the normal pipeline can choose a follow-up
-        //    weapon on the next tick instead of immediately hiding the axe swap.
-        if (snap.targetBlocking && snap.distance <= MELEE_RANGE
-                && hasAxe(inv) && snap.botOnGround
-                && bot.getBotCooldowns().ready(STUN_SLAM_CD, alive)) {
-            if (!BotCombatTiming.shouldPlanNormalMelee(bot, target)) {
-                chargeSkip(bot, "STUN_SLAM");
-            } else
-            if (executeStunSlam(bot, target)) {
-                bot.getBotCooldowns().set(STUN_SLAM_CD, 20, alive);
                 return true;
             }
         }
@@ -2130,13 +2066,6 @@ public final class OpportunityScanner {
             Material.STONE_AXE, Material.GOLDEN_AXE, Material.WOODEN_AXE
     };
 
-    private static boolean hasAxe(BotInventory inv) {
-        for (Material m : AXES) {
-            if (inv.findHotbar(m) >= 0) return true;
-        }
-        return false;
-    }
-
     private static boolean hasSwordOrAxe(BotInventory inv) {
         return findSwordAxeSlot(inv) >= 0;
     }
@@ -2468,10 +2397,9 @@ public final class OpportunityScanner {
     /**
      * Schedule a block to be cleared (or replaced) after a delay. Used by
      * lava pin, water douse, and web drain to simulate the "double click"
-     * pickup behavior. Silently no-ops if the plugin reference is null.
+     * pickup behavior.
      */
     private void scheduleBlockClear(Block block, Material replacement, long delayTicks) {
-        if (plugin == null) return;
         Material original = block.getType();
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             // Only clear if the block is still what we placed (avoid clobbering

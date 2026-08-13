@@ -106,15 +106,9 @@ That means:
 So debug log paths are not a deletion target just because they are not part of
 the normal player path.
 
-## Documentation implication
+## Classification reference
 
-A clean docs split should treat runtime file areas like this:
-
-- core runtime config
-- persistent user/runtime data
-- AI/training persistence
-- debug/admin outputs
-- legacy import compatibility
-
-That is much clearer than treating all plugin-folder files as one flat feature
-set.
+Use the table above for file-level status and the [status
+matrix](./14-active-vs-legacy-vs-unused-matrix.md) for cross-system
+classification. Preserve legacy import and debug paths unless reference or
+runtime proof supports reclassification.

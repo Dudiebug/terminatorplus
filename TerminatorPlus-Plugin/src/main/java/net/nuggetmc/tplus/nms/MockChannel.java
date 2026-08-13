@@ -1,8 +1,6 @@
 package net.nuggetmc.tplus.nms;
 
 import io.netty.channel.*;
-import io.netty.util.Attribute;
-import io.netty.util.AttributeKey;
 
 import java.net.SocketAddress;
 
@@ -11,11 +9,6 @@ public class MockChannel extends AbstractChannel {
 
     public MockChannel(Channel parent) {
         super(parent);
-    }
-
-    @Override
-    public <T> Attribute<T> attr(AttributeKey<T> key) {
-        return super.attr(key);
     }
 
     @Override

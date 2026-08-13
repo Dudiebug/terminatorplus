@@ -41,7 +41,7 @@ public class BotManagerImpl implements BotManager, Listener {
 
     public BotManagerImpl() {
         this.agent = new LegacyAgent(this, TerminatorPlus.getInstance());
-        this.bots = ConcurrentHashMap.newKeySet(); //should fix concurrentmodificationexception
+        this.bots = ConcurrentHashMap.newKeySet();
         this.numberFormat = NumberFormat.getInstance(Locale.US);
     }
 
@@ -53,7 +53,6 @@ public class BotManagerImpl implements BotManager, Listener {
     @Override
     public void add(Terminator bot) {
         if (joinMessages) {
-            // Bukkit.broadcastMessage(ChatColor.YELLOW + (bot.getBotName() + " joined the game"));
             Bukkit.broadcast(MiniMessage.miniMessage().deserialize("<yellow>" + bot.getBotName() + " joined the game"));
         }
 
@@ -91,7 +90,6 @@ public class BotManagerImpl implements BotManager, Listener {
 
     @Override
     public List<String> fetchNames() {
-        //return bots.stream().map(Bot::getBotName).map(component -> component.getString()).collect(Collectors.toList());
         return bots.stream().map(terminator -> {
             if (terminator instanceof Bot bot) return bot.getName().getString();
             else return terminator.getBotName();
@@ -132,18 +130,7 @@ public class BotManagerImpl implements BotManager, Listener {
         }
 
         String requestedSkin = skinName == null ? name : skinName;
-        Location spawnLoc = location;
-        if (spawnLoc == null) {
-            if (sender instanceof Player player) {
-                spawnLoc = player.getLocation();
-            } else {
-                spawnLoc = new Location(Bukkit.getWorlds().get(0), 0, 0, 0);
-                if (sender != null) {
-                    sender.sendRichMessage("<red>No location specified, defaulting to " + spawnLoc.getX() + ", " + spawnLoc.getY() + ", " + spawnLoc.getZ() + ".");
-                }
-            }
-        }
-        final Location finalSpawnLoc = spawnLoc;
+        final Location finalSpawnLoc = resolveSpawnLocation(sender, location);
 
         MojangAPI.getSkinAsync(requestedSkin).whenComplete((skin, error) ->
                 Bukkit.getScheduler().runTask(TerminatorPlus.getInstance(), () -> {
@@ -155,6 +142,18 @@ public class BotManagerImpl implements BotManager, Listener {
                         sender.sendRichMessage("Process completed (<red>" + ((System.currentTimeMillis() - timestamp) / 1000D) + "s<reset>).");
                     }
                 }));
+    }
+
+    private Location resolveSpawnLocation(CommandSender sender, Location location) {
+        if (location != null) return location;
+        if (sender instanceof Player player) return player.getLocation();
+
+        Location spawnLocation = new Location(Bukkit.getWorlds().get(0), 0, 0, 0);
+        if (sender != null) {
+            sender.sendRichMessage("<red>No location specified, defaulting to " + spawnLocation.getX() + ", "
+                    + spawnLocation.getY() + ", " + spawnLocation.getZ() + ".");
+        }
+        return spawnLocation;
     }
 
     @Override
@@ -173,34 +172,15 @@ public class BotManagerImpl implements BotManager, Listener {
 
         skinName = skinName == null ? name : skinName;
 
-        if (location != null) {
-            createBots(location, name, MojangAPI.getSkin(skinName), n, network);
-        } else {
-            if (sender instanceof Player player)
-                createBots(player.getLocation(), name, MojangAPI.getSkin(skinName), n, network);
-            else {
-                Location l = new Location(Bukkit.getWorlds().get(0), 0, 0, 0);
-                if (sender != null)
-                    // sender.sendMessage(ChatColor.RED + "No location specified, defaulting to " + l + ".");
-                    sender.sendRichMessage("<red>No location specified, defaulting to " + l.getX() + ", " + l.getY() + ", " + l.getZ() + ".");
-                createBots(l, name, MojangAPI.getSkin(skinName), n, network);
-            }
-        }
+        createBots(resolveSpawnLocation(sender, location), name, MojangAPI.getSkin(skinName), n, network);
 
         if (sender != null)
-            // sender.sendMessage("Process completed (" + ChatColor.RED + ((System.currentTimeMillis() - timestamp) / 1000D) + "s" + ChatColor.RESET + ").");
             sender.sendRichMessage("Process completed (<red>" + ((System.currentTimeMillis() - timestamp) / 1000D) + "s<reset>).");
     }
 
     @Override
     public Set<Terminator> createBots(Location loc, String name, String[] skin, int n, NeuralNetwork network) {
-        List<NeuralNetwork> networks = new ArrayList<>();
-
-        for (int i = 0; i < n; i++) {
-            networks.add(network);
-        }
-
-        return createBots(loc, name, skin, networks);
+        return createBots(loc, name, skin, Collections.nCopies(Math.max(0, n), network));
     }
 
     @Override
@@ -229,10 +209,6 @@ public class BotManagerImpl implements BotManager, Listener {
                 bot.setNeuralNetwork(network == NeuralNetwork.RANDOM ? NeuralNetwork.generateRandomNetwork() : network);
                 bot.setShield(true);
                 bot.setDefaultItem(new ItemStack(Material.WOODEN_AXE));
-                //bot.setRemoveOnDeath(false);
-            }
-
-            if (network != null) {
                 bot.setVelocity(randomVelocity());
             } else if (i > 1) {
                 bot.setVelocity(randomVelocity().multiply(f));
@@ -267,7 +243,7 @@ public class BotManagerImpl implements BotManager, Listener {
     public void reset() {
         if (!bots.isEmpty()) {
             new HashSet<>(bots).forEach(Terminator::removeBot);
-            bots.clear(); // Not always necessary, but a good security measure
+            bots.clear();
         }
 
         agent.stopAllTasks();
@@ -275,7 +251,7 @@ public class BotManagerImpl implements BotManager, Listener {
 
 
     @Override
-    public Terminator getBot(Player player) { // potentially memory intensive
+    public Terminator getBot(Player player) {
         int id = player.getEntityId();
         return getBot(id);
     }

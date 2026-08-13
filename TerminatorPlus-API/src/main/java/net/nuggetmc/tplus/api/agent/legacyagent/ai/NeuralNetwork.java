@@ -11,13 +11,6 @@ import java.util.*;
 
 public class NeuralNetwork {
 
-    // thinking about making an enum called BotNode, and have a map here, .check(Node.L) or fetch
-    // also randomize activation point between 0 and 0.5
-    // randomize the blocking length and cooldown
-    // also the XZ offset randomizers!! (or maybe just turn them off entirely, that works too)
-
-    // b, j, l, r, ox, oz, av, bl, bc, dlr
-
     private final Map<BotNode, NodeConnections> nodes;
 
     private final boolean dynamicLR;
@@ -35,7 +28,9 @@ public class NeuralNetwork {
         this.movementBrainBank = movementBrainBank;
 
         if (profile == null) {
-            Arrays.stream(BotNode.values()).forEach(n -> this.nodes.put(n, new NodeConnections()));
+            for (BotNode node : BotNode.values()) {
+                nodes.put(node, new NodeConnections());
+            }
         } else {
             profile.forEach((nodeType, map) -> nodes.put(nodeType, new NodeConnections(map)));
         }

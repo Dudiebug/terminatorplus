@@ -14,7 +14,7 @@ import org.bukkit.util.Vector;
  * up to {@link #MAX_CHARGE_TICKS}, then releases a thrown trident whose
  * exit velocity is amplified by the momentum it built.
  */
-public final class TridentBehavior implements WeaponBehavior {
+public final class TridentBehavior {
 
     public static final String COOLDOWN_KEY = "trident";
     private static final int MAX_CHARGE_TICKS = 18;
@@ -26,7 +26,6 @@ public final class TridentBehavior implements WeaponBehavior {
     private static final double THROW_BASE_SPEED = 2.5;
     private static final double THROW_MOMENTUM_BONUS = 1.4;
 
-    @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
         int alive = bot.getAliveTicks();
         CombatState state = bot.getCombatState();

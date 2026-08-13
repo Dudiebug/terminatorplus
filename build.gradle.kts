@@ -108,15 +108,6 @@ tasks.named("check") {
     dependsOn("checkMovementOnlyContract")
 }
 
-//TODO currently, the resources are in src/main/resources, because gradle is stubborn and won't include the resources in TerminatorPlus-Plugin/src/main/resources, will need to fix
-
-/*
-task copyPlugin(type: Copy) {
-    from 'build/libs/' + jarName + '.jar'
-    into 'run/plugins'
-}
- */
-
 tasks.register("copyPlugin", Copy::class.java) {
     from("build/libs/" + jarName + ".jar")
     into("run/plugins")

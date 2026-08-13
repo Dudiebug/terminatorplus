@@ -19,11 +19,10 @@ import org.bukkit.inventory.ItemStack;
  * <p>Only reached via {@link CombatDirector#tick}, which short-circuits for neural-network
  * training bots — training still uses the deterministic damage table.
  */
-public final class MeleeBehavior implements WeaponBehavior {
+public final class MeleeBehavior {
 
     public static final double ATTACK_RANGE = 5.0;
 
-    @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
         if (distance > ATTACK_RANGE) {
             CombatDebugger.log(bot, "melee-oor", "dist=" + String.format("%.2f", distance));

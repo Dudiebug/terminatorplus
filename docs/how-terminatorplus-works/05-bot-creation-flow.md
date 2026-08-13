@@ -176,16 +176,9 @@ Important assumptions become true:
 - its inventory state matters
 - cleanup must work if it is removed quickly after creation
 
-## Paper/NMS-sensitive points to remember
+## Paper/NMS guardrail reference
 
-The following points are protected:
-
-- `ServerPlayer` construction path
-- `MockConnection` reflection fallback logic
-- loopback sentinel address behavior
-- player-list insertion vs non-player-list insertion split
-- render packet ordering and entity-data usage
-- main-thread-only world insertion/removal
-
-If a future change breaks bot spawn without compile errors, this path is one of
-the first places to inspect.
+The construction, fake-connection, insertion, rendering, and thread-affinity
+details above are protected. Apply the shared [scope and safety
+rules](./01-scope-and-safety.md) and require runtime proof before changing
+them.

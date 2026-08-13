@@ -16,7 +16,7 @@ import org.bukkit.util.Vector;
  * the vanilla attack-strength clock to recharge, then launches and tracks the
  * target while airborne so the impact can use real mace fall-damage scaling.
  */
-public final class MaceBehavior implements WeaponBehavior {
+public final class MaceBehavior {
 
     public static final String COOLDOWN_KEY = "mace";
     private static final double MIN_DISTANCE = 0.5;
@@ -41,7 +41,6 @@ public final class MaceBehavior implements WeaponBehavior {
     private static final double AIRBORNE_DAMPING_DISTANCE = 1.25;
     private static final double AIRBORNE_DEADZONE = 0.35;
 
-    @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
         CombatState state = bot.getCombatState();
         Location targetLoc = target.getLocation();

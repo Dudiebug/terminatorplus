@@ -1,12 +1,13 @@
 package net.nuggetmc.tplus.api.utils;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
-import org.json.simple.JSONArray;
-import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
-import org.json.simple.parser.ParseException;
 
 import net.nuggetmc.tplus.api.agent.legacyagent.LegacyMats;
 
@@ -54,18 +55,16 @@ public class PlayerUtils {
         String file = Bukkit.getServer().getWorldContainer().getAbsolutePath();
         file = file.substring(0, file.length() - 1) + "usercache.json";
 
-        JSONParser parser = new JSONParser();
-
         try {
-            JSONArray array = (JSONArray) parser.parse(new FileReader(file));
+            JsonArray array = JsonParser.parseReader(new FileReader(file)).getAsJsonArray();
 
-            for (Object obj : array) {
-                JSONObject jsonOBJ = (JSONObject) obj;
-                String username = (String) jsonOBJ.get("name");
+            for (JsonElement obj : array) {
+                JsonObject jsonOBJ = obj.getAsJsonObject();
+                String username = jsonOBJ.get("name").getAsString();
 
                 USERNAME_CACHE.add(username);
             }
-        } catch (IOException | ParseException e) {
+        } catch (IOException | JsonParseException e) {
             DebugLogUtils.log("Failed to fetch from the usercache.");
         }
     }
