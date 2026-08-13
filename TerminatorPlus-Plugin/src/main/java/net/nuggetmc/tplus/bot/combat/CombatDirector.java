@@ -698,6 +698,12 @@ public final class CombatDirector {
         if (tridentMelee >= 0) {
             return new MeleeChoice(tridentMelee, "TRIDENT", "TRIDENT(melee)", "fallback", false, 0);
         }
+        if (inv.findBestMeleeWeaponSlot() < 0) {
+            int fistSlot = inv.findEmptyHotbarSlot();
+            if (fistSlot >= 0) {
+                return new MeleeChoice(fistSlot, "FIST", "FIST", "empty-hand", false, 0);
+            }
+        }
         return new MeleeChoice(-1, "NONE", "MELEE(empty)", "empty", false, 0);
     }
 
