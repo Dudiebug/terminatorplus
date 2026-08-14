@@ -52,7 +52,7 @@ public final class BotCombatTiming {
     public static boolean canSwing(Bot bot, LivingEntity target) {
         float charge = charge(bot);
         int iframes = target.getNoDamageTicks();
-        if (!bot.getBotInventory().isSelectedMeleeWeapon()) {
+        if (!MeleeBehavior.isMeleeOrEmpty(bot.getBotInventory().getSelected())) {
             CombatDebugger.swingGate(bot, charge, READY_CHARGE, iframes, false, "held");
             return false;
         }
@@ -203,7 +203,7 @@ public final class BotCombatTiming {
     }
 
     public static boolean shouldPlanNormalMelee(Bot bot, LivingEntity target) {
-        return bot.getBotInventory().isSelectedMeleeWeapon()
+        return MeleeBehavior.isMeleeOrEmpty(bot.getBotInventory().getSelected())
                 && chargeReady(bot)
                 && !targetHasIFrames(target);
     }

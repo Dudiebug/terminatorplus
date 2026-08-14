@@ -146,6 +146,19 @@ public final class BotInventory {
         return item == null ? new ItemStack(Material.AIR) : item;
     }
 
+    /** Find an already-empty hotbar slot, preferring the selected slot, without changing inventory. */
+    public int findEmptyHotbarSlot() {
+        PlayerInventory inv = raw();
+        ItemStack selected = inv.getItem(selectedHotbarSlot);
+        if (selected == null || selected.getType() == Material.AIR) return selectedHotbarSlot;
+        for (int i = 0; i < HOTBAR_SIZE; i++) {
+            if (i == selectedHotbarSlot) continue;
+            ItemStack item = inv.getItem(i);
+            if (item == null || item.getType() == Material.AIR) return i;
+        }
+        return -1;
+    }
+
     /** Find a hotbar slot (0-8) containing {@code type}. */
     public int findHotbarOnly(Material type) {
         if (type == null) return -1;

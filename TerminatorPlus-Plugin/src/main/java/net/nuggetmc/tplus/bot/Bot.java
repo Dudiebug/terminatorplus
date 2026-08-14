@@ -1004,7 +1004,7 @@ public class Bot extends ServerPlayer implements Terminator {
         }
 
         if (entity instanceof org.bukkit.entity.LivingEntity) {
-            if (!botInventory.isSelectedMeleeWeapon()) {
+            if (!MeleeBehavior.isMeleeOrEmpty(botInventory.getSelected())) {
                 CombatDebugger.log(this, "attack-skip",
                         "reason=non-melee-held held=" + botInventory.getSelected().getType().name());
                 return;
