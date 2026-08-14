@@ -129,7 +129,7 @@ public final class BotInventory {
         if (this.selectedHotbarSlot == slot) return;
         this.selectedHotbarSlot = slot;
         // Sync NMS (Bukkit API route, since the NMS field is private in
-        // Paper 26.1.2). setItemInMainHand below writes into whichever
+        // Paper 26.x). setItemInMainHand below writes into whichever
         // slot this tracker says is selected.
         raw().setHeldItemSlot(slot);
         ItemStack item = raw().getItem(slot);
@@ -137,14 +137,26 @@ public final class BotInventory {
     }
 
     public ItemStack getSelected() {
-        ItemStack item = raw().getItem(selectedHotbarSlot);
-        return item == null ? new ItemStack(Material.AIR) : item;
+        return getHotbar(selectedHotbarSlot);
     }
 
     public ItemStack getHotbar(int slot) {
         if (slot < 0 || slot >= HOTBAR_SIZE) return new ItemStack(Material.AIR);
         ItemStack item = raw().getItem(slot);
         return item == null ? new ItemStack(Material.AIR) : item;
+    }
+
+    /** Find an already-empty hotbar slot, preferring the selected slot, without changing inventory. */
+    public int findEmptyHotbarSlot() {
+        PlayerInventory inv = raw();
+        ItemStack selected = inv.getItem(selectedHotbarSlot);
+        if (selected == null || selected.getType() == Material.AIR) return selectedHotbarSlot;
+        for (int i = 0; i < HOTBAR_SIZE; i++) {
+            if (i == selectedHotbarSlot) continue;
+            ItemStack item = inv.getItem(i);
+            if (item == null || item.getType() == Material.AIR) return i;
+        }
+        return -1;
     }
 
     /** Find a hotbar slot (0-8) containing {@code type}. */
@@ -211,7 +223,6 @@ public final class BotInventory {
             for (int i = HOTBAR_SIZE - 1; i >= 0; i--) {
                 ItemStack it = inv.getItem(i);
                 if (it == null) continue;
-                String n = it.getType().name();
                 if (isMeleeWeapon(it)) continue;
                 target = i;
                 break;
@@ -360,11 +371,8 @@ public final class BotInventory {
 
     /** Any slot (not only hotbar) holds a totem of undying. */
     public boolean hasTotem() {
+        if (findMainInventory(Material.TOTEM_OF_UNDYING) >= 0) return true;
         PlayerInventory inv = raw();
-        for (int i = 0; i < 36; i++) {
-            ItemStack it = inv.getItem(i);
-            if (it != null && it.getType() == Material.TOTEM_OF_UNDYING) return true;
-        }
         ItemStack off = inv.getItemInOffHand();
         return off != null && off.getType() == Material.TOTEM_OF_UNDYING;
     }
@@ -403,11 +411,10 @@ public final class BotInventory {
      * raw inventory slot index, or -1.
      */
     public int findStoredChestpieceOfType(Material type) {
+        int main = findMainInventory(type);
+        if (main >= 0) return main;
+
         PlayerInventory inv = raw();
-        for (int i = 0; i < 36; i++) {
-            ItemStack it = inv.getItem(i);
-            if (it != null && it.getType() == type) return i;
-        }
         ItemStack off = inv.getItemInOffHand();
         if (off != null && off.getType() == type) return 40;
         return -1;
@@ -593,10 +600,7 @@ public final class BotInventory {
         PlayerInventory src = raw();
         net.minecraft.world.entity.player.Inventory nmsTarget = target.getInventory();
         for (int i = 0; i < 36; i++) {
-            ItemStack it = src.getItem(i);
-            nmsTarget.setItem(i, (it == null || it.getType() == Material.AIR)
-                    ? net.minecraft.world.item.ItemStack.EMPTY
-                    : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(it));
+            setMainSlotIfChanged(nmsTarget, i, src.getItem(i));
         }
         nmsTarget.setChanged();
 
@@ -803,10 +807,7 @@ public final class BotInventory {
     private int findPrimaryWeaponSlot() {
         PlayerInventory inv = raw();
         for (int i = 0; i < HOTBAR_SIZE; i++) {
-            ItemStack it = inv.getItem(i);
-            if (it == null) continue;
-            String n = it.getType().name();
-            if (n.endsWith("_SWORD") || n.equals("MACE") || n.equals("TRIDENT") || n.endsWith("_AXE")) return i;
+            if (isMeleeWeapon(inv.getItem(i))) return i;
         }
         return 0;
     }
@@ -828,8 +829,7 @@ public final class BotInventory {
     public int getEquippedArmorTier() {
         PlayerInventory inv = raw();
         int best = 0;
-        ItemStack[] pieces = { inv.getHelmet(), inv.getChestplate(), inv.getLeggings(), inv.getBoots() };
-        for (ItemStack p : pieces) {
+        for (ItemStack p : inv.getArmorContents()) {
             if (p == null || p.getType() == Material.AIR) continue;
             int t = armorTier(p.getType());
             if (t > best) best = t;

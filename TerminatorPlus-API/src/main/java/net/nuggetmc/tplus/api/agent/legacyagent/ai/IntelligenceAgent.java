@@ -39,14 +39,6 @@ import java.util.concurrent.Future;
 
 public class IntelligenceAgent {
 
-    /*
-     * export all agent data to the plugin folder as separate folder things
-     * commands /ai stop and /ai pause
-     * if a session with name already exists keep adding underscores
-     * /ai conclude or /ai finish
-     * default anchor location, /ai relocateanchor
-     */
-
     private final Plugin plugin;
     private final BotManager manager;
     private final AIManager aiManager;
@@ -104,7 +96,7 @@ public class IntelligenceAgent {
         this.botName = name;
         this.botSkin = skin;
         this.bots = new ConcurrentHashMap<>();
-        this.users = new HashSet<>(Collections.singletonList(Bukkit.getConsoleSender()));
+        this.users = new HashSet<>(Set.of(Bukkit.getConsoleSender()));
         this.cutoff = 5;
         this.genProfiles = new HashMap<>();
         this.populationSize = populationSize;
@@ -734,9 +726,9 @@ public class IntelligenceAgent {
     }
 
     private void print(Object... objects) {
-        String message = ChatColor.DARK_GREEN + "[REINFORCEMENT] " + ChatColor.RESET + String.join(" ", Arrays.stream(objects).map(String::valueOf).toArray(String[]::new));
+        String message = ChatColor.DARK_GREEN + "[REINFORCEMENT] " + ChatColor.RESET
+                + String.join(" ", Arrays.stream(objects).map(String::valueOf).toList());
         users.forEach(u -> u.sendMessage(message));
-        // log -> ChatColor.stripColor(message);
     }
 
     private void setup() {
@@ -786,16 +778,6 @@ public class IntelligenceAgent {
             new HashSet<>(bots.values()).forEach(Terminator::removeBot);
             bots.clear();
         }
-
-        /*print("Removing all current bots...");
-
-        int size = manager.fetch().size();
-        manager.reset();
-
-        String formatted = NumberFormat.getNumberInstance(Locale.US).format(size);
-        print("Removed " + ChatColor.RED + formatted + ChatColor.RESET + " entit" + (size == 1 ? "y" : "ies") + ".");
-
-        bots.clear();*/
     }
 
     private record MovementCandidate(

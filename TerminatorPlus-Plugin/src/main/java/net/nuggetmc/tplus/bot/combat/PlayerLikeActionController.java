@@ -43,18 +43,6 @@ public final class PlayerLikeActionController {
         }
     }
 
-    public boolean canStart(Bot bot, BotActionState nextState, String nextSource) {
-        beginTick(bot);
-        if (state == BotActionState.IDLE) return true;
-        CombatDebugger.log(bot, "action-busy",
-                "active=" + state
-                        + " next=" + safeState(nextState)
-                        + " src=" + token(nextSource)
-                        + " activeSrc=" + token(source)
-                        + " left=" + remainingTicks);
-        return false;
-    }
-
     public boolean start(Bot bot, BotActionState nextState, int durationTicks, int lockedSlot, String nextSource) {
         return start(bot, nextState, durationTicks, lockedSlot, nextSource, null);
     }
@@ -68,7 +56,15 @@ public final class PlayerLikeActionController {
             Runnable onComplete
     ) {
         beginTick(bot);
-        if (!canStart(bot, nextState, nextSource)) return false;
+        if (state != BotActionState.IDLE) {
+            CombatDebugger.log(bot, "action-busy",
+                    "active=" + state
+                            + " next=" + safeState(nextState)
+                            + " src=" + token(nextSource)
+                            + " activeSrc=" + token(source)
+                            + " left=" + remainingTicks);
+            return false;
+        }
         reservePrimary(bot, nextState, nextSource, lockedSlot, false);
         state = nextState == null ? BotActionState.IDLE : nextState;
         startedTick = bot == null ? -1 : bot.getAliveTicks();
@@ -155,42 +151,17 @@ public final class PlayerLikeActionController {
 
     public boolean blocksCombatAction() {
         return switch (state) {
-            case USING_CONSUMABLE, DRINKING_POTION, THROWING_PROJECTILE, MINING, PLACING_BLOCK, USING_PEARL,
-                 CRYSTAL_SEQUENCE, ANCHOR_SEQUENCE, FALL_CLUTCH -> true;
+            case USING_CONSUMABLE, DRINKING_POTION, THROWING_PROJECTILE, PLACING_BLOCK, USING_PEARL -> true;
             default -> false;
         };
-    }
-
-    public int startedTick() {
-        return startedTick;
     }
 
     public int remainingTicks() {
         return remainingTicks;
     }
 
-    public int selectedSlot() {
-        return selectedSlot;
-    }
-
-    public Material selectedMaterial() {
-        return selectedMaterial;
-    }
-
     public String source() {
         return source;
-    }
-
-    public String interruptionReason() {
-        return interruptionReason;
-    }
-
-    public String completionResult() {
-        return completionResult;
-    }
-
-    public int primaryActionsThisTick() {
-        return primaryActionsThisTick;
     }
 
     public int sameTickActionViolations() {

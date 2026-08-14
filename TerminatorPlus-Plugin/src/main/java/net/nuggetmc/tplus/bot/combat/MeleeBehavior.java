@@ -1,6 +1,7 @@
 package net.nuggetmc.tplus.bot.combat;
 
 import net.nuggetmc.tplus.bot.Bot;
+import net.nuggetmc.tplus.bot.loadout.BotInventory;
 import org.bukkit.Material;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.inventory.ItemStack;
@@ -10,27 +11,26 @@ import org.bukkit.inventory.ItemStack;
  * <ul>
  *   <li>attack-strength charge &gt;= 0.95 (full-damage + crit/sweep eligible), and</li>
  *   <li>the target isn't deep in an i-frame window that would swallow the hit, and</li>
- *   <li>the currently-held item is an actual melee weapon — otherwise a scanner
- *       play that left a cobweb / wind charge / pearl / crystal in hand last
- *       tick would make the bot "swing" that utility item, wasting the swing
- *       cooldown and producing melee-hit log lines with w=AIR / COBWEB / etc.</li>
+ *   <li>the currently-held item is AIR or an actual melee weapon — otherwise a
+ *       scanner play that left a cobweb / wind charge / pearl / crystal in hand
+ *       last tick would make the bot "swing" that utility item, wasting the
+ *       swing cooldown and producing melee-hit log lines with w=COBWEB / etc.</li>
  * </ul>
  *
  * <p>Only reached via {@link CombatDirector#tick}, which short-circuits for neural-network
  * training bots — training still uses the deterministic damage table.
  */
-public final class MeleeBehavior implements WeaponBehavior {
+public final class MeleeBehavior {
 
     public static final double ATTACK_RANGE = 5.0;
 
-    @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
         if (distance > ATTACK_RANGE) {
             CombatDebugger.log(bot, "melee-oor", "dist=" + String.format("%.2f", distance));
             return 0;
         }
         ItemStack held = bot.getBotInventory().getSelected();
-        if (!isMeleeWeapon(held)) {
+        if (!isMeleeOrEmpty(held)) {
             CombatDebugger.log(bot, "melee-skip", "reason=non-melee-held held=" + held.getType().name());
             return 0;
         }
@@ -89,13 +89,10 @@ public final class MeleeBehavior implements WeaponBehavior {
                         + " targetHpDelta=" + fmt2(targetHpBefore - targetHpAfter));
     }
 
-    private static boolean isMeleeWeapon(ItemStack stack) {
-        if (stack == null) return false;
-        Material m = stack.getType();
-        if (m == Material.AIR) return false;
-        if (m == Material.MACE || m == Material.TRIDENT) return true;
-        String name = m.name();
-        return name.endsWith("_SWORD") || name.endsWith("_AXE");
+    /** True only for an empty hand or a real melee weapon; utility items remain illegal. */
+    public static boolean isMeleeOrEmpty(ItemStack stack) {
+        return stack != null
+                && (stack.getType() == Material.AIR || BotInventory.isMeleeWeapon(stack));
     }
 
     private static String fmt2(double value) {

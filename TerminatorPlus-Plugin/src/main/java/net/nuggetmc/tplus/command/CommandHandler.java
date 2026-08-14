@@ -12,8 +12,6 @@ import net.nuggetmc.tplus.command.commands.BotEnvironmentCommand;
 import net.nuggetmc.tplus.command.commands.MainCommand;
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.command.SimpleCommandMap;
-import org.bukkit.craftbukkit.CraftServer;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -50,12 +48,8 @@ public class CommandHandler {
     }
 
     private void registerCommands(CommandInstance... commands) {
-        String fallback = plugin.getName().toLowerCase();
-        SimpleCommandMap bukkitCommandMap = ((CraftServer) plugin.getServer()).getCommandMap();
-
         for (CommandInstance command : commands) {
             commandMap.put(command.getName(), command);
-            bukkitCommandMap.register(fallback, command);
 
             org.bukkit.command.PluginCommand pluginCmd = plugin.getCommand(command.getName());
             if (pluginCmd != null) {

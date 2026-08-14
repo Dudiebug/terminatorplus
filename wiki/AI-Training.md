@@ -1,9 +1,7 @@
 # AI Training
 
-> Legacy/reference notice:
-> This page may describe the old general TerminatorPlus strategy.
-> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
-> Use this page for technical reference only until it is verified against source code and runtime behavior.
+> See [Legacy Status](Legacy-Status) for this page's reference status and
+> [Current Strategy](Current-Strategy) for the current target.
 
 
 TerminatorPlus can train movement-controller brains in the JVM. The neural
@@ -47,24 +45,8 @@ Modes:
 Movement training samples named loadouts automatically from
 `ai.training.loadout-mix`. No separate `/bot loadoutmix` step is needed.
 
-The default `movement_balanced` mix is:
-
-```yaml
-sword: 12
-axe: 12
-smp: 12
-pot: 8
-mace: 10
-spear: 8
-trident: 8
-windcharge: 6
-skydiver: 5
-hybrid: 6
-vanilla: 5
-pvp: 3
-crystalpvp: 3
-anchorbomb: 2
-```
+The default `movement_balanced` weights are documented in
+[Configuration](Configuration).
 
 `pvp`, `crystalpvp`, and `anchorbomb` total 8%, which gives explosive/survival
 movement enough exposure without letting those kits dominate every generation.
@@ -114,23 +96,6 @@ reports.
 
 ## Commands
 
-```text
-/ai stop
-/ai brain status
-/ai brain load
-/ai brain save [bot-name]
-/ai brain reset
-/ai movement <amount> <name> [skin] [loc]
-/ai evaluate [variant] [scenario] [seeds]
-```
-
-`/ai movement` spawns fighting bots using the loaded movement bank. They are not
-training bots.
-
-`/ai evaluate` exports a report-only seed/scenario matrix and route/fallback
-summary under `ai/movement/evaluations/`. Live win/damage metrics require an
-arena run.
-
-See [Movement Brain Bank](Movement-Brain-Bank) and
-[Brain Persistence](Brain-Persistence) for the bank layout and file formats.
-
+See [Commands](Commands) for full `/ai` syntax, including training, bank,
+movement, and evaluation commands. [Movement Brain Bank](Movement-Brain-Bank)
+and [Brain Persistence](Brain-Persistence) cover bank behavior and file formats.

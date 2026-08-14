@@ -1,9 +1,5 @@
 package net.nuggetmc.tplus.api.agent.legacyagent;
 
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
-
 import org.bukkit.Location;
 
 public enum LegacyLevel {
@@ -42,55 +38,24 @@ public enum LegacyLevel {
 		this.offsetZ = offsetZ;
 	}
 
-    private static final Set<LegacyLevel> NON_SIDE = new HashSet<>(Arrays.asList(
-        ABOVE,
-        BELOW,
-        AT,
-        AT_D
-    ));
-    private static final Set<LegacyLevel> SIDE_AT = new HashSet<>(Arrays.asList(
-        NORTH,
-        SOUTH,
-        EAST,
-        WEST
-    ));
-    private static final Set<LegacyLevel> SIDE_UP = new HashSet<>(Arrays.asList(
-        NORTH_U,
-        SOUTH_U,
-        EAST_U,
-        WEST_U
-    ));
-    private static final Set<LegacyLevel> SIDE_DOWN = new HashSet<>(Arrays.asList(
-        NORTH_D,
-        SOUTH_D,
-        EAST_D,
-        WEST_D
-    ));
-    private static final Set<LegacyLevel> SIDE_DOWN_2 = new HashSet<>(Arrays.asList(
-        NORTH_D_2,
-        SOUTH_D_2,
-        EAST_D_2,
-        WEST_D_2
-    ));
-
     public boolean isSide() {
-        return !NON_SIDE.contains(this);
+        return this != ABOVE && this != BELOW && this != AT && this != AT_D;
     }
     
     public boolean isSideAt() {
-        return SIDE_AT.contains(this);
+        return this == NORTH || this == SOUTH || this == EAST || this == WEST;
     }
     
     public boolean isSideUp() {
-        return SIDE_UP.contains(this);
+        return this == NORTH_U || this == SOUTH_U || this == EAST_U || this == WEST_U;
     }
     
     public boolean isSideDown() {
-        return SIDE_DOWN.contains(this);
+        return this == NORTH_D || this == SOUTH_D || this == EAST_D || this == WEST_D;
     }
     
     public boolean isSideDown2() {
-        return SIDE_DOWN_2.contains(this);
+        return this == NORTH_D_2 || this == SOUTH_D_2 || this == EAST_D_2 || this == WEST_D_2;
     }
     
     public LegacyLevel sideUp() {

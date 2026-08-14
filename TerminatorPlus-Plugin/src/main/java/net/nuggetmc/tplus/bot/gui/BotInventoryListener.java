@@ -9,7 +9,6 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.InventoryHolder;
 
 /**
  * Blocks edits to the decorative filler slots of {@link BotInventoryGUI}
@@ -26,8 +25,7 @@ public final class BotInventoryListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onClick(InventoryClickEvent event) {
         Inventory top = event.getView().getTopInventory();
-        InventoryHolder holder = top.getHolder();
-        if (!(holder instanceof BotInventoryGUI gui)) return;
+        if (!(top.getHolder() instanceof BotInventoryGUI)) return;
 
         // Filler slots: lock down hard.
         if (event.getClickedInventory() == top && BotInventoryGUI.isFillerSlot(event.getRawSlot())) {
@@ -45,8 +43,7 @@ public final class BotInventoryListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onDrag(InventoryDragEvent event) {
         Inventory top = event.getView().getTopInventory();
-        InventoryHolder holder = top.getHolder();
-        if (!(holder instanceof BotInventoryGUI gui)) return;
+        if (!(top.getHolder() instanceof BotInventoryGUI)) return;
 
         for (int slot : event.getRawSlots()) {
             if (slot < top.getSize() && BotInventoryGUI.isFillerSlot(slot)) {
@@ -63,8 +60,7 @@ public final class BotInventoryListener implements Listener {
     @EventHandler
     public void onClose(InventoryCloseEvent event) {
         Inventory top = event.getView().getTopInventory();
-        InventoryHolder holder = top.getHolder();
-        if (!(holder instanceof BotInventoryGUI gui)) return;
+        if (!(top.getHolder() instanceof BotInventoryGUI gui)) return;
 
         if (!gui.getBot().isBotAlive()) return;
         gui.syncToBot();

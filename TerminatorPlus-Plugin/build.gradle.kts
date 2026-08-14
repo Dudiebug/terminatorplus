@@ -4,7 +4,6 @@ plugins {
     id("net.nuggetmc.java-conventions")
 }
 
-group = "net.nuggetmc"
 description = "TerminatorPlus"
 
 java {
@@ -12,7 +11,7 @@ java {
 }
 
 dependencies {
-    paperweight.paperDevBundle("26.1.2.build.+")
+    paperweight.paperDevBundle("26.2.build.+")
 
     implementation(project(":TerminatorPlus-API"))
 }

@@ -117,11 +117,11 @@ public final class CombatDirector {
         CombatIntent intent = switch (phase) {
             case MACE_CHARGING -> buildIntent(bot, target, distance, MovementBranchFamily.MACE, "",
                     DesiredRangeBand.MELEE, ACTION_MACE_CHARGING, false, 40,
-                    "mace_charging", wantsCritSetup, wantsSprintHit, true, true,
+                    "mace_charging", wantsCritSetup, wantsSprintHit, false, true,
                     MeleeBehavior.ATTACK_RANGE);
             case AIRBORNE -> buildIntent(bot, target, distance, MovementBranchFamily.MACE, "",
                     DesiredRangeBand.MELEE, ACTION_AIRBORNE_MACE, false, 40,
-                    "mace_airborne", wantsCritSetup, wantsSprintHit, true, true,
+                    "mace_airborne", wantsCritSetup, wantsSprintHit, false, true,
                     MeleeBehavior.ATTACK_RANGE);
             case CHARGING -> buildIntent(bot, target, distance, MovementBranchFamily.TRIDENT_RANGED, "",
                     DesiredRangeBand.MID, ACTION_TRIDENT_CHARGING, false, 40,
@@ -317,7 +317,7 @@ public final class CombatDirector {
         lastBranch = "melee";
         if (distance <= 3.5 || onlyTridentMelee) {
             boolean hasSwordOrAxe = sword >= 0 || axe >= 0;
-            boolean maceSmashReady = inv.hasMace() && !hasSwordOrAxe && !snapshot.targetBlocking
+            boolean maceSmashReady = inv.hasMace() && !snapshot.targetBlocking
                     && snapshot.openSkyAboveBot && inv.hasWindCharge() && grounded
                     && bot.getBotCooldowns().ready(MaceBehavior.COOLDOWN_KEY, alive)
                     && bot.getBotCooldowns().ready(WindChargeBehavior.COOLDOWN_KEY, alive)
@@ -698,11 +698,24 @@ public final class CombatDirector {
         if (tridentMelee >= 0) {
             return new MeleeChoice(tridentMelee, "TRIDENT", "TRIDENT(melee)", "fallback", false, 0);
         }
+        if (inv.findBestMeleeWeaponSlot() < 0) {
+            int fistSlot = inv.findEmptyHotbarSlot();
+            if (fistSlot >= 0) {
+                return new MeleeChoice(fistSlot, "FIST", "FIST", "empty-hand", false, 0);
+            }
+        }
         return new MeleeChoice(-1, "NONE", "MELEE(empty)", "empty", false, 0);
     }
 
     private static boolean selectedTypeEndsWith(BotInventory inv, String suffix) {
         return inv.getSelected().getType().name().endsWith(suffix);
+    }
+
+    private static boolean scannerWantsHold(OpportunityScanner.ScannerPlay play) {
+        if (play.family() == MovementBranchFamily.MACE) {
+            return false;
+        }
+        return !play.interruptible();
     }
 
     private CombatIntent planIdle(
@@ -739,7 +752,7 @@ public final class CombatDirector {
             OpportunityScanner.ScannerPlay play = scannerPlan.play();
             return buildIntent(bot, target, distance, play.family(), scannerPlan.playId(),
                     play.rangeBand(), play.actionIdentity(), play.interruptible(), play.lockTicks(),
-                    play.id(), wantsCritSetup, wantsSprintHit, !play.interruptible(), false,
+                    play.id(), wantsCritSetup, wantsSprintHit, scannerWantsHold(play), false,
                     weaponRangeFor(play.family(), play.rangeBand()));
         }
 
@@ -776,7 +789,7 @@ public final class CombatDirector {
 
         if (distance <= 3.5 || onlyTridentMelee) {
             boolean hasSwordOrAxe = sword >= 0 || axe >= 0;
-            boolean maceSmashReady = inv.hasMace() && !hasSwordOrAxe && !snapshot.targetBlocking
+            boolean maceSmashReady = inv.hasMace() && !snapshot.targetBlocking
                     && snapshot.openSkyAboveBot && inv.hasWindCharge() && grounded
                     && bot.getBotCooldowns().ready(MaceBehavior.COOLDOWN_KEY, bot.getAliveTicks())
                     && bot.getBotCooldowns().ready(WindChargeBehavior.COOLDOWN_KEY, bot.getAliveTicks())
@@ -784,7 +797,7 @@ public final class CombatDirector {
             if (maceSmashReady) {
                 return buildIntent(bot, target, distance, MovementBranchFamily.MACE, "",
                         DesiredRangeBand.MELEE, ACTION_MACE_SMASH, false, 40, "mace_smash",
-                        wantsCritSetup, wantsSprintHit, true, false, MeleeBehavior.ATTACK_RANGE);
+                        wantsCritSetup, wantsSprintHit, false, false, MeleeBehavior.ATTACK_RANGE);
             }
 
             MovementBranchFamily family = !hasSwordOrAxe && tridentMelee >= 0

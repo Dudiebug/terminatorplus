@@ -170,17 +170,9 @@ There is no evidence that every inventory mutation persists automatically. The
 main persistence surface is presets, not live autosave of arbitrary bot
 inventory state.
 
-## What should not be touched without runtime tests
+## Shared safety reference
 
-The following should be treated as protected:
-
-- direct NMS write paths for main inventory
-- selected hotbar slot sync
-- auto-equip ordering
-- GUI-to-bot sync logic
-- preset application ordering
-- offhand handling
-- movement-kit replenishment
-
-These are exactly the kinds of systems that can look straightforward in source
-and still fail in subtle runtime-only ways.
+Keep the NMS writes, equip ordering, GUI sync, preset application, offhand, and
+movement-kit paths protected. See [scope and safety](./01-scope-and-safety.md)
+and the [status matrix](./14-active-vs-legacy-vs-unused-matrix.md) for shared
+guardrails and classification.

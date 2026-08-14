@@ -1,9 +1,7 @@
 # Brain Persistence
 
-> Legacy/reference notice:
-> This page may describe the old general TerminatorPlus strategy.
-> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
-> Use this page for technical reference only until it is verified against source code and runtime behavior.
+> See [Legacy Status](Legacy-Status) for this page's reference status and
+> [Current Strategy](Current-Strategy) for the current target.
 
 
 Movement-controller persistence uses a bank, not a single primary brain file.
@@ -87,4 +85,3 @@ fallback.
 `plugins/TerminatorPlus/ai/movement/evaluations/`. Reports include manifest and
 schema information, route fallback state, seed/scenario metadata, active branch
 family distribution, loadout distribution, and reward component summaries.
-

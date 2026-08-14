@@ -3,8 +3,6 @@ plugins {
     id("net.nuggetmc.java-conventions")
 }
 
-group = "net.nuggetmc"
-
 repositories {
     mavenCentral()
     maven {
@@ -17,7 +15,6 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:26.1.2.build.+")
+    compileOnly("io.papermc.paper:paper-api:26.2.build.+")
     compileOnly("com.mojang:authlib:3.2.38")
-    compileOnly("com.googlecode.json-simple:json-simple:1.1.1")
 }

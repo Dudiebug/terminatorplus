@@ -11,7 +11,7 @@ runtime duel tests.
 
 ## Current branch truth
 
-- Primary active development target: `mc-26.1.2`.
+- Primary active development target: `mc-26.2`.
 - Do not start current 1v1 strategy work from `master`.
 - Treat `mc-1.21.11` as an older compatibility branch unless a task explicitly
   scopes compatibility work.

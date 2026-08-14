@@ -2,16 +2,12 @@ name: "Compile"
 
 on: [push, pull_request]
 
-# Branch-aware toolchain: mc-1.21.11 still builds on Java 21, but mc-26.1.2 and
-# master require Java 25 (Paper 26.1+ dev-bundle). Pick the JDK by branch so the
+# Branch-aware toolchain: mc-1.21.11 still builds on Java 21, but mc-26.2 and
+# modern Paper branches require Java 25. Pick the JDK by branch so the
 # same workflow is green on every long-lived branch.
 jobs:
   gradle:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ ubuntu-latest ]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -24,7 +20,6 @@ jobs:
             mc-1.21.11) echo "version=21" >> "$GITHUB_OUTPUT" ;;
             *)          echo "version=25" >> "$GITHUB_OUTPUT" ;;
           esac
-          echo "Selected Java ${GITHUB_OUTPUT} for branch $branch"
 
       - uses: actions/setup-java@v4
         with:
@@ -39,7 +34,6 @@ jobs:
 
       - name: Upload a Build Artifact
         uses: actions/upload-artifact@v4
-        if: success()
         with:
           name: TerminatorPlus
           path: |

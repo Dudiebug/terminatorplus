@@ -140,16 +140,3 @@ Examples:
 
 Changing order can easily alter behavior without looking like a "big change" in
 code review.
-
-## Fast way to reason about a bot tick
-
-A useful simplification is:
-
-- `LegacyAgent` decides what problem the bot is solving this tick
-- movement code decides how to locomote toward that problem
-- `CombatDirector` decides which legal combat action should happen
-- `Bot` maintains the entity state needed to make all of that behave like a
-  server-side player
-
-That model is not perfect, but it is close enough to make the codebase much
-easier to navigate.

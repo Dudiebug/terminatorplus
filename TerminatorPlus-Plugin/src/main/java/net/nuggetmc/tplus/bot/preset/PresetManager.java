@@ -58,8 +58,7 @@ public final class PresetManager {
     }
 
     public boolean delete(String name) {
-        File f = fileFor(name);
-        return f.exists() && f.delete();
+        return fileFor(name).delete();
     }
 
     public BotPreset load(String name) {
@@ -197,8 +196,7 @@ public final class PresetManager {
     }
 
     private static ItemStack cloneOrAir(ItemStack it) {
-        return (it == null || it.getType() == Material.AIR)
-                ? new ItemStack(Material.AIR)
-                : it.clone();
+        ItemStack copy = copy(it);
+        return copy == null ? new ItemStack(Material.AIR) : copy;
     }
 }

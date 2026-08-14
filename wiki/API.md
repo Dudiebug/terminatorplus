@@ -1,9 +1,7 @@
 # API
 
-> Legacy/reference notice:
-> This page may describe the old general TerminatorPlus strategy.
-> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
-> Use this page for technical reference only until it is verified against source code and runtime behavior.
+> See [Legacy Status](Legacy-Status) for this page's reference status and
+> [Current Strategy](Current-Strategy) for the current target.
 
 
 TerminatorPlus ships a separate artifact, `TerminatorPlus-API`, so plugins can drive bots without depending on the plugin jar directly.

@@ -2,7 +2,6 @@ package net.nuggetmc.tplus.bot.combat;
 
 import net.nuggetmc.tplus.bot.Bot;
 import org.bukkit.Material;
-import org.bukkit.craftbukkit.entity.CraftLivingEntity;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.inventory.ItemStack;
@@ -26,7 +25,7 @@ import org.bukkit.util.Vector;
  *   <li>{@link #SMASH_READY_CHARGE} = 0.848 — matches vanilla's crit threshold; the mace
  *       smash density bonus dominates base damage so we accept anything above this.</li>
  *   <li>{@link #IFRAME_BLOCK_THRESHOLD} = 10 — matches vanilla LivingEntity.hurt's
- *       {@code invulnerableTime > 10.0F} branch. Hits in the lower half of the window
+ *       {@code getNoDamageTicks() > 10} branch. Hits in the lower half of the window
  *       still land for full damage.</li>
  * </ul>
  */
@@ -51,27 +50,23 @@ public final class BotCombatTiming {
 
     /** True when the bot is charged AND the target can take full damage right now. */
     public static boolean canSwing(Bot bot, LivingEntity target) {
-        return canSwing(bot, target, READY_CHARGE);
-    }
-
-    public static boolean canSwing(Bot bot, LivingEntity target, float minCharge) {
         float charge = charge(bot);
-        int iframes = ((CraftLivingEntity) target).getHandle().invulnerableTime;
-        if (!bot.getBotInventory().isSelectedMeleeWeapon()) {
-            CombatDebugger.swingGate(bot, charge, minCharge, iframes, false, "held");
+        int iframes = target.getNoDamageTicks();
+        if (!MeleeBehavior.isMeleeOrEmpty(bot.getBotInventory().getSelected())) {
+            CombatDebugger.swingGate(bot, charge, READY_CHARGE, iframes, false, "held");
             return false;
         }
-        if (charge < minCharge) {
+        if (charge < READY_CHARGE) {
             CombatDebugger.swingBlock(bot, "charge", charge);
-            CombatDebugger.swingGate(bot, charge, minCharge, iframes, false, "charge");
+            CombatDebugger.swingGate(bot, charge, READY_CHARGE, iframes, false, "charge");
             return false;
         }
         if (iframes > IFRAME_BLOCK_THRESHOLD) {
             CombatDebugger.swingBlock(bot, "iframes", iframes);
-            CombatDebugger.swingGate(bot, charge, minCharge, iframes, false, "iframes");
+            CombatDebugger.swingGate(bot, charge, READY_CHARGE, iframes, false, "iframes");
             return false;
         }
-        CombatDebugger.swingGate(bot, charge, minCharge, iframes, true, "ready");
+        CombatDebugger.swingGate(bot, charge, READY_CHARGE, iframes, true, "ready");
         return true;
     }
 
@@ -194,7 +189,7 @@ public final class BotCombatTiming {
 
     /** True if hitting the target now would be wasted on its i-frame window. */
     public static boolean targetHasIFrames(LivingEntity target) {
-        return ((CraftLivingEntity) target).getHandle().invulnerableTime > IFRAME_BLOCK_THRESHOLD;
+        return target.getNoDamageTicks() > IFRAME_BLOCK_THRESHOLD;
     }
 
     /** Raw vanilla attack-strength charge in [0, 1]. */
@@ -202,40 +197,33 @@ public final class BotCombatTiming {
         return bot.getAttackStrengthScale(0.0f);
     }
 
-    /** Planning guard: a full melee hit can execute right now. */
-    public static boolean readyForFullMelee(Bot bot) {
-        return bot.getBotInventory().isSelectedMeleeWeapon() && chargeReady(bot);
-    }
-
     /** Planning guard for vanilla special-hit branches (crit/sprint-kb windows). */
     public static boolean readyForVanillaSpecial(Bot bot) {
         return bot.getBotInventory().isSelectedMeleeWeapon() && charge(bot) > SMASH_READY_CHARGE;
     }
 
-    public static boolean targetCanTakeFullHit(LivingEntity target) {
-        return !targetHasIFrames(target);
-    }
-
     public static boolean shouldPlanNormalMelee(Bot bot, LivingEntity target) {
-        return readyForFullMelee(bot) && targetCanTakeFullHit(target);
+        return MeleeBehavior.isMeleeOrEmpty(bot.getBotInventory().getSelected())
+                && chargeReady(bot)
+                && !targetHasIFrames(target);
     }
 
     public static boolean shouldPlanSprintReset(Bot bot, LivingEntity target) {
-        return readyForVanillaSpecial(bot) && targetCanTakeFullHit(target);
+        return readyForVanillaSpecial(bot) && !targetHasIFrames(target);
     }
 
     public static void logSweepCheck(Bot bot, LivingEntity target, double distance) {
         if (!CombatDebugger.isOn(bot)) return;
-        SweepDiagnostic diag = sweepDiagnostic(bot, target, distance);
+        SweepDiagnostic diag = sweepDiagnostic(bot, target, distance, false);
         CombatDebugger.log(bot, "sweep-check", diag.details());
     }
 
     public static boolean predictsSweep(Bot bot, LivingEntity target, double distance) {
-        return sweepDiagnostic(bot, target, distance).eligible;
+        return sweepDiagnostic(bot, target, distance, false).eligible();
     }
 
     public static boolean predictsSweepWithSword(Bot bot, LivingEntity target, double distance) {
-        return sweepDiagnostic(bot, target, distance, true).eligible;
+        return sweepDiagnostic(bot, target, distance, true).eligible();
     }
 
     public static int sweepVictimCount(Bot bot, LivingEntity target) {
@@ -245,18 +233,14 @@ public final class BotCombatTiming {
     public static void logSweepSkipIfRelevant(Bot bot, LivingEntity target, double distance, String reason, String branch) {
         if (!CombatDebugger.isOn(bot)) return;
         if (bot.getBotInventory().findSword() < 0 || distance > MeleeBehavior.ATTACK_RANGE) return;
-        SweepDiagnostic diag = sweepDiagnostic(bot, target, distance);
+        SweepDiagnostic diag = sweepDiagnostic(bot, target, distance, false);
         CombatDebugger.log(bot, "sweep-skip",
                 "reason=" + reason
                         + " branch=" + branch
-                        + " charge=" + fmt3(diag.charge)
+                        + " charge=" + fmt3(diag.charge())
                         + " range=" + fmt2(distance)
-                        + " sweepPred=" + diag.eligible
-                        + " sweepVictimCount=" + diag.targets);
-    }
-
-    private static SweepDiagnostic sweepDiagnostic(Bot bot, LivingEntity target, double distance) {
-        return sweepDiagnostic(bot, target, distance, false);
+                        + " sweepPred=" + diag.eligible()
+                        + " sweepVictimCount=" + diag.targets());
     }
 
     private static SweepDiagnostic sweepDiagnostic(Bot bot, LivingEntity target, double distance, boolean assumeSwordHeld) {
@@ -319,21 +303,7 @@ public final class BotCombatTiming {
         return String.format("%.3f", value);
     }
 
-    private static final class SweepDiagnostic {
-        final boolean eligible;
-        final String reason;
-        final float charge;
-        final double distance;
-        final int targets;
-
-        SweepDiagnostic(boolean eligible, String reason, float charge, double distance, int targets) {
-            this.eligible = eligible;
-            this.reason = reason;
-            this.charge = charge;
-            this.distance = distance;
-            this.targets = targets;
-        }
-
+    private record SweepDiagnostic(boolean eligible, String reason, float charge, double distance, int targets) {
         String details() {
             return "sweepPred=" + eligible
                     + " reason=" + reason

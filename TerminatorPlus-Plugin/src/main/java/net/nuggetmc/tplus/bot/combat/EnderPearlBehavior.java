@@ -15,7 +15,7 @@ import org.bukkit.util.Vector;
  * (refilled in {@link net.nuggetmc.tplus.bot.loadout.BotInventory#ensureMovementKit()}),
  * so this fires whenever the cooldown is ready and the target is in range.
  */
-public final class EnderPearlBehavior implements WeaponBehavior {
+public final class EnderPearlBehavior {
 
     public static final String COOLDOWN_KEY = "pearl";
     private static final int COOLDOWN = 60;
@@ -26,7 +26,6 @@ public final class EnderPearlBehavior implements WeaponBehavior {
     private static final double SPEED = 1.8;
     private static final int RELEASE_TICKS = 5;
 
-    @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
         int alive = bot.getAliveTicks();
         if (distance < MIN_DISTANCE || distance > MAX_DISTANCE) {

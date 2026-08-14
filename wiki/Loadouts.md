@@ -1,26 +1,14 @@
 # Loadouts
 
-> Legacy/reference notice:
-> This page may describe the old general TerminatorPlus strategy.
-> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
-> Use this page for technical reference only until it is verified against source code and runtime behavior.
+> See [Legacy Status](Legacy-Status) for this page's reference status and
+> [Current Strategy](Current-Strategy) for the current target.
 
 
 Loadouts are named, built-in kits applied via `/bot loadout <name> [bot-name]`. They write a full 41-slot layout to the bot: hotbar, storage, armor, and offhand.
 
 If `bot-name` is omitted, the kit is applied to every spawned bot.
 
-## Slot map
-
-| Slot | Meaning |
-| ---: | --- |
-| 0--8 | Hotbar |
-| 9--35 | Storage |
-| 36 | Boots |
-| 37 | Leggings |
-| 38 | Chestplate or elytra |
-| 39 | Helmet |
-| 40 | Offhand |
+Slot numbers use the [Inventory GUI slot map](Inventory-GUI#slot-map).
 
 ## Catalog
 
@@ -155,24 +143,8 @@ samples named loadouts automatically from the weighted mix selected by
 `ai.training.loadout-mix`; the named mixes live under
 `ai.training.loadout-mixes` in `config.yml`.
 
-The default `movement_balanced` mix is intentionally not equal weight:
-
-```yaml
-sword: 12
-axe: 12
-smp: 12
-pot: 8
-mace: 10
-spear: 8
-trident: 8
-windcharge: 6
-skydiver: 5
-hybrid: 6
-vanilla: 5
-pvp: 3
-crystalpvp: 3
-anchorbomb: 2
-```
+The default `movement_balanced` weights are documented in
+[Configuration](Configuration).
 
 `pvp`, `crystalpvp`, and `anchorbomb` total 8% so explosive movement gets
 coverage without turning every generation into crystal/anchor chaos.

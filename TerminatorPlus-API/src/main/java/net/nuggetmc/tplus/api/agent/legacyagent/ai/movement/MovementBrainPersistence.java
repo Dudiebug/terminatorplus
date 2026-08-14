@@ -159,7 +159,12 @@ public final class MovementBrainPersistence {
                     routeNames.put(family, read.brain().name());
                 } else if (!read.missing()) {
                     warnings.add(family + ": " + read.message());
-                    Path quarantined = quarantineBrain(brainPath, config, "bad-brain");
+                    Path quarantined;
+                    try {
+                        quarantined = quarantineOrBackup(brainPath, config, "bad-brain");
+                    } catch (IOException ignored) {
+                        quarantined = null;
+                    }
                     if (quarantined != null) warnings.add("quarantined " + brainPath + " -> " + quarantined);
                 }
             }
@@ -420,7 +425,7 @@ public final class MovementBrainPersistence {
         json.addProperty("savedAt", Instant.now().toString());
 
         JsonObject architecture = new JsonObject();
-        architecture.add("layerShape", intArray(brain.network().layerSizes()));
+        architecture.add("layerShape", GSON.toJsonTree(brain.network().layerSizes()));
         architecture.addProperty("inputCount", MovementNetworkShape.INPUT_COUNT);
         architecture.addProperty("outputCount", MovementNetworkShape.OUTPUT_COUNT);
         architecture.addProperty("parameterCount", brain.network().parameterCount());
@@ -428,14 +433,14 @@ public final class MovementBrainPersistence {
         architecture.addProperty("parameterLayout", "bias-then-input-weights-per-neuron");
         json.add("architecture", architecture);
 
-        json.add("weights", doubleArray(brain.network().parameters()));
+        json.add("weights", GSON.toJsonTree(brain.network().parameters()));
 
         JsonObject normalization = new JsonObject();
         normalization.addProperty("mode", brain.normalization().mode());
-        normalization.add("mean", doubleArray(brain.normalization().mean()));
-        normalization.add("scale", doubleArray(brain.normalization().scale()));
-        normalization.add("observationFields", stringArray(MovementNetworkShape.INPUT_FIELDS));
-        normalization.add("actionFields", stringArray(MovementNetworkShape.OUTPUT_FIELDS));
+        normalization.add("mean", GSON.toJsonTree(brain.normalization().mean()));
+        normalization.add("scale", GSON.toJsonTree(brain.normalization().scale()));
+        normalization.add("observationFields", GSON.toJsonTree(MovementNetworkShape.INPUT_FIELDS));
+        normalization.add("actionFields", GSON.toJsonTree(MovementNetworkShape.OUTPUT_FIELDS));
         json.add("normalization", normalization);
 
         JsonObject training = new JsonObject();
@@ -525,11 +530,7 @@ public final class MovementBrainPersistence {
         JsonArray shapeArray = architecture == null ? null : arrayValue(architecture, "layerShape");
         if (shapeArray == null) shapeArray = arrayValue(json, "shape");
         if (shapeArray == null) throw new IllegalStateException("missing layer shape");
-        int[] shape = new int[shapeArray.size()];
-        for (int i = 0; i < shape.length; i++) {
-            shape[i] = shapeArray.get(i).getAsInt();
-        }
-        return normalizedShape(shape);
+        return normalizedShape(GSON.fromJson(shapeArray, int[].class));
     }
 
     private static double[] readParameters(JsonObject json, int[] shape) {
@@ -564,11 +565,7 @@ public final class MovementBrainPersistence {
                 }
             }
         }
-        double[] result = new double[values.size()];
-        for (int i = 0; i < values.size(); i++) {
-            result[i] = values.get(i);
-        }
-        return result;
+        return values.stream().mapToDouble(Double::doubleValue).toArray();
     }
 
     private static int[] normalizedShape(int[] requested) {
@@ -657,38 +654,12 @@ public final class MovementBrainPersistence {
         return backupExisting(path, suffix);
     }
 
-    private static Path quarantineBrain(Path path, MovementTrainingConfig config, String suffix) {
-        try {
-            return quarantineOrBackup(path, config, suffix);
-        } catch (IOException e) {
-            return null;
-        }
-    }
-
     private static String timestamp() {
         return Instant.now().toString().replace(':', '-');
     }
 
     private static String buildVersion(Plugin plugin) {
         return plugin == null || plugin.getDescription() == null ? "" : plugin.getDescription().getVersion();
-    }
-
-    private static JsonArray intArray(int[] values) {
-        JsonArray array = new JsonArray();
-        for (int value : values) array.add(value);
-        return array;
-    }
-
-    private static JsonArray doubleArray(double[] values) {
-        JsonArray array = new JsonArray();
-        for (double value : values) array.add(value);
-        return array;
-    }
-
-    private static JsonArray stringArray(List<String> values) {
-        JsonArray array = new JsonArray();
-        values.forEach(array::add);
-        return array;
     }
 
     private static double[] readOptionalDoubleArray(JsonObject json, String key) {
@@ -698,11 +669,7 @@ public final class MovementBrainPersistence {
 
     private static double[] readDoubleArray(JsonArray array) {
         if (array == null) throw new IllegalStateException("missing number array");
-        double[] values = new double[array.size()];
-        for (int i = 0; i < values.length; i++) {
-            values[i] = array.get(i).getAsDouble();
-        }
-        return values;
+        return GSON.fromJson(array, double[].class);
     }
 
     private static JsonObject objectValue(JsonObject object, String key) {

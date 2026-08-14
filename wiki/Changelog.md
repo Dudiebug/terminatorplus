@@ -1,63 +1,15 @@
 # Changelog
 
-> Legacy/reference notice:
-> This page may describe the old general TerminatorPlus strategy.
-> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
-> Use this page for technical reference only until it is verified against source code and runtime behavior.
+> See [Legacy Status](Legacy-Status) for this page's reference status and
+> [Current Strategy](Current-Strategy) for the current target.
 
 ## 6.1.0 - Legal Action Migration and Live Duel Metrics
 
 See [Release Notes 6.1.0](Release-Notes-6.1.0) for the full patch notes.
 
-### Added
-
-- Action-controller release phases for splash throws, utility/scanner cobweb placement, ender pearl throws, and trident charge/release.
-- `LiveDuelMetricsRecorder` and `LiveDuelMetricsSnapshot` for runtime damage, spacing, movement fallback, route thrash, retreat, heal, and action-legality counters.
-- Movement constraints while timed actions are active, without changing MovementInput schema v3.
-- Tool-aware legacy mining crack progress for common obstacle blocks.
-
-### Changed
-
-- Splash self-heal no longer applies duplicate instant healing in addition to the thrown potion.
-- Movement reward scoring now penalizes fake/direct shortcuts, instant consumes, illegal same-tick actions, and interruptions.
-- Report-only evaluation schema is now version 3 and continues to keep uncollected live metrics null.
-
-### Notes
-
-- Build passed with `./gradlew build -q`.
-- Runtime gameplay claims remain `needs runtime test` until verified in a live Paper duel.
-
 ## 6.0.0 - Duel Core V2, Player-Like Actions, Movement Brain Bank, and Evaluation Overhaul
 
-This is the largest TerminatorPlus update in the modern Paper 26 line. Version
-6.0.0 turns the project from a collection of strong combat behaviors into a
-structured 1v1 PvP bot platform with a cleaner duel brain, player-like action
-timing, movement-brain routing, richer training telemetry, and release-grade
-documentation for continuing the work safely.
-
 See [Release Notes 6.0.0](Release-Notes-6.0.0) for the full patch notes.
-
-### Added
-
-- Combat runtime architecture for focused 1v1 PvP bot quality on Paper 26.1.2.
-- `CombatIntent`, movement objective, action category, and movement-branch routing data that let combat planning and movement selection share one richer state model.
-- Movement brain-bank support with per-family brains, schema validation, manifest state, quarantine behavior, route telemetry, and fixed-seed evaluation exports.
-- Player-like action controller foundation with timed consumable use, interruption handling, combat gating, and legality counters for fake actions, instant consumes, and same-tick action violations.
-- Live evaluator metric schema v2 with a metric catalog and first-class duel, movement, safety, and action-legality fields.
-- Major documentation pass covering the project vision, workflow, review checklist, duel test plan, phase review, installation notes, and API/troubleshooting version references.
-
-### Changed
-
-- Updated the plugin build version to `6.0.0-BETA-mc26.1.2`.
-- Consumables now route apples and drink potions through timed use instead of instant effect application.
-- Combat execution now respects primary-action budgeting and can hold combat while timed player-like actions are in progress.
-- Training and evaluation outputs now expose report-only nulls explicitly so missing live arena metrics are visible instead of ambiguous.
-
-### Notes
-
-- This release targets Paper 26.1.2 and Java 25.
-- Some advanced legal-action systems, including vanilla mining/block breaking and full block/projectile/explosive legality replacement, are still tracked as follow-up work; 6.0.0 adds telemetry and guardrails so those shortcuts are visible.
-- Runtime PvP arena testing is still required before treating every new metric as gameplay-calibrated.
 
 ## 5.2.5 - Reinforcement Round Limit Config
 
@@ -113,49 +65,6 @@ See [Release Notes 6.0.0](Release-Notes-6.0.0) for the full patch notes.
 ## 5.1.1 - Combat Reliability + Movement Neural Network
 
 See [Release Notes 5.1.1](Release-Notes-5.1.1) for full details.
-
-### Added
-
-Combat reliability:
-
-- Vanilla attack ordering fix: `Bot.attack()` calls vanilla attack before swing/punch to prevent charge reset.
-- Charge-aware planning: CombatDirector waits for full attack charge before committing to attacks.
-- Mace recharge planning with gravity-aware airtime tracking.
-- Mace airborne tracking with ground clip tolerance and velocity-aware horizontal damping.
-- Sweep instrumentation and telemetry.
-- Combat telemetry fields: `critPred`, `sweepPred`, `chargeAtVanillaAttack`, `chargeAfterVanillaAttack`, `targetHp`, `targetHpDelta`.
-- `/bot combatdebug` command for per-bot combat trace logging.
-
-Movement neural network:
-
-- Movement-only neural network controlling footwork. It does **not** control combat.
-- `CombatDirector.plan()` / `execute()` split with `CombatIntent` / `MovementState` coupling.
-- 37-value `MovementInput` schema and 8-value `MovementOutput` schema.
-- MovementOutputApplier with threshold-based movement decisions.
-- In-JVM genetic algorithm with tournament selection, uniform crossover, adaptive Gaussian mutation, and elite preservation.
-- Brain persistence with schema validation, safe fallback, and backups.
-- `/ai brain <status|load|save|reset>` commands.
-- `/ai movement` command for spawning movement-controller bots.
-- `/ai reinforcement` accepts movement-controller or `legacy` mode.
-
-Loadouts:
-
-- New loadouts: `vanilla`, `axe`, `smp`, `pot`, `spear`.
-- `/bot loadoutmix` command for distributing loadouts across live bots.
-- Loadout mix presets: `alltypes`, `core`, `problem`.
-
-### Fixed
-
-- Bots no longer waste swings on uncharged attacks.
-- Vanilla attack damage calculation now runs before swing/punch animation.
-- Mace smash no longer commits when airtime is insufficient for recharge.
-- Mace airborne tracking no longer overshoots on moving targets.
-
-### Known limitations
-
-- Changing the movement layer shape after training invalidates saved brains.
-- Training with large populations impacts server TPS.
-- Movement-bank bots must be spawned with `/ai movement`; normal `/bot create` bots use the legacy movement path.
 
 ## Pre-5.1.1 - Combat + Inventory + Presets Overhaul
 

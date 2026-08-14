@@ -40,7 +40,6 @@ public class LegacyMats {
         Material.SUNFLOWER,
         Material.AIR,
         Material.VOID_AIR,
-        Material.FIRE,
         Material.SOUL_FIRE
     ));
 
@@ -162,7 +161,6 @@ public class LegacyMats {
     	Material.WALL_TORCH,
     	Material.WEEPING_VINES_PLANT,
     	Material.WEEPING_VINES,
-    	Material.CAVE_VINES_PLANT,
     	Material.CAVE_VINES
     ), Arrays.asList(), Arrays.asList(Switch.class, CoralWallFan.class, WallSign.class), m -> m.name().endsWith("_WALL_BANNER")));
     
@@ -360,8 +358,6 @@ public class LegacyMats {
     		if (block.getType().data == Fence.class || block.getType().data == Wall.class)
     			return false;
     		if (block.getType().name().endsWith("_BANNER"))
-    			return false;
-    		if (block.getType().name().endsWith("_WALL_BANNER"))
     			return false;
     		if (block.getType().data == Bed.class)
     			return false;

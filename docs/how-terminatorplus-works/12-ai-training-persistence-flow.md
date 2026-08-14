@@ -157,41 +157,10 @@ Changing those casually can:
 
 So even apparently small AI changes can have repo-wide migration costs.
 
-## What appears current
+## Classification and change posture
 
-Current and important:
-
-- movement-controller runtime path
-- movement brain bank
-- movement brain persistence
-- routing/fallback logic
-- AI command support for movement-brain workflows
-
-## What appears legacy/protected
-
-Legacy/protected:
-
-- full-replacement NN mode
-- legacy training/random paths
-- old import compatibility behavior
-- fallback bridges back into legacy movement logic
-
-## What appears training-only
-
-Training-only or mostly training-oriented:
-
-- reinforcement training commands
-- evaluation export flows
-- some route telemetry/reporting helpers
-- mixed training scenarios and curriculum-oriented settings
-
-## What should not be deleted yet
-
-The correct current posture is:
-
-- document the difference between current and legacy AI modes
-- preserve both until proof exists
-- prefer docs reclassification over code deletion
-
-The movement-controller system is the architectural future, but it still lives
-inside a codebase that preserves older AI machinery for real reasons.
+Use the [status matrix](./14-active-vs-legacy-vs-unused-matrix.md) for shared
+current, legacy, and training labels. The movement-controller path is current
+infrastructure; full-replacement and import compatibility remain protected,
+and training outputs stay secondary to normal duel runtime. Preserve both modes
+until reference and runtime proof support a narrower surface.

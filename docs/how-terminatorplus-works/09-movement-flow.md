@@ -190,16 +190,7 @@ Accidental contract breaks would likely happen if someone:
 movement back to `moveLegacy(...)` when needed. That fallback is protective,
 not dead code.
 
-## Why this architecture is important for the future
+## Directional takeaway
 
-The movement-controller design is one of the clearest expressions of the
-current long-term direction.
-
-It allows:
-
-- learned locomotion specialization
-- combat-aware spacing and pressure
-- continued centralized combat legality
-
-That is much closer to a future duel-core architecture than the old
-full-replacement NN path, but it still depends on the legacy shell around it.
+The movement-controller path is the current direction, but it still relies on
+the legacy shell and fallback path described above.

@@ -17,7 +17,6 @@ import net.nuggetmc.tplus.api.utils.ChatUtils;
 import net.nuggetmc.tplus.command.CommandHandler;
 import net.nuggetmc.tplus.command.CommandInstance;
 import net.nuggetmc.tplus.command.annotation.Arg;
-import net.nuggetmc.tplus.command.annotation.Autofill;
 import net.nuggetmc.tplus.command.annotation.Command;
 
 public class BotEnvironmentCommand extends CommandInstance {
@@ -266,7 +265,7 @@ public class BotEnvironmentCommand extends CommandInstance {
     public void mobListType(CommandSender sender, List<String> args) {
         if (args.isEmpty()) {
             sender.sendMessage("The custom mob list type is " + ChatColor.BLUE + LegacyAgent.customListMode + ChatColor.RESET + ".");
-        } else if (args.size() > 0 && CustomListMode.isValid(args.get(0))) {
+        } else if (CustomListMode.isValid(args.get(0))) {
             LegacyAgent.customListMode = CustomListMode.from(args.get(0));
             sender.sendMessage(
                     "Successfully set the custom mob list type to " + ChatColor.BLUE + args.get(0) + ChatColor.RESET + ".");
@@ -274,7 +273,6 @@ public class BotEnvironmentCommand extends CommandInstance {
             sender.sendMessage("Usage: " + ChatColor.YELLOW + "/botenvironment mobListType (" + CustomListMode.listModes() + ")" + ChatColor.RESET);
     }
 
-    @Autofill
     public List<String> autofill(CommandSender sender, String[] args) {
         List<String> output = new ArrayList<>();
         if (args.length == 2) {
@@ -299,22 +297,6 @@ public class BotEnvironmentCommand extends CommandInstance {
 
     private boolean matches(String input, String check) {
         return input.equals(check) || input.equals(check.toLowerCase(Locale.ENGLISH));
-    }
-
-    private double parseDoubleOrRelative(String pos, Location loc, int type) {
-        if (loc == null || pos.length() == 0 || pos.charAt(0) != '~')
-            return Double.parseDouble(pos);
-        double relative = pos.length() == 1 ? 0 : Double.parseDouble(pos.substring(1));
-        switch (type) {
-            case 0:
-                return relative + Math.round(loc.getX() * 1000) / 1000D;
-            case 1:
-                return relative + Math.round(loc.getY() * 1000) / 1000D;
-            case 2:
-                return relative + Math.round(loc.getZ() * 1000) / 1000D;
-            default:
-                return 0;
-        }
     }
 
     private boolean isLocationLoaded(Location loc) {

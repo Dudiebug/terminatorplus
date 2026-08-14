@@ -8,7 +8,10 @@ import net.nuggetmc.tplus.command.annotation.TextArg;
 import net.nuggetmc.tplus.command.exception.ArgCountException;
 import net.nuggetmc.tplus.command.exception.ArgParseException;
 import net.nuggetmc.tplus.command.exception.NonPlayerException;
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.defaults.BukkitCommand;
 import org.bukkit.entity.Player;
@@ -66,6 +69,56 @@ public abstract class CommandInstance extends BukkitCommand {
         aliasesToNames.put(alias, name);
     }
 
+    protected static Location parseSpawnLocation(CommandSender sender, String loc) {
+        Location location = sender instanceof Player
+                ? ((Player) sender).getLocation()
+                : new Location(Bukkit.getWorlds().get(0), 0, 0, 0);
+        if (loc != null && !loc.isEmpty()) {
+            Player player = Bukkit.getPlayer(loc);
+            if (player != null) {
+                return player.getLocation();
+            }
+
+            String[] split = loc.split(" ");
+            if (split.length < 3) {
+                sender.sendMessage("The location '" + ChatColor.YELLOW + loc + ChatColor.RESET + "' is not valid!");
+                return null;
+            }
+            try {
+                double x = Double.parseDouble(split[0]);
+                double y = Double.parseDouble(split[1]);
+                double z = Double.parseDouble(split[2]);
+                World world = Bukkit.getWorld(split.length >= 4 ? split[3] : location.getWorld().getName());
+                return new Location(world, x, y, z);
+            } catch (NumberFormatException e) {
+                sender.sendMessage("The location '" + ChatColor.YELLOW + loc + ChatColor.RESET + "' is not valid!");
+                return null;
+            }
+        }
+
+        if (!(sender instanceof Player)) {
+            sender.sendMessage("Spawning bot at 0, 0, 0 in world " + location.getWorld().getName()
+                    + " because no location was specified.");
+        }
+        return location;
+    }
+
+    protected static double parseDoubleOrRelative(String pos, Location loc, int type) {
+        if (loc == null || pos.length() == 0 || pos.charAt(0) != '~')
+            return Double.parseDouble(pos);
+        double relative = pos.length() == 1 ? 0 : Double.parseDouble(pos.substring(1));
+        switch (type) {
+            case 0:
+                return relative + Math.round(loc.getX() * 1000) / 1000D;
+            case 1:
+                return relative + Math.round(loc.getY() * 1000) / 1000D;
+            case 2:
+                return relative + Math.round(loc.getZ() * 1000) / 1000D;
+            default:
+                return 0;
+        }
+    }
+
     @Override
     public boolean execute(@Nonnull CommandSender sender, @Nonnull String label, @Nonnull String[] args) {
         if (!sender.hasPermission(MANAGE_PERMISSION)) {
@@ -82,10 +135,9 @@ public abstract class CommandInstance extends BukkitCommand {
 
         if (args.length == 0) {
             method = methods.get("");
-        } else if (methods.containsKey(aliasesToNames.getOrDefault(args[0], args[0]))) {
-            method = methods.get(aliasesToNames.getOrDefault(args[0], args[0]));
         } else {
-            method = methods.get("");
+            String methodName = aliasesToNames.getOrDefault(args[0], args[0]);
+            method = methods.containsKey(methodName) ? methods.get(methodName) : methods.get("");
         }
 
         if (method == null) {

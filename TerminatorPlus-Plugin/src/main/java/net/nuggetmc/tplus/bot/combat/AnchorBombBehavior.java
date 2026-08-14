@@ -22,7 +22,7 @@ import org.bukkit.util.Vector;
  * away from the target when placing the anchor; otherwise it kills itself. The director
  * is also expected to trigger this only when the bot has open space behind it.
  */
-public final class AnchorBombBehavior implements WeaponBehavior {
+public final class AnchorBombBehavior {
 
     public static final String COOLDOWN_KEY = "anchor";
     private static final int COOLDOWN = 50;
@@ -30,7 +30,6 @@ public final class AnchorBombBehavior implements WeaponBehavior {
     public static final double MIN_DISTANCE = 6.0;
     public static final double MAX_DISTANCE = 8.0;
 
-    @Override
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
         // Vanilla anchors only explode OUTSIDE the Nether. In the Nether they just set spawn.
         int alive = bot.getAliveTicks();

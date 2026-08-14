@@ -171,14 +171,7 @@ runtime proof.
 Use this release if you want the 6.0.0 architecture with better action timing,
 better measurement, and fewer obviously fake advanced-tool shortcuts.
 
-Suggested smoke test:
-
-```text
-/bot create DuelBot
-/bot loadout sword DuelBot
-/bot combatdebug DuelBot on
-/ai movement 1 DuelBot
-```
+For a baseline duel setup and command pattern, see [Duel Testing](Duel-Testing).
 
 Then test targeted loadouts:
 

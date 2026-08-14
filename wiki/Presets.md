@@ -1,9 +1,7 @@
 # Presets
 
-> Legacy/reference notice:
-> This page may describe the old general TerminatorPlus strategy.
-> Current strategy is 1v1 PvP bot quality on `mc-26.1.2`.
-> Use this page for technical reference only until it is verified against source code and runtime behavior.
+> See [Legacy Status](Legacy-Status) for this page's reference status and
+> [Current Strategy](Current-Strategy) for the current target.
 
 
 Presets are YAML files that snapshot a bot's loadout **and** behavior settings. They live in:
@@ -26,6 +24,7 @@ plugins/TerminatorPlus/presets/<preset-name>.yml
 Everything a new bot needs to replay the same kit:
 
 - **Every item slot** (0–40): hotbar, storage, armor, offhand — with full NBT.
+  See the [Inventory GUI slot map](Inventory-GUI#slot-map) for indices.
 - **Selected hotbar slot** (which item the bot is holding).
 - **Behavior settings**:
   - `goal` — target-selection goal (`PLAYER`, `NEAREST`, `NEAREST_PLAYER`, etc.)
@@ -58,18 +57,6 @@ items:
 Items are serialized with Paper's `ItemStack.serializeAsBytes()` and Base64-encoded. This preserves **everything**: display name, lore, enchantments, potion effects, durability, custom NBT. Items round-trip exactly.
 
 Only non-empty slots are written; missing keys deserialize as `AIR`.
-
-### Slot indices
-
-| Range | Meaning |
-| --- | --- |
-| 0–8 | Hotbar |
-| 9–35 | Storage |
-| 36 | Boots |
-| 37 | Leggings |
-| 38 | Chestplate (or elytra) |
-| 39 | Helmet |
-| 40 | Offhand |
 
 ## Editing by hand
 

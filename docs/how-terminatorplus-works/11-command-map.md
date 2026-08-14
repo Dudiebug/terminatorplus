@@ -73,73 +73,11 @@ the desired future default user path.
 | `/terminatorplus` | `MainCommand.root(...)` | Plugin info/help surface | No | Active shell |
 | `/terminatorplus debuginfo` | `MainCommand.debugInfo(...)` | Upload debug info externally through `mclo.gs` | Yes | Optional/debug/admin with external side effect |
 
-## Commands closest to the current narrow 1v1 path
+## Reading the table
 
-These are the commands most aligned with the plugin's current strategic
-direction:
-
-- `/bot create`
-- `/bot reset`
-- `/bot give`
-- `/bot armor`
-- `/bot inventory`
-- `/bot preset`
-- `/bot loadout`
-- `/bot combatdebug`
-- `/ai movement`
-- `/ai brain`
-- `/ai stop`
-- `/ai info`
-
-Even within this set, some commands touch high-risk systems and should not be
-treated as low-consequence utilities.
-
-## Commands that are active but clearly broader than the current strategy
-
-These still work, but they reflect older, wider plugin ambitions:
-
-- `/bot multi`
-- `/bot gather`
-- `/bot settings` in its broader target-goal/region sense
-- `/bot loadoutmix`
-- `/botenvironment`
-- `/ai random`
-- legacy reinforcement branches
-
-These are strong archive/reclassification candidates at the docs level.
-
-## Commands that touch the highest-risk code paths
-
-These commands deserve extra caution because they mutate fragile runtime state:
-
-- `/bot create`
-- `/bot give`
-- `/bot armor`
-- `/bot inventory`
-- `/bot preset apply`
-- `/bot loadout`
-- `/bot loadoutmix`
-- `/bot settings`
-- `/botenvironment`
-
-The common high-risk surfaces they touch are:
-
-- NMS bot spawn/removal
-- inventory/loadout sync
-- target-goal and manager globals
-- legacy movement/environment assumptions
-
-## Documentation implication
-
-The current command surface should not be documented as one flat set of equal
-"main features."
-
-A better docs split is:
-
-- current duel-focused commands
-- training-only commands
-- admin/debug commands
-- legacy/protected compatibility commands
-
-That split matches the source much better than the older broad-plugin docs
-shape.
+The table above is the canonical command legend: active rows include the
+current `/bot create` flow and its inventory, preset, and loadout support;
+training, admin/debug, and legacy rows remain live but secondary to the narrow
+duel path. Treat rows that mutate spawn, inventory, presets, target/manager
+state, or environment overrides as high-risk. See [inventory flow](./10-inventory-loadout-preset-gui-flow.md)
+and [scope and safety](./01-scope-and-safety.md) before changing them.

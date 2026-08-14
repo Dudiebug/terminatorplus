@@ -42,12 +42,7 @@ class BotStats:
     noop_reasons: Counter = field(default_factory=Counter)
     swing_blocks: Counter = field(default_factory=Counter)
     mace_phase_transitions: Counter = field(default_factory=Counter)
-    melee_try: int = 0
-    melee_hit: int = 0
-    melee_oor: int = 0
-    mace_smash: int = 0
     mace_smash_iframed: int = 0
-    mace_cd_skips: int = 0
     first_ts: str | None = None
     last_ts: str | None = None
     first_tick: int | None = None
@@ -55,13 +50,6 @@ class BotStats:
     weapon_pick_by_distance_bucket: dict[str, Counter] = field(
         default_factory=lambda: defaultdict(Counter)
     )
-
-
-def parse_kv(blob: str | None) -> dict[str, str]:
-    if not blob:
-        return {}
-    return dict(KV_RE.findall(blob))
-
 
 def dist_bucket(d: float) -> str:
     if d < 1.5:
@@ -82,8 +70,6 @@ def parse(path: Path, bot_filter: str | None) -> dict[str, BotStats]:
 
     with path.open("r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
-            if "[tplus-cbt]" not in line:
-                continue
             m = LINE_RE.search(line)
             if not m:
                 continue
@@ -93,7 +79,7 @@ def parse(path: Path, bot_filter: str | None) -> dict[str, BotStats]:
             tick = int(m["tick"])
             event = m["event"]
             ts = m["ts"]
-            kv = parse_kv(m["kv"])
+            kv = dict(KV_RE.findall(m["kv"] or ""))
 
             s = stats.setdefault(bot, BotStats(name=bot))
             s.events[event] += 1
@@ -115,18 +101,9 @@ def parse(path: Path, bot_filter: str | None) -> dict[str, BotStats]:
                 s.noop_reasons[kv.get("reason", "?")] += 1
             elif event == "swing-block":
                 s.swing_blocks[kv.get("reason", "?")] += 1
-            elif event == "melee-try":
-                s.melee_try += 1
-            elif event == "melee-hit":
-                s.melee_hit += 1
-            elif event == "melee-oor":
-                s.melee_oor += 1
             elif event == "mace-smash":
-                s.mace_smash += 1
                 if kv.get("iframes") == "true":
                     s.mace_smash_iframed += 1
-            elif event == "mace-cd":
-                s.mace_cd_skips += 1
             elif event == "mace-phase":
                 s.mace_phase_transitions[
                     f'{kv.get("from", "?")}->{kv.get("to", "?")}'
@@ -150,6 +127,12 @@ def fmt_counter(c: Counter, total: int | None = None, top: int = 15) -> str:
 
 
 def report(bot: BotStats) -> None:
+    melee_try = bot.events.get("melee-try", 0)
+    melee_hit = bot.events.get("melee-hit", 0)
+    melee_oor = bot.events.get("melee-oor", 0)
+    mace_smash = bot.events.get("mace-smash", 0)
+    mace_cd_skips = bot.events.get("mace-cd", 0)
+
     print("=" * 72)
     print(f"bot: {bot.name}")
     print(f"  window: {bot.first_ts}..{bot.last_ts}  "
@@ -189,16 +172,16 @@ def report(bot: BotStats) -> None:
         print()
 
     print("melee conversion:")
-    print(f"  melee-try: {bot.melee_try:,}")
-    print(f"  melee-hit: {bot.melee_hit:,}  "
-          f"({100.0 * bot.melee_hit / bot.melee_try if bot.melee_try else 0.0:.1f}% of tries)")
-    print(f"  melee-oor: {bot.melee_oor:,}  (distance > ATTACK_RANGE)")
+    print(f"  melee-try: {melee_try:,}")
+    print(f"  melee-hit: {melee_hit:,}  "
+          f"({100.0 * melee_hit / melee_try if melee_try else 0.0:.1f}% of tries)")
+    print(f"  melee-oor: {melee_oor:,}  (distance > ATTACK_RANGE)")
     print()
 
     print("mace activity:")
-    print(f"  mace-smash:          {bot.mace_smash:,}  "
+    print(f"  mace-smash:          {mace_smash:,}  "
           f"({bot.mace_smash_iframed:,} wasted on i-frames)")
-    print(f"  mace-cd swings:      {bot.mace_cd_skips:,}  "
+    print(f"  mace-cd swings:      {mace_cd_skips:,}  "
           f"(stay-and-swing while jump cooldown burns)")
     print()
 
@@ -228,21 +211,21 @@ def report(bot: BotStats) -> None:
                     f"  !! {crystal_close:,} END_CRYSTAL picks at distance < 1.5 — "
                     f"the bot is point-blank-nuking itself."
                 )
-    if bot.melee_try == 0 and bot.melee_hit == 0 and total_picks > 100:
+    if melee_try == 0 and melee_hit == 0 and total_picks > 100:
         flags.append(
             "  !! zero melee attempts recorded. "
             "Either no sword/axe in loadout, or a higher-priority branch "
             "(crystal / anchor / mace-airborne) preempts every tick."
         )
-    if bot.melee_try and bot.melee_hit == 0:
+    if melee_try and melee_hit == 0:
         flags.append(
-            f"  !! {bot.melee_try:,} melee-try events but 0 melee-hit — every swing "
+            f"  !! {melee_try:,} melee-try events but 0 melee-hit — every swing "
             f"was gated by canSwing(). Check swing-block reasons above."
         )
-    if bot.mace_smash and bot.mace_smash_iframed / bot.mace_smash > 0.5:
+    if mace_smash and bot.mace_smash_iframed / mace_smash > 0.5:
         flags.append(
-            f"  !! {100.0 * bot.mace_smash_iframed / bot.mace_smash:.0f}% of mace "
-            f"smashes wasted on i-frames ({bot.mace_smash_iframed}/{bot.mace_smash})."
+            f"  !! {100.0 * bot.mace_smash_iframed / mace_smash:.0f}% of mace "
+            f"smashes wasted on i-frames ({bot.mace_smash_iframed}/{mace_smash})."
         )
 
     if flags:

@@ -22,7 +22,6 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.potion.PotionType;
-import org.bukkit.scheduler.BukkitScheduler;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 
@@ -36,10 +35,8 @@ public class BotCommand extends CommandInstance {
     private static final String ADMIN_PERMISSION = "terminatorplus.admin";
 
     private final TerminatorPlus plugin;
-    private final CommandHandler handler;
     private final BotManagerImpl manager;
     private final LegacyAgent agent;
-    private final BukkitScheduler scheduler;
     private final DecimalFormat formatter;
     private final Map<String, ItemStack[]> armorTiers;
     private AICommand aiManager;
@@ -47,11 +44,9 @@ public class BotCommand extends CommandInstance {
     public BotCommand(CommandHandler handler, String name, String description, String... aliases) {
         super(handler, name, description, aliases);
 
-        this.handler = commandHandler;
         this.plugin = TerminatorPlus.getInstance();
         this.manager = plugin.getManager();
         this.agent = (LegacyAgent) manager.getAgent();
-        this.scheduler = Bukkit.getScheduler();
         this.formatter = new DecimalFormat("0.##");
         this.armorTiers = new HashMap<>();
 
@@ -68,35 +63,7 @@ public class BotCommand extends CommandInstance {
             desc = "Create a bot."
     )
     public void create(CommandSender sender, @Arg("name") String name, @OptArg("skin") String skin, @TextArg @OptArg("loc") String loc) {
-        Location location = (sender instanceof Player) ? ((Player) sender).getLocation() : new Location(Bukkit.getWorlds().get(0), 0, 0, 0);
-        if (loc != null && !loc.isEmpty()) {
-            Player player = Bukkit.getPlayer(loc);
-            if (player != null) {
-                location = player.getLocation();
-            } else {
-                String[] split = loc.split(" ");
-                if (split.length >= 3) {
-                    try {
-                        double x = Double.parseDouble(split[0]);
-                        double y = Double.parseDouble(split[1]);
-                        double z = Double.parseDouble(split[2]);
-                        World world = Bukkit.getWorld(split.length >= 4 ? split[3] : location.getWorld().getName());
-                        location = new Location(world, x, y, z);
-                    } catch (NumberFormatException e) {
-                        sender.sendMessage("The location '" + ChatColor.YELLOW + loc + ChatColor.RESET + "' is not valid!");
-                        return;
-                    }
-                } else {
-                    sender.sendMessage("The location '" + ChatColor.YELLOW + loc + ChatColor.RESET + "' is not valid!");
-                    return;
-                }
-            }
-        } else {
-            if (!(sender instanceof Player)) {
-                sender.sendMessage("Spawning bot at 0, 0, 0 in world " + location.getWorld().getName() + " because no location was specified.");
-            }
-        }
-        manager.createBotsAsync(sender, name, skin, 1, location);
+        createBots(sender, name, skin, loc, 1);
     }
 
     @Command(
@@ -104,34 +71,12 @@ public class BotCommand extends CommandInstance {
             desc = "Create multiple bots at once."
     )
     public void multi(CommandSender sender, @Arg("amount") int amount, @Arg("name") String name, @OptArg("skin") String skin, @TextArg @OptArg("loc") String loc) {
-        Location location = (sender instanceof Player) ? ((Player) sender).getLocation() : new Location(Bukkit.getWorlds().get(0), 0, 0, 0);
-        if (loc != null && !loc.isEmpty()) {
-            Player player = Bukkit.getPlayer(loc);
-            if (player != null) {
-                location = player.getLocation();
-            } else {
-                String[] split = loc.split(" ");
-                if (split.length >= 3) {
-                    try {
-                        double x = Double.parseDouble(split[0]);
-                        double y = Double.parseDouble(split[1]);
-                        double z = Double.parseDouble(split[2]);
-                        World world = Bukkit.getWorld(split.length >= 4 ? split[3] : location.getWorld().getName());
-                        location = new Location(world, x, y, z);
-                    } catch (NumberFormatException e) {
-                        sender.sendMessage("The location '" + ChatColor.YELLOW + loc + ChatColor.RESET + "' is not valid!");
-                        return;
-                    }
-                } else {
-                    sender.sendMessage("The location '" + ChatColor.YELLOW + loc + ChatColor.RESET + "' is not valid!");
-                    return;
-                }
-            }
-        } else {
-            if (!(sender instanceof Player)) {
-                sender.sendMessage("Spawning bot at 0, 0, 0 in world " + location.getWorld().getName() + " because no location was specified.");
-            }
-        }
+        createBots(sender, name, skin, loc, amount);
+    }
+
+    private void createBots(CommandSender sender, String name, String skin, String loc, int amount) {
+        Location location = parseSpawnLocation(sender, loc);
+        if (location == null) return;
         manager.createBotsAsync(sender, name, skin, amount, location);
     }
 
@@ -198,7 +143,6 @@ public class BotCommand extends CommandInstance {
                 + ChatColor.BLUE + slot + ChatColor.RESET + ".");
     }
 
-    @Autofill
     public List<String> giveAutofill(CommandSender sender, String[] args) {
         List<String> out = new ArrayList<>();
         if (args.length == 2) {
@@ -298,7 +242,6 @@ public class BotCommand extends CommandInstance {
         sender.sendMessage("Successfully set the armor tier to " + ChatColor.YELLOW + tier + ChatColor.RESET + " for all current bots.");
     }
 
-    @Autofill
     public List<String> armorAutofill(CommandSender sender, String[] args) {
         return args.length == 2 ? new ArrayList<>(armorTiers.keySet()) : new ArrayList<>();
     }
@@ -323,17 +266,6 @@ public class BotCommand extends CommandInstance {
                 return;
             }
 
-            /*
-             * time created
-             * current life (how long it has lived for)
-             * health
-             * inventory
-             * current target
-             * current kills
-             * skin
-             * neural network values (network name if loaded, otherwise RANDOM)
-             */
-
             String botName = bot.getBotName();
             String world = ChatColor.YELLOW + bot.getBukkitEntity().getWorld().getName();
             Location loc = bot.getLocation();
@@ -352,7 +284,6 @@ public class BotCommand extends CommandInstance {
         }
     }
 
-    @Autofill
     public List<String> infoAutofill(CommandSender sender, String[] args) {
         return args.length == 2 ? manager.fetchNames() : new ArrayList<>();
     }
@@ -389,7 +320,7 @@ public class BotCommand extends CommandInstance {
         sender.sendMessage("Removed " + ChatColor.RED + ChatUtils.NUMBER_FORMAT.format(size) + ChatColor.RESET + " entit" + (size == 1 ? "y" : "ies") + ".");
 
         if (aiManager == null) {
-            this.aiManager = (AICommand) handler.getCommand("ai");
+            this.aiManager = (AICommand) commandHandler.getCommand("ai");
         }
 
         if (aiManager != null && aiManager.hasActiveSession()) {
@@ -397,10 +328,6 @@ public class BotCommand extends CommandInstance {
         }
     }
 
-    /*
-     * EVENTUALLY, we should make a command parent hierarchy system soon too! (so we don't have to do this crap)
-     * basically, in the @Command annotation, you can include a "parent" for the command, so it will be a subcommand under the specified parent
-     */
     @Command(
             name = "settings",
             desc = "Make changes to the global configuration file and bot-specific settings.",
@@ -554,17 +481,8 @@ public class BotCommand extends CommandInstance {
         }
     }
 
-    @Autofill
     public List<String> settingsAutofill(CommandSender sender, String[] args) {
         List<String> output = new ArrayList<>();
-
-        // More settings:
-        // setitem
-        // tpall
-        // tprandom
-        // hidenametags or nametags <show/hide>
-        // sitall
-        // lookall
 
         if (args.length == 2) {
             output.add("setgoal");
@@ -605,7 +523,6 @@ public class BotCommand extends CommandInstance {
         new Debugger(sender).execute(expression);
     }
 
-    @Autofill
     public List<String> debugAutofill(CommandSender sender, String[] args) {
         return args.length == 2 ? new ArrayList<>(Debugger.AUTOFILL_METHODS) : new ArrayList<>();
     }
@@ -662,7 +579,6 @@ public class BotCommand extends CommandInstance {
         sb.append(on ? ChatColor.YELLOW : ChatColor.DARK_GRAY).append(label).append(ChatColor.RESET).append(' ');
     }
 
-    @Autofill
     public List<String> weaponsAutofill(CommandSender sender, String[] args) {
         return args.length == 2 ? manager.fetchNames() : new ArrayList<>();
     }
@@ -725,7 +641,6 @@ public class BotCommand extends CommandInstance {
         }
     }
 
-    @Autofill
     public List<String> combatDebugAutofill(CommandSender sender, String[] args) {
         if (args.length == 2) {
             List<String> out = new ArrayList<>(manager.fetchNames());
@@ -776,7 +691,6 @@ public class BotCommand extends CommandInstance {
         new BotInventoryGUI(bot).open(player);
     }
 
-    @Autofill
     public List<String> inventoryAutofill(CommandSender sender, String[] args) {
         return args.length == 2 ? manager.fetchNames() : new ArrayList<>();
     }
@@ -881,7 +795,6 @@ public class BotCommand extends CommandInstance {
         }
     }
 
-    @Autofill
     public List<String> presetAutofill(CommandSender sender, String[] args) {
         List<String> out = new ArrayList<>();
         if (args.length == 2) {
@@ -985,7 +898,6 @@ public class BotCommand extends CommandInstance {
         return buildLoadout(name == null ? "" : name.toLowerCase()) != null;
     }
 
-    @Autofill
     public List<String> loadoutAutofill(CommandSender sender, String[] args) {
         if (args.length == 2) return new ArrayList<>(Arrays.asList(LOADOUT_NAMES));
         if (args.length == 3) return manager.fetchNames();
@@ -1038,7 +950,6 @@ public class BotCommand extends CommandInstance {
         sender.sendMessage(ChatColor.GRAY + "Distribution: " + ChatColor.YELLOW + describeCounts(counts));
     }
 
-    @Autofill
     public List<String> loadoutMixAutofill(CommandSender sender, String[] args) {
         if (args.length == 2) return new ArrayList<>(Arrays.asList(LOADOUT_MIX_NAMES));
         if (args.length == 3) return manager.fetchNames();
@@ -1431,22 +1342,6 @@ public class BotCommand extends CommandInstance {
         return null;
     }
 
-    private double parseDoubleOrRelative(String pos, Location loc, int type) {
-        if (loc == null || pos.length() == 0 || pos.charAt(0) != '~')
-            return Double.parseDouble(pos);
-        double relative = pos.length() == 1 ? 0 : Double.parseDouble(pos.substring(1));
-        switch (type) {
-            case 0:
-                return relative + Math.round(loc.getX() * 1000) / 1000D;
-            case 1:
-                return relative + Math.round(loc.getY() * 1000) / 1000D;
-            case 2:
-                return relative + Math.round(loc.getZ() * 1000) / 1000D;
-            default:
-                return 0;
-        }
-    }
-
     private Boolean parseBooleanValue(String value) {
         if (value == null) return null;
         if (value.equalsIgnoreCase("true")) return true;
@@ -1454,4 +1349,3 @@ public class BotCommand extends CommandInstance {
         return null;
     }
 }
-
