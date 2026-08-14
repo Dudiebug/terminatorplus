@@ -15,7 +15,7 @@
 
 ## Branch rules
 
-- Primary active target: `mc-26.1.2`.
+- Primary active target: `mc-26.2`.
 - Do not start new current-strategy work from `master`.
 - Treat older branch docs as compatibility references.
 - If a file says `mc-1.21.11` is primary, update docs or flag it as stale before using it as process guidance.

@@ -129,7 +129,7 @@ public final class BotInventory {
         if (this.selectedHotbarSlot == slot) return;
         this.selectedHotbarSlot = slot;
         // Sync NMS (Bukkit API route, since the NMS field is private in
-        // Paper 26.1.2). setItemInMainHand below writes into whichever
+        // Paper 26.x). setItemInMainHand below writes into whichever
         // slot this tracker says is selected.
         raw().setHeldItemSlot(slot);
         ItemStack item = raw().getItem(slot);

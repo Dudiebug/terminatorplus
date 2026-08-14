@@ -6,7 +6,7 @@ TerminatorPlus is being redirected from a general server-side bot plugin into a 
 
 The goal is not to spawn many weak bots. The goal is to make one bot that can pressure, survive, punish, and adapt against a skilled human PvPer.
 
-Primary target branch: `mc-26.1.2`.
+Primary target branch: `mc-26.2`.
 
 ## Old model vs new model
 

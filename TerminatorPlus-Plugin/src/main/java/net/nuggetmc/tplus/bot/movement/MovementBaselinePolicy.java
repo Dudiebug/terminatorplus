@@ -1,7 +1,9 @@
 package net.nuggetmc.tplus.bot.movement;
 
 import net.nuggetmc.tplus.bot.Bot;
+import net.nuggetmc.tplus.bot.combat.CombatActionCategory;
 import net.nuggetmc.tplus.bot.combat.CombatIntent;
+import net.nuggetmc.tplus.bot.combat.MovementBranchFamily;
 import net.nuggetmc.tplus.bot.combat.MovementObjective;
 import org.bukkit.entity.LivingEntity;
 
@@ -28,6 +30,13 @@ public final class MovementBaselinePolicy {
         boolean outsideMaxRange = estimatedDistance > maxUsefulRange;
         boolean dangerRetreat = safeIntent.botHealthFraction() < 0.35f && safeIntent.healthAdvantage() < -0.15;
 
+        boolean maceIntent = isMaceIntent(safeIntent);
+        if (maceIntent && dangerRetreat) {
+            return retreat(Math.max(urgency, 0.75), true);
+        }
+        if (maceIntent) {
+            return macePressure(rangeError, urgency, safeIntent.openSkyAboveBot(), tooClose, outsideMaxRange);
+        }
         if (safeIntent.movementObjective() == MovementObjective.HOLD || safeIntent.wantsHoldPosition()) {
             return hold(urgency);
         }
@@ -97,6 +106,21 @@ public final class MovementBaselinePolicy {
         return new MovementOutput(forward, 0.25, jump, 0.45, 0.0, 0.0, urgency, 0.0);
     }
 
+    private static MovementOutput macePressure(
+            double rangeError,
+            double urgency,
+            boolean openSky,
+            boolean tooClose,
+            boolean outsideMaxRange
+    ) {
+        double forward = tooClose ? -0.25 : outsideMaxRange ? 0.75 : rangeError > 0.55 ? 0.45 : 0.12;
+        double strafe = outsideMaxRange ? 0.25 : 0.75;
+        double jump = openSky && !outsideMaxRange ? 0.65 : 0.1;
+        double sprint = outsideMaxRange || rangeError > 0.9 ? 0.65 : 0.35;
+        double retreat = tooClose ? 0.35 : 0.0;
+        return new MovementOutput(forward, strafe, jump, sprint, retreat, 0.0, urgency, 0.0);
+    }
+
     private static MovementOutput rangedLos(
             double rangeError,
             double urgency,
@@ -126,6 +150,15 @@ public final class MovementBaselinePolicy {
             case COBWEB_PRESSURE -> dangerRetreat;
             default -> true;
         };
+    }
+
+    private static boolean isMaceIntent(CombatIntent intent) {
+        if (intent.branchFamily() == MovementBranchFamily.MACE) return true;
+        CombatActionCategory category = intent.actionCategory();
+        return category == CombatActionCategory.MACE_CHARGE
+                || category == CombatActionCategory.MACE_AIRBORNE
+                || category == CombatActionCategory.MACE_SMASH
+                || category == CombatActionCategory.AERIAL_DIVE;
     }
 
     private static double clamp01(double value) {

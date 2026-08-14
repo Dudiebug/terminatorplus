@@ -5,7 +5,7 @@ whether it compiles or shows more features.
 
 ## Baseline Setup
 
-- Paper-compatible server for `mc-26.1.2`
+- Paper-compatible server for `mc-26.2`
 - plugin jar built with `./gradlew build -q`
 - controlled flat duel arena
 - one human tester

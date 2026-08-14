@@ -1,7 +1,7 @@
 # TerminatorPlus
 
 TerminatorPlus is now focused on one strong 1v1 PvP bot versus one skilled
-human PvPer on the `mc-26.1.2` target branch.
+human PvPer on the `mc-26.2` target branch.
 
 The current priority is duel quality: movement, spacing, vanilla hit timing,
 sword/axe/shield fundamentals, defensive recovery, punish logic, and controlled
@@ -35,7 +35,7 @@ they are not the current strategy unless explicitly rewritten.
 
 ## Version Support
 
-Built for the active Paper target branch, such as Paper 26.1.2 or Paper
+Built for the active Paper target branch, such as Paper 26.2 or Paper
 1.21.11, with Java 25. Spigot and CraftBukkit are not supported.
 
 ## Quick Start

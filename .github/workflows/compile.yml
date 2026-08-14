@@ -2,8 +2,8 @@ name: "Compile"
 
 on: [push, pull_request]
 
-# Branch-aware toolchain: mc-1.21.11 still builds on Java 21, but mc-26.1.2 and
-# master require Java 25 (Paper 26.1+ dev-bundle). Pick the JDK by branch so the
+# Branch-aware toolchain: mc-1.21.11 still builds on Java 21, but mc-26.2 and
+# modern Paper branches require Java 25. Pick the JDK by branch so the
 # same workflow is green on every long-lived branch.
 jobs:
   gradle:

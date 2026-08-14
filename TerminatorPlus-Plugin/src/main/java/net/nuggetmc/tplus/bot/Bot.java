@@ -579,6 +579,7 @@ public class Bot extends ServerPlayer implements Terminator {
 
         updateLocation();
         updateMovementState();
+        extinguishFromWaterContact();
 
         if (!isAlive()) return;
 
@@ -813,6 +814,62 @@ public class Bot extends ServerPlayer implements Terminator {
         jumpedThisTick = false;
     }
 
+    private void extinguishFromWaterContact() {
+        WaterExtinguishContact contact = waterContactForExtinguish();
+        if (!contact.touchingWater()) return;
+
+        int before = getBukkitEntity().getFireTicks();
+        if (before <= 0) return;
+
+        getBukkitEntity().setFireTicks(0);
+        int after = getBukkitEntity().getFireTicks();
+        CombatDebugger.log(this, "bot-extinguish",
+                "source=water-contact fireTicks=" + before + "->" + after
+                        + " contact=" + contact.id()
+                        + " normalWater=" + contact.normalWater()
+                        + " waterlogged=" + contact.waterlogged());
+    }
+
+    private boolean isTouchingWaterForExtinguish() {
+        return waterContactForExtinguish().touchingWater();
+    }
+
+    private WaterExtinguishContact waterContactForExtinguish() {
+        AABB box = getBoundingBox();
+        org.bukkit.World world = getBukkitEntity().getWorld();
+
+        int minX = Mth.floor(box.minX + 1.0E-7D);
+        int maxX = Mth.floor(box.maxX - 1.0E-7D);
+        int minY = Math.max(world.getMinHeight(), Mth.floor(box.minY + 1.0E-7D));
+        int maxY = Math.min(world.getMaxHeight() - 1, Mth.floor(box.maxY - 1.0E-7D));
+        int minZ = Mth.floor(box.minZ + 1.0E-7D);
+        int maxZ = Mth.floor(box.maxZ - 1.0E-7D);
+        if (minY > maxY) {
+            return WaterExtinguishContact.NONE;
+        }
+
+        boolean water = false;
+        boolean waterlogged = false;
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    Block block = world.getBlockAt(x, y, z);
+                    Material type = block.getType();
+                    if (type == Material.LAVA) {
+                        return WaterExtinguishContact.NONE;
+                    }
+                    if (type == Material.WATER) {
+                        water = true;
+                    }
+                    if (block.getBlockData() instanceof Waterlogged wl && wl.isWaterlogged()) {
+                        waterlogged = true;
+                    }
+                }
+            }
+        }
+        return WaterExtinguishContact.of(water, waterlogged);
+    }
+
     @Override
     public boolean isBotInWater() {
         Location loc = getLocation();
@@ -828,6 +885,46 @@ public class Bot extends ServerPlayer implements Terminator {
         }
 
         return false;
+    }
+
+    private enum WaterExtinguishContact {
+        NONE(false, false, "none"),
+        WATER(true, false, "water"),
+        WATERLOGGED(false, true, "waterlogged"),
+        BOTH(true, true, "water+waterlogged");
+
+        private final boolean normalWater;
+        private final boolean waterlogged;
+        private final String id;
+
+        WaterExtinguishContact(boolean normalWater, boolean waterlogged, String id) {
+            this.normalWater = normalWater;
+            this.waterlogged = waterlogged;
+            this.id = id;
+        }
+
+        static WaterExtinguishContact of(boolean normalWater, boolean waterlogged) {
+            if (normalWater && waterlogged) return BOTH;
+            if (normalWater) return WATER;
+            if (waterlogged) return WATERLOGGED;
+            return NONE;
+        }
+
+        boolean touchingWater() {
+            return normalWater || waterlogged;
+        }
+
+        boolean normalWater() {
+            return normalWater;
+        }
+
+        boolean waterlogged() {
+            return waterlogged;
+        }
+
+        String id() {
+            return id;
+        }
     }
 
     @Override

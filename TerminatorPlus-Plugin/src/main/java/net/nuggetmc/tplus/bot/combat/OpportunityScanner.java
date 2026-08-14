@@ -302,6 +302,10 @@ public final class OpportunityScanner {
         BotInventory inv = bot.getBotInventory();
         int alive = bot.getAliveTicks();
 
+        if (canWaterDouse(snap, inv, bot, alive)) {
+            return ScannerPlan.of(ScannerPlay.WATER_DOUSE_SELF);
+        }
+
         if (snap.targetBlocking && snap.distance <= MELEE_RANGE
                 && findAxeSlot(inv) >= 0 && snap.botOnGround
                 && bot.getBotCooldowns().ready(STUN_SLAM_CD, alive)
@@ -505,11 +509,6 @@ public final class OpportunityScanner {
                 && !snap.targetInWater
                 && bot.getBotCooldowns().ready(FIRE_ZONE_CD, alive)) {
             return ScannerPlan.of(ScannerPlay.FIRE_ZONE);
-        }
-
-        if (snap.botOnFire && hasItem(inv, Material.WATER_BUCKET)
-                && bot.getBotCooldowns().ready(WATER_DOUSE_CD, alive)) {
-            return ScannerPlan.of(ScannerPlay.WATER_DOUSE_SELF);
         }
 
         if (snap.targetInCobweb && snap.distance <= 5.0
@@ -807,6 +806,15 @@ public final class OpportunityScanner {
                 "dist=" + String.format("%.2f", snap.distance)
                         + " botHp=" + String.format("%.2f", snap.botHpFraction)
                         + " targetHp=" + String.format("%.2f", snap.targetHpFraction));
+
+        // Active self-extinguish is defensive and time-sensitive. Run it before
+        // any offensive terrain play can spend this tick placing lava/fire.
+        if (canWaterDouse(snap, inv, bot, alive)) {
+            if (executeWaterDouse(bot)) {
+                bot.getBotCooldowns().set(WATER_DOUSE_CD, 40, alive);
+                return true;
+            }
+        }
 
         // Shield breaks beat flashy burst plays. If the target is actively
         // blocking, keep trying to put an axe hit through instead of swapping
@@ -1175,15 +1183,6 @@ public final class OpportunityScanner {
                 && bot.getBotCooldowns().ready(FIRE_ZONE_CD, alive)) {
             if (executeFireZone(bot, target, inv)) {
                 bot.getBotCooldowns().set(FIRE_ZONE_CD, 60, alive);
-                return true;
-            }
-        }
-
-        // 34. WATER_DOUSE_SELF -- bot on fire + water bucket.
-        if (snap.botOnFire && hasItem(inv, Material.WATER_BUCKET)
-                && bot.getBotCooldowns().ready(WATER_DOUSE_CD, alive)) {
-            if (executeWaterDouse(bot)) {
-                bot.getBotCooldowns().set(WATER_DOUSE_CD, 40, alive);
                 return true;
             }
         }
@@ -1791,13 +1790,25 @@ public final class OpportunityScanner {
     private boolean executeWaterDouse(Bot bot) {
         CombatDebugger.log(bot, "opp-attempt", "name=WATER_DOUSE_SELF");
         Block feet = bot.getLocation().getBlock();
-        // Feet occupied: can't place water here, let the next priority fire.
-        if (!feet.getType().isAir()) return false;
+        Material previous = feet.getType();
+        if (previous == Material.WATER) {
+            clearFireTicks(bot);
+            CombatDebugger.log(bot, "water-douse", "block=natural-water cleanup=false");
+            return true;
+        }
+
+        if (!canReplaceForWaterDouse(previous)) {
+            CombatDebugger.log(bot, "opp-skip",
+                    "name=WATER_DOUSE_SELF reason=occupied at=" + previous.name());
+            return false;
+        }
 
         int slot = bot.getBotInventory().findHotbar(Material.WATER_BUCKET);
         if (slot >= 0) selectSlot(bot, slot);
+        bot.faceLocation(feet.getLocation());
         bot.punch();
         placeBlock(bot, feet, Material.WATER, "water-douse");
+        clearFireTicks(bot);
         scheduleBlockClear(feet, Material.AIR, 10L);
         return true;
     }
@@ -2032,6 +2043,23 @@ public final class OpportunityScanner {
 
     private static boolean hasItem(BotInventory inv, Material type) {
         return inv.findHotbar(type) >= 0;
+    }
+
+    private static boolean canWaterDouse(CombatSnapshot snap, BotInventory inv, Bot bot, int alive) {
+        return snap.botOnFire
+                && hasItem(inv, Material.WATER_BUCKET)
+                && bot.getBotCooldowns().ready(WATER_DOUSE_CD, alive);
+    }
+
+    private static boolean canReplaceForWaterDouse(Material type) {
+        return type.isAir() || type == Material.FIRE || type == Material.SOUL_FIRE;
+    }
+
+    private static void clearFireTicks(Bot bot) {
+        int before = bot.getBukkitEntity().getFireTicks();
+        bot.getBukkitEntity().setFireTicks(0);
+        int after = bot.getBukkitEntity().getFireTicks();
+        CombatDebugger.log(bot, "water-douse", "fireTicks=" + before + "->" + after);
     }
 
     private static int countItem(BotInventory inv, Material type) {

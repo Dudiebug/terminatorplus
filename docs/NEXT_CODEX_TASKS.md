@@ -51,7 +51,7 @@ If a build is run, only use:
 
 - Confirm `CODEX.md` exists.
 - Confirm `CLAUDE.md` is only a compatibility redirect.
-- Confirm current strategy target is `mc-26.1.2`.
+- Confirm current strategy target is `mc-26.2`.
 - Confirm old `mc-1.21.11` branch-flow guidance is removed or marked
   compatibility-only.
 - Confirm no source/build files changed.
@@ -70,7 +70,7 @@ If a build is run, only use:
 - `CODEX.md` is canonical.
 - `CLAUDE.md` points to `CODEX.md`.
 - No Java/build/runtime files changed.
-- Current work is clearly scoped to `mc-26.1.2`.
+- Current work is clearly scoped to `mc-26.2`.
 
 ### Rejection criteria
 
