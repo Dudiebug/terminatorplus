@@ -48,6 +48,14 @@ class SkinDataTest {
         assertTrue(SkinData.fromLegacy(new String[]{"", "signature"}).isEmpty());
     }
 
+    @Test
+    void preservesUsernameCasingForLookupWhileSharingCacheEntries() {
+        String requested = MojangAPI.normalize("  Notch ");
+
+        assertEquals("Notch", requested);
+        assertEquals("notch", MojangAPI.cacheKey(requested));
+    }
+
     private static Property assertSingle(Iterable<Property> properties) {
         var iterator = properties.iterator();
         assertTrue(iterator.hasNext());

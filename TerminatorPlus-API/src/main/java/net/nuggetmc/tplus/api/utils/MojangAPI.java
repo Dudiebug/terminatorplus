@@ -31,13 +31,14 @@ public class MojangAPI {
      */
     @Deprecated
     public static String[] getSkin(String name) {
-        String key = normalize(name);
-        if (key == null) return null;
+        String requestedName = normalize(name);
+        if (requestedName == null) return null;
+        String key = cacheKey(requestedName);
         if (Bukkit.isPrimaryThread()) {
             SkinData cached = CACHE.get(key);
             return cached == null ? null : cached.toLegacyArray();
         }
-        SkinLookup result = getSkinAsync(key).join();
+        SkinLookup result = getSkinAsync(requestedName).join();
         return result.skin() == null ? null : result.skin().toLegacyArray();
     }
 
@@ -46,8 +47,9 @@ public class MojangAPI {
      * successful signed texture properties enter the bounded cache.
      */
     public static CompletableFuture<SkinLookup> getSkinAsync(String name) {
-        String key = normalize(name);
-        if (key == null) return CompletableFuture.completedFuture(SkinLookup.notFound());
+        String requestedName = normalize(name);
+        if (requestedName == null) return CompletableFuture.completedFuture(SkinLookup.notFound());
+        String key = cacheKey(requestedName);
 
         SkinData cached = CACHE.get(key);
         if (cached != null) return CompletableFuture.completedFuture(SkinLookup.success(cached));
@@ -56,7 +58,7 @@ public class MojangAPI {
         CompletableFuture<SkinLookup> existing = IN_FLIGHT.putIfAbsent(key, pending);
         if (existing != null) return existing;
 
-        lookupProfile(key, pending);
+        lookupProfile(requestedName, key, pending);
         return pending;
     }
 
@@ -72,12 +74,12 @@ public class MojangAPI {
         return null;
     }
 
-    private static void lookupProfile(String key, CompletableFuture<SkinLookup> result) {
+    private static void lookupProfile(String requestedName, String key, CompletableFuture<SkinLookup> result) {
         final PlayerProfile profile;
         try {
-            profile = Bukkit.createProfile(key);
+            profile = Bukkit.createProfile(requestedName);
         } catch (RuntimeException e) {
-            logFailure(key, e);
+            logFailure(requestedName, e);
             completeLookup(key, result, SkinLookup.unavailable(e));
             return;
         }
@@ -85,7 +87,7 @@ public class MojangAPI {
         try {
             profile.update().whenComplete((updated, error) -> {
                 if (error != null) {
-                    logFailure(key, error);
+                    logFailure(requestedName, error);
                     completeLookup(key, result, SkinLookup.unavailable(error));
                     return;
                 }
@@ -98,13 +100,13 @@ public class MojangAPI {
                             : SkinLookup.success(skin);
                     if (skin != null) CACHE.put(key, skin);
                 } catch (RuntimeException e) {
-                    logFailure(key, e);
+                    logFailure(requestedName, e);
                     lookup = SkinLookup.unavailable(e);
                 }
                 completeLookup(key, result, lookup);
             });
         } catch (RuntimeException e) {
-            logFailure(key, e);
+            logFailure(requestedName, e);
             completeLookup(key, result, SkinLookup.unavailable(e));
         }
     }
@@ -118,9 +120,13 @@ public class MojangAPI {
         Bukkit.getLogger().log(Level.WARNING, "Unable to resolve Minecraft skin for " + name, error);
     }
 
-    private static String normalize(String name) {
+    static String normalize(String name) {
         if (name == null || name.isBlank()) return null;
-        return name.trim().toLowerCase(Locale.ROOT);
+        return name.trim();
+    }
+
+    static String cacheKey(String name) {
+        return name.toLowerCase(Locale.ROOT);
     }
 
     public static void shutdown() {

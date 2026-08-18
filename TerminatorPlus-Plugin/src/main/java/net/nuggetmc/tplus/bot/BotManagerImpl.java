@@ -147,14 +147,14 @@ public class BotManagerImpl implements BotManager, Listener {
         if (sender == null) return;
         String message = "Creating " + (amount == 1 ? "new bot" : "<red>" + numberFormat.format(amount) + "<reset>" + " new bots")
                 + " with name " + "<green>" + name.replace("%", "<light_purple>%" + "<reset>")
-                + (skinName == null ? "" : "<reset>" + " and skin " + "<green>" + skinName)
+                + (skinName == null || skinName.isBlank() ? "" : "<reset>" + " and skin " + "<green>" + skinName)
                 + "<reset>...";
         sender.sendRichMessage(message);
     }
 
     private void resolveSkinAndCreate(CommandSender sender, String name, String skinName, int amount,
                                       NeuralNetwork network, Location location, long timestamp) {
-        String requestedSkin = skinName == null ? name : skinName;
+        String requestedSkin = skinName == null || skinName.isBlank() ? name : skinName;
         final Location finalSpawnLoc = resolveSpawnLocation(sender, location);
 
         MojangAPI.getSkinAsync(requestedSkin).whenComplete((lookup, error) ->
