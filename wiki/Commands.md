@@ -27,6 +27,11 @@ Open a 54-slot chest GUI that mirrors the bot's inventory. Edits save on close. 
 - Two args: drop the item into the first empty hotbar slot on the named bot.
 - Three args: place into the specified inventory slot. See the [Inventory GUI slot map](Inventory-GUI#slot-map).
 
+### `/bot place <material>`
+Set the global block used by bot building and clutch placement. The default is `COBBLESTONE`.
+
+Example: `/bot place DIAMOND_BLOCK`
+
 ### `/bot armor <tier>`
 Apply an armor tier to every bot. Tiers: `none`, `leather`, `chain`, `gold`, `iron`, `diamond`, `netherite`.
 

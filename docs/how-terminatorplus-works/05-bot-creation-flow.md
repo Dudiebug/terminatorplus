@@ -64,7 +64,7 @@ It can:
 
 - create a profile with a random UUID
 - apply name trimming/normalization
-- attach skin texture/signature data when available
+- attach a signed `textures` property when skin data is available
 
 This layer exists so that bot creation can support skinned fake players without
 duplicating low-level profile logic at the command or manager level.
@@ -112,11 +112,13 @@ player list.
 
 Two important patterns exist in `Bot.java`:
 
-- player-list-aware path using `PlayerList.getPlayers()`,
-  `ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(...)`, and
+- player-list-aware path using `PlayerList.getPlayers()` and
   `ServerLevel.addNewPlayer(...)`
-- lighter path using `ADD_PLAYER` packet behavior plus
-  `ServerLevel.addFreshEntity(...)`
+- lighter path using `ServerLevel.addFreshEntity(...)`
+
+Both paths send one `createSinglePlayerInitializing(...)` packet containing the
+final profile before entity insertion. The `listed` flag matches the configured
+`addToPlayerList` value.
 
 This split is intentional.
 
@@ -131,14 +133,14 @@ real players can see the bot correctly.
 
 That includes:
 
-- player info packets
 - add/spawn packets
 - entity data packets
 - head rotation or look packets
 
-`renderAll()` also sets the skin/customization data using
-`Player.DATA_PLAYER_MODE_CUSTOMISATION`, which avoids hardcoding the data slot
-index.
+The profile packet is sent before insertion. `renderAll()` then sends spawn,
+entity data, and head rotation in that order. It sets the skin/customization
+data before building the entity-data packet, using
+`Player.DATA_PLAYER_MODE_CUSTOMISATION` rather than a hardcoded slot index.
 
 That "use the constant, not a hardcoded slot" detail is important across
 Minecraft/Paper version movement.

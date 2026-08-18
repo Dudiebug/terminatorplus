@@ -159,6 +159,41 @@ public class BotCommand extends CommandInstance {
         return out;
     }
 
+    @Command(
+            name = "place",
+            desc = "Set the block bots use when placing blocks.",
+            autofill = "placeAutofill"
+    )
+    public void place(CommandSender sender, @Arg("material") String materialName) {
+        Material material = materialName == null ? null : Material.matchMaterial(materialName);
+        if (!isValidPlacementMaterial(material)) {
+            sender.sendMessage(ChatColor.RED + "Material " + ChatColor.YELLOW + materialName
+                    + ChatColor.RED + " is not a valid block placement material.");
+            return;
+        }
+
+        agent.setPlacementMaterial(material);
+        sender.sendMessage("Successfully set the bot placement material to "
+                + ChatColor.YELLOW + material + ChatColor.RESET + ".");
+    }
+
+    public List<String> placeAutofill(CommandSender sender, String[] args) {
+        List<String> out = new ArrayList<>();
+        if (args.length != 2) return out;
+
+        String prefix = args[1].toUpperCase(Locale.ROOT);
+        for (Material material : Material.values()) {
+            if (isValidPlacementMaterial(material) && material.name().startsWith(prefix)) {
+                out.add(material.name());
+            }
+        }
+        return out;
+    }
+
+    private static boolean isValidPlacementMaterial(Material material) {
+        return material != null && material.isBlock() && material.isItem() && !material.isAir();
+    }
+
     private void armorTierSetup() {
         armorTiers.put("none", new ItemStack[]{
                 new ItemStack(Material.AIR),

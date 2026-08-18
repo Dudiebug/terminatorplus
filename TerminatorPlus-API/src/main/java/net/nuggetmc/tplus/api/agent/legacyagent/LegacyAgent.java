@@ -40,6 +40,7 @@ public class LegacyAgent extends Agent {
     public final Set<LivingEntity> noJump = new HashSet<>();
     public final Set<Terminator> slow = new HashSet<>();
     private final LegacyBlockCheck blockCheck;
+    private Material placementMaterial = Material.COBBLESTONE;
     private final Map<LivingEntity, BukkitRunnable> miningAnim = new HashMap<>();
     private final Set<Boat> boats = new HashSet<>();
     private final Map<LivingEntity, Location> btList = new HashMap<>();
@@ -78,6 +79,16 @@ public class LegacyAgent extends Agent {
         this.survivalController = new LegacySurvivalController(this);
         this.movementRouter = new LegacyMovementControllerRouter(this);
         this.runtimeOrchestrator = new BotRuntimeOrchestrator(this);
+    }
+
+    public Material getPlacementMaterial() {
+        return placementMaterial;
+    }
+
+    public void setPlacementMaterial(Material placementMaterial) {
+        if (placementMaterial != null) {
+            this.placementMaterial = placementMaterial;
+        }
     }
 
     private static boolean checkSideBreak(Material type) {
@@ -1460,6 +1471,7 @@ public class LegacyAgent extends Agent {
         LivingEntity botPlayer = bot.getBukkitEntity();
         World world = botPlayer.getWorld();
         Location loc = bot.getLocation();
+        Material placementMaterial = getPlacementMaterial();
 
         if (bot.isBotOnFire()) {
             if (bot.getDimension() != World.Environment.NETHER) {
@@ -1483,7 +1495,7 @@ public class LegacyAgent extends Agent {
 
         if (atType == Material.LAVA) {
             if (bot.getDimension() == World.Environment.NETHER) {
-                bot.attemptBlockPlace(loc, Material.COBBLESTONE, false);
+                bot.attemptBlockPlace(loc, placementMaterial, false);
             } else {
                 placeWaterDown(bot, world, loc);
             }
@@ -1494,7 +1506,7 @@ public class LegacyAgent extends Agent {
 
         if (headType == Material.LAVA) {
             if (bot.getDimension() == World.Environment.NETHER) {
-                bot.attemptBlockPlace(head, Material.COBBLESTONE, false);
+                bot.attemptBlockPlace(head, placementMaterial, false);
             } else {
                 placeWaterDown(bot, world, head);
             }
@@ -1527,7 +1539,7 @@ public class LegacyAgent extends Agent {
 
         if (under2Type == Material.MAGMA_BLOCK) {
             if (LegacyMats.SPAWN.contains(under2Type)) {
-                bot.attemptBlockPlace(under2, Material.COBBLESTONE, true);
+                bot.attemptBlockPlace(under2, placementMaterial, true);
             }
         }
 
@@ -1543,7 +1555,7 @@ public class LegacyAgent extends Agent {
 
                         Block place = loc.clone().add(0, -1, 0).getBlock();
                         if (LegacyMats.WATER.contains(place.getType())) {
-                            bot.attemptBlockPlace(place.getLocation(), Material.COBBLESTONE, true);
+                            bot.attemptBlockPlace(place.getLocation(), placementMaterial, true);
                         }
                     }
                 }
