@@ -48,6 +48,7 @@ the desired future default user path.
 | `/bot multi` | `BotCommand.multi(...)` | Spawn multiple bots quickly | Yes | Active but broad-plugin behavior; strategy mismatch |
 | `/bot reset` | `BotCommand.reset(...)` | Remove/reset bots and AI state | Yes | Active admin/runtime control |
 | `/bot give` | `BotCommand.give(...)` | Give items to bot inventory/mainhand path | Yes | Active but high-risk inventory mutation |
+| `/bot place` | `BotCommand.place(...)` | Set the global block used by generic bot building and clutch placement; defaults to `COBBLESTONE` | Yes | Active legacy compatibility control |
 | `/bot armor` | `BotCommand.armor(...)` | Set armor/offhand equipment | Yes | Active but high-risk inventory mutation |
 | `/bot info` | `BotCommand.info(...)` | Show bot info; partial UX and placeholder behavior remain | No | Active but partially incomplete |
 | `/bot count` | `BotCommand.count(...)` | Show bot count | No | Active inspection utility |

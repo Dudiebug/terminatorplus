@@ -1,97 +1,150 @@
 package net.nuggetmc.tplus.api.utils;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.destroystokyo.paper.profile.PlayerProfile;
+import com.destroystokyo.paper.profile.ProfileProperty;
+import org.bukkit.Bukkit;
 
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.URL;
 import java.util.Collections;
+import java.util.Collection;
 import java.util.LinkedHashMap;
-import java.util.concurrent.CompletableFuture;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
 
 public class MojangAPI {
 
-    // Cache positive Mojang API lookups so repeated /bot create <name> / loadouts
-    // don't re-hit the network every time. The previous cache was disabled
-    // (CACHE_ENABLED=false) because it also cached nulls from transient API
-    // failures, turning a momentary hiccup into a permanent "no skin" result;
-    // this rewrite only caches successful pulls.
-    //
-    // TODO(B-13): pullFromAPI is still blocking and is called from the main thread
-    // via Bot.createBot(String)/BotManagerImpl.createBots — a Mojang API latency
-    // spike still freezes the server for the first lookup. The full fix is an
-    // async CompletableFuture API and hopping back to main for the caller; that's
-    // a signature change through every caller so it lands in a separate commit.
     private static final int MAX_CACHE_ENTRIES = 256;
-    private static final Map<String, String[]> CACHE = Collections.synchronizedMap(
-            new LinkedHashMap<String, String[]>(128, 0.75f, true) {
+    private static final Map<String, SkinData> CACHE = Collections.synchronizedMap(
+            new LinkedHashMap<String, SkinData>(128, 0.75f, true) {
                 @Override
-                protected boolean removeEldestEntry(Map.Entry<String, String[]> eldest) {
+                protected boolean removeEldestEntry(Map.Entry<String, SkinData> eldest) {
                     return size() > MAX_CACHE_ENTRIES;
                 }
             });
-    private static final Map<String, CompletableFuture<String[]>> IN_FLIGHT = new ConcurrentHashMap<>();
-    private static final ExecutorService LOOKUP_EXECUTOR = Executors.newFixedThreadPool(2, runnable -> {
-        Thread thread = new Thread(runnable, "tplus-mojang-skin");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private static final Map<String, CompletableFuture<SkinLookup>> IN_FLIGHT = new ConcurrentHashMap<>();
 
+    /**
+     * Compatibility adapter for older callers. On the primary thread this only
+     * returns an already-cached result; new code must use {@link #getSkinAsync}.
+     */
+    @Deprecated
     public static String[] getSkin(String name) {
-        if (name == null) return null;
-        String[] cached = CACHE.get(name);
-        if (cached != null) return cached;
-
-        String[] values = pullFromAPI(name);
-        if (values != null) {
-            CACHE.put(name, values);
+        String key = normalize(name);
+        if (key == null) return null;
+        if (Bukkit.isPrimaryThread()) {
+            SkinData cached = CACHE.get(key);
+            return cached == null ? null : cached.toLegacyArray();
         }
-        return values;
+        SkinLookup result = getSkinAsync(key).join();
+        return result.skin() == null ? null : result.skin().toLegacyArray();
     }
 
     /**
-     * Non-blocking skin lookup for command paths. Reuses the positive-result cache
-     * and deduplicates concurrent requests for the same name.
+     * Resolves a username through Paper's asynchronous profile API. Only
+     * successful signed texture properties enter the bounded cache.
      */
-    public static CompletableFuture<String[]> getSkinAsync(String name) {
-        if (name == null) {
-            return CompletableFuture.completedFuture(null);
-        }
-        String[] cached = CACHE.get(name);
-        if (cached != null) {
-            return CompletableFuture.completedFuture(cached);
-        }
-        if (LOOKUP_EXECUTOR.isShutdown()) {
-            return CompletableFuture.completedFuture(getSkin(name));
-        }
-        return IN_FLIGHT.computeIfAbsent(name, key ->
-                CompletableFuture.supplyAsync(() -> getSkin(key), LOOKUP_EXECUTOR)
-                        .whenComplete((result, error) -> IN_FLIGHT.remove(key)));
+    public static CompletableFuture<SkinLookup> getSkinAsync(String name) {
+        String key = normalize(name);
+        if (key == null) return CompletableFuture.completedFuture(SkinLookup.notFound());
+
+        SkinData cached = CACHE.get(key);
+        if (cached != null) return CompletableFuture.completedFuture(SkinLookup.success(cached));
+
+        CompletableFuture<SkinLookup> pending = new CompletableFuture<>();
+        CompletableFuture<SkinLookup> existing = IN_FLIGHT.putIfAbsent(key, pending);
+        if (existing != null) return existing;
+
+        lookupProfile(key, pending);
+        return pending;
     }
 
-    // CATCHING NULL ILLEGALSTATEEXCEPTION BAD!!!! eventually fix from the getAsJsonObject thingy
-    public static String[] pullFromAPI(String name) {
-        try {
-            String uuid = new JsonParser().parse(new InputStreamReader(new URL("https://api.mojang.com/users/profiles/minecraft/" + name)
-                    .openStream())).getAsJsonObject().get("id").getAsString();
-            JsonObject property = new JsonParser()
-                    .parse(new InputStreamReader(new URL("https://sessionserver.mojang.com/session/minecraft/profile/" + uuid + "?unsigned=false")
-                            .openStream())).getAsJsonObject().get("properties").getAsJsonArray().get(0).getAsJsonObject();
-            return new String[] {property.get("value").getAsString(), property.get("signature").getAsString()};
-        } catch (IOException | IllegalStateException e) {
-            return null;
+    static SkinData extractTextures(Collection<ProfileProperty> properties) {
+        if (properties == null) return null;
+        for (ProfileProperty property : properties) {
+            if (!"textures".equals(property.getName()) || !property.isSigned()) continue;
+            String value = property.getValue();
+            String signature = property.getSignature();
+            if (value == null || value.isBlank() || signature == null || signature.isBlank()) continue;
+            return new SkinData(value, signature);
         }
+        return null;
+    }
+
+    private static void lookupProfile(String key, CompletableFuture<SkinLookup> result) {
+        final PlayerProfile profile;
+        try {
+            profile = Bukkit.createProfile(key);
+        } catch (RuntimeException e) {
+            logFailure(key, e);
+            completeLookup(key, result, SkinLookup.unavailable(e));
+            return;
+        }
+
+        try {
+            profile.update().whenComplete((updated, error) -> {
+                if (error != null) {
+                    logFailure(key, error);
+                    completeLookup(key, result, SkinLookup.unavailable(error));
+                    return;
+                }
+
+                SkinLookup lookup;
+                try {
+                    SkinData skin = extractTextures(updated == null ? null : updated.getProperties());
+                    lookup = skin == null
+                            ? SkinLookup.notFound()
+                            : SkinLookup.success(skin);
+                    if (skin != null) CACHE.put(key, skin);
+                } catch (RuntimeException e) {
+                    logFailure(key, e);
+                    lookup = SkinLookup.unavailable(e);
+                }
+                completeLookup(key, result, lookup);
+            });
+        } catch (RuntimeException e) {
+            logFailure(key, e);
+            completeLookup(key, result, SkinLookup.unavailable(e));
+        }
+    }
+
+    private static void completeLookup(String key, CompletableFuture<SkinLookup> result, SkinLookup lookup) {
+        result.complete(lookup);
+        IN_FLIGHT.remove(key, result);
+    }
+
+    private static void logFailure(String name, Throwable error) {
+        Bukkit.getLogger().log(Level.WARNING, "Unable to resolve Minecraft skin for " + name, error);
+    }
+
+    private static String normalize(String name) {
+        if (name == null || name.isBlank()) return null;
+        return name.trim().toLowerCase(Locale.ROOT);
     }
 
     public static void shutdown() {
         IN_FLIGHT.values().forEach(future -> future.cancel(true));
         IN_FLIGHT.clear();
         CACHE.clear();
-        LOOKUP_EXECUTOR.shutdownNow();
+    }
+
+    public record SkinLookup(SkinData skin, Failure failure, Throwable error) {
+        public enum Failure {
+            NOT_FOUND,
+            UNAVAILABLE
+        }
+
+        public static SkinLookup success(SkinData skin) {
+            return new SkinLookup(skin, null, null);
+        }
+
+        public static SkinLookup notFound() {
+            return new SkinLookup(null, Failure.NOT_FOUND, null);
+        }
+
+        public static SkinLookup unavailable(Throwable error) {
+            return new SkinLookup(null, Failure.UNAVAILABLE, error);
+        }
     }
 }

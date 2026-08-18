@@ -51,18 +51,17 @@ public class LegacyBlockCheck {
     }
 
     private void placeFinal(Location loc) {
-        if (loc.getBlock().getType() != Material.COBBLESTONE) {
+        Material placementMaterial = agent.getPlacementMaterial();
+        if (loc.getBlock().getType() != placementMaterial) {
             for (Player all : Bukkit.getOnlinePlayers())
                 all.playSound(loc, Sound.BLOCK_STONE_PLACE, SoundCategory.BLOCKS, 1, 1);
-            // Was: bot.setItem(new ItemStack(COBBLESTONE)) — cosmetic, wiped
-            // the selected hotbar slot (mace / sword / whatever) every time
-            // the bot clutched a cobblestone. setType below still places the
-            // block regardless of what the bot is holding.
-            loc.getBlock().setType(Material.COBBLESTONE);
+            // The old path wrote a temporary block ItemStack here, which wiped
+            // the selected hotbar slot. World placement is logical state only.
+            loc.getBlock().setType(placementMaterial);
 
             Block under = loc.clone().add(0, -1, 0).getBlock();
             if (under.getType() == Material.LAVA) {
-                under.setType(Material.COBBLESTONE);
+                under.setType(placementMaterial);
             }
         }
     }
@@ -234,11 +233,9 @@ public class LegacyBlockCheck {
             }
             for (Player all : Bukkit.getOnlinePlayers())
                 all.playSound(loc, Sound.BLOCK_STONE_PLACE, SoundCategory.BLOCKS, 1, 1);
-            // Was: bot.setItem(new ItemStack(COBBLESTONE)) — cosmetic, wiped
-            // the selected hotbar slot (mace / sword / whatever) every time
-            // the bot clutched a cobblestone. setType below still places the
-            // block regardless of what the bot is holding.
-            loc.getBlock().setType(Material.COBBLESTONE);
+            // The old path wrote a temporary block ItemStack here, which wiped
+            // the selected hotbar slot. World placement is logical state only.
+            loc.getBlock().setType(agent.getPlacementMaterial());
     	}
 
     	return false;
@@ -297,8 +294,8 @@ public class LegacyBlockCheck {
                 bot.sneak();
                 for (Player all : Bukkit.getOnlinePlayers())
                     all.playSound(loc, Sound.BLOCK_STONE_PLACE, SoundCategory.BLOCKS, 1, 1);
-                // Was: bot.setItem(new ItemStack(COBBLESTONE)) — see earlier notes.
-                loc.getBlock().setType(Material.COBBLESTONE);
+                // Placement is logical world state and does not alter the held item.
+                loc.getBlock().setType(agent.getPlacementMaterial());
             }
         }
     }

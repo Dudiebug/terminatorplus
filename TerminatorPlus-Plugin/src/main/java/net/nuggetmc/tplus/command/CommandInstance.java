@@ -310,7 +310,9 @@ public abstract class CommandInstance extends BukkitCommand {
 
             if (autofiller != null) {
                 try {
-                    return ((List<String>) autofiller.invoke(commandMethod.getHandler(), sender, args)).stream().filter(c -> c.contains(args[args.length - 1])).collect(Collectors.toList());
+                    String prefix = args[args.length - 1].toLowerCase(Locale.ROOT);
+                    return ((List<String>) autofiller.invoke(commandMethod.getHandler(), sender, args)).stream()
+                            .filter(c -> c.toLowerCase(Locale.ROOT).contains(prefix)).collect(Collectors.toList());
                 } catch (InvocationTargetException | IllegalAccessException e) {
                     e.printStackTrace();
                 }

@@ -10,6 +10,7 @@ import net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent;
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.NeuralNetwork;
 import net.nuggetmc.tplus.api.event.BotDeathEvent;
 import net.nuggetmc.tplus.api.utils.MojangAPI;
+import net.nuggetmc.tplus.api.utils.SkinData;
 import org.bukkit.*;
 import org.bukkit.command.CommandSender;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
@@ -98,7 +99,7 @@ public class BotManagerImpl implements BotManager, Listener {
 
     @Override
     public Terminator createBot(Location loc, String name, String skin, String sig) {
-        return Bot.createBot(loc, name, new String[]{skin, sig});
+        return Bot.createBot(loc, name, SkinData.fromLegacy(new String[]{skin, sig}).orElse(null));
     }
 
     @Override
@@ -117,31 +118,9 @@ public class BotManagerImpl implements BotManager, Listener {
      */
     public void createBotsAsync(CommandSender sender, String name, String skinName, int n, Location location) {
         long timestamp = System.currentTimeMillis();
-
-        if (n < 1) n = 1;
-        int amount = n;
-
-        if (sender != null) {
-            String message = "Creating " + (amount == 1 ? "new bot" : "<red>" + numberFormat.format(amount) + "<reset>" + " new bots")
-                    + " with name " + "<green>" + name.replace("%", "<light_purple>%" + "<reset>")
-                    + (skinName == null ? "" : "<reset>" + " and skin " + "<green>" + skinName)
-                    + "<reset>...";
-            sender.sendRichMessage(message);
-        }
-
-        String requestedSkin = skinName == null ? name : skinName;
-        final Location finalSpawnLoc = resolveSpawnLocation(sender, location);
-
-        MojangAPI.getSkinAsync(requestedSkin).whenComplete((skin, error) ->
-                Bukkit.getScheduler().runTask(TerminatorPlus.getInstance(), () -> {
-                    if (error != null && sender != null) {
-                        sender.sendRichMessage("<red>Skin lookup failed for <yellow>" + requestedSkin + "<red>. Spawning bot(s) with fallback skin.");
-                    }
-                    createBots(finalSpawnLoc, name, skin, amount, null);
-                    if (sender != null) {
-                        sender.sendRichMessage("Process completed (<red>" + ((System.currentTimeMillis() - timestamp) / 1000D) + "s<reset>).");
-                    }
-                }));
+        int amount = Math.max(1, n);
+        announceCreation(sender, name, skinName, amount);
+        resolveSkinAndCreate(sender, name, skinName, amount, null, location, timestamp);
     }
 
     private Location resolveSpawnLocation(CommandSender sender, Location location) {
@@ -159,32 +138,61 @@ public class BotManagerImpl implements BotManager, Listener {
     @Override
     public void createBots(CommandSender sender, String name, String skinName, int n, NeuralNetwork network, Location location) {
         long timestamp = System.currentTimeMillis();
+        int amount = Math.max(1, n);
+        announceCreation(sender, name, skinName, amount);
+        resolveSkinAndCreate(sender, name, skinName, amount, network, location, timestamp);
+    }
 
-        if (n < 1) n = 1;
+    private void announceCreation(CommandSender sender, String name, String skinName, int amount) {
+        if (sender == null) return;
+        String message = "Creating " + (amount == 1 ? "new bot" : "<red>" + numberFormat.format(amount) + "<reset>" + " new bots")
+                + " with name " + "<green>" + name.replace("%", "<light_purple>%" + "<reset>")
+                + (skinName == null ? "" : "<reset>" + " and skin " + "<green>" + skinName)
+                + "<reset>...";
+        sender.sendRichMessage(message);
+    }
 
-        if (sender != null) {
-            String message = "Creating " + (n == 1 ? "new bot" : "<red>" + numberFormat.format(n) + "<reset>" + " new bots")
-                    + " with name " + "<green>" + name.replace("%", "<light_purple>%" + "<reset>")
-                    + (skinName == null ? "" : "<reset>" + " and skin " + "<green>" + skinName)
-                    + "<reset>...";
-            sender.sendRichMessage(message);
-        }
+    private void resolveSkinAndCreate(CommandSender sender, String name, String skinName, int amount,
+                                      NeuralNetwork network, Location location, long timestamp) {
+        String requestedSkin = skinName == null ? name : skinName;
+        final Location finalSpawnLoc = resolveSpawnLocation(sender, location);
 
-        skinName = skinName == null ? name : skinName;
-
-        createBots(resolveSpawnLocation(sender, location), name, MojangAPI.getSkin(skinName), n, network);
-
-        if (sender != null)
-            sender.sendRichMessage("Process completed (<red>" + ((System.currentTimeMillis() - timestamp) / 1000D) + "s<reset>).");
+        MojangAPI.getSkinAsync(requestedSkin).whenComplete((lookup, error) ->
+                Bukkit.getScheduler().runTask(TerminatorPlus.getInstance(), () -> {
+                    MojangAPI.SkinLookup result = lookup == null
+                            ? MojangAPI.SkinLookup.unavailable(error)
+                            : lookup;
+                    if (sender != null && result.failure() != null) {
+                        if (result.failure() == MojangAPI.SkinLookup.Failure.NOT_FOUND) {
+                            sender.sendRichMessage("<yellow>No usable Minecraft skin was found for <green>"
+                                    + requestedSkin + "<yellow>. Spawning bot(s) with fallback skin.");
+                        } else {
+                            sender.sendRichMessage("<red>Skin lookup failed for <yellow>" + requestedSkin
+                                    + "<red>. Spawning bot(s) with fallback skin.");
+                        }
+                    }
+                    createBots(finalSpawnLoc, name, result.skin(), amount, network);
+                    if (sender != null) {
+                        sender.sendRichMessage("Process completed (<red>" + ((System.currentTimeMillis() - timestamp) / 1000D) + "s<reset>).");
+                    }
+                }));
     }
 
     @Override
     public Set<Terminator> createBots(Location loc, String name, String[] skin, int n, NeuralNetwork network) {
-        return createBots(loc, name, skin, Collections.nCopies(Math.max(0, n), network));
+        return createBots(loc, name, SkinData.fromLegacy(skin).orElse(null), n, network);
     }
 
     @Override
     public Set<Terminator> createBots(Location loc, String name, String[] skin, List<NeuralNetwork> networks) {
+        return createBots(loc, name, SkinData.fromLegacy(skin).orElse(null), networks);
+    }
+
+    private Set<Terminator> createBots(Location loc, String name, SkinData skin, int n, NeuralNetwork network) {
+        return createBots(loc, name, skin, Collections.nCopies(Math.max(0, n), network));
+    }
+
+    private Set<Terminator> createBots(Location loc, String name, SkinData skin, List<NeuralNetwork> networks) {
         Set<Terminator> bots = new HashSet<>();
         World world = loc.getWorld();
 

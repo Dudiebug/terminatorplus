@@ -177,10 +177,15 @@ public class Bot extends ServerPlayer implements Terminator {
     }
 
     public static Bot createBot(Location loc, String name) {
-        return createBot(loc, name, MojangAPI.getSkin(name));
+        return createBot(loc, name, SkinData.fromLegacy(MojangAPI.getSkin(name)).orElse(null));
     }
 
+    @Deprecated
     public static Bot createBot(Location loc, String name, String[] skin) {
+        return createBot(loc, name, SkinData.fromLegacy(skin).orElse(null));
+    }
+
+    public static Bot createBot(Location loc, String name, SkinData skin) {
         MinecraftServer nmsServer = ((CraftServer) Bukkit.getServer()).getServer();
         ServerLevel nmsWorld = ((CraftWorld) Objects.requireNonNull(loc.getWorld())).getHandle();
 
@@ -197,13 +202,11 @@ public class Bot extends ServerPlayer implements Terminator {
         bot.setPos(loc.getX(), loc.getY(), loc.getZ());
         bot.setRot(loc.getYaw(), loc.getPitch());
         bot.getBukkitEntity().setNoDamageTicks(0);
+        Packet<?> playerInfo = ClientboundPlayerInfoUpdatePacket.createSinglePlayerInitializing(bot, addPlayerList);
+        Bukkit.getOnlinePlayers().forEach(p -> ((CraftPlayer) p).getHandle().connection.send(playerInfo));
         if (addPlayerList) {
-            Bukkit.getOnlinePlayers().forEach(p -> ((CraftPlayer) p).getHandle().connection.send(
-                    ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(bot))));
             nmsWorld.addNewPlayer(bot);
         } else {
-            Bukkit.getOnlinePlayers().forEach(p -> ((CraftPlayer) p).getHandle().connection.send(
-                    new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER, bot)));
             nmsWorld.addFreshEntity(bot);
         }
         bot.renderAll();
@@ -239,25 +242,22 @@ public class Bot extends ServerPlayer implements Terminator {
     }
 
     private void renderAll() {
-        Packet<?>[] packets = getRenderPacketsNoInfo();
         this.entityData.set(net.minecraft.world.entity.player.Player.DATA_PLAYER_MODE_CUSTOMISATION, (byte) 0x7F);
+        Packet<?>[] packets = getRenderPacketsNoInfo();
         Bukkit.getOnlinePlayers().forEach(p -> {
             ServerGamePacketListenerImpl connection = ((CraftPlayer) p).getHandle().connection;
-            connection.send(packets[0]);
-            connection.send(packets[1]);
-            connection.send(packets[2]);
+            for (Packet<?> packet : packets) connection.send(packet);
         });
     }
 
     private void render(ServerGamePacketListenerImpl connection, Packet<?>[] packets, boolean login) {
         connection.send(packets[0]);
         connection.send(packets[1]);
-        connection.send(packets[2]);
 
         if (login) {
-            scheduleBotTask(() -> connection.send(packets[3]), 10);
+            scheduleBotTask(() -> connection.send(packets[2]), 10);
         } else {
-            connection.send(packets[3]);
+            connection.send(packets[2]);
         }
     }
 
@@ -275,8 +275,7 @@ public class Bot extends ServerPlayer implements Terminator {
 
     private Packet<?>[] getRenderPackets() {
         return new Packet[]{
-                new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER, this),
-                new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER, this),
+                ClientboundPlayerInfoUpdatePacket.createSinglePlayerInitializing(this, inPlayerList),
                 new ClientboundSetEntityDataPacket(this.getId(), NMSUtils.getEntityData(this.entityData)),
                 new ClientboundRotateHeadPacket(this, (byte) ((this.yHeadRot * 256f) / 360f))
         };
@@ -285,7 +284,6 @@ public class Bot extends ServerPlayer implements Terminator {
     private Packet<?>[] getRenderPacketsNoInfo() {
         return new Packet[]{
                 new ClientboundAddEntityPacket(this.getId(), this.getUUID(), this.getX(), this.getY(), this.getZ(), this.getXRot(), this.getYRot(), this.getType(), 0, this.getDeltaMovement(), this.getYHeadRot()),
-                new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER, this),
                 new ClientboundSetEntityDataPacket(this.getId(), this.entityData.packDirty()),
                 new ClientboundRotateHeadPacket(this, (byte) ((this.yHeadRot * 256f) / 360f))
         };
