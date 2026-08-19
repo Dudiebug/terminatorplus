@@ -263,7 +263,8 @@ public final class MaceBehavior {
                         + " charge=" + fmt(bot.getAttackStrengthScale(0.0f))
                         + " held=" + heldType(bot));
         bot.getBotCooldowns().set(COOLDOWN_KEY, JUMP_COOLDOWN, bot.getAliveTicks());
-        bot.getBotCooldowns().set(WindChargeBehavior.COOLDOWN_KEY, 55, bot.getAliveTicks());
+        bot.getBotCooldowns().set(WindChargeBehavior.COOLDOWN_KEY,
+                WindChargeBehavior.COOLDOWN_TICKS, bot.getAliveTicks());
         CombatDebugger.macePhase(bot, state.getPhase(), CombatState.Phase.AIRBORNE);
         state.setPhase(CombatState.Phase.AIRBORNE);
         state.setPhaseStartY(startY);
@@ -398,6 +399,10 @@ public final class MaceBehavior {
                             + " held=" + heldType(bot));
         }
 
+        if (!bot.hasCombatLineOfSight(target)) {
+            CombatDebugger.log(bot, "mace-attack-skip", "reason=line-of-sight");
+            return;
+        }
         bot.punch();
         if (bot.getBukkitEntity() instanceof Player attacker) {
             attacker.attack(target);

@@ -18,6 +18,7 @@ public final class WindChargeBehavior {
 
     // Shared with deliberate offensive wind-charge plays.
     public static final String COOLDOWN_KEY = "windcharge";
+    public static final int COOLDOWN_TICKS = 55;
 
     // -- Self-propulsion wind charge --
     public static final String BOOST_COOLDOWN_KEY = "windcharge_boost";

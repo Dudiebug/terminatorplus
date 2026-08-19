@@ -14,6 +14,10 @@ dependencies {
     paperweight.paperDevBundle("26.2.build.+")
 
     implementation(project(":TerminatorPlus-API"))
+
+    // Reuse the repository's existing JUnit version for focused combat policy tests.
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.0")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.0")
 }
 
 tasks {
@@ -23,6 +27,9 @@ tasks {
     }
     javadoc {
         options.encoding = Charsets.UTF_8.name()
+    }
+    test {
+        useJUnitPlatform()
     }
     processResources {
         filteringCharset = Charsets.UTF_8.name()

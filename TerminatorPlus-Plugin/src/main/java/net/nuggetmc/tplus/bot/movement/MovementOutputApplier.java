@@ -152,7 +152,7 @@ public final class MovementOutputApplier {
                     output.facingAdjustment() * 0.35,
                     Math.min(output.urgency(), 0.35),
                     Math.max(output.holdPosition(), 0.45));
-            case THROWING_PROJECTILE, USING_PEARL, PLACING_BLOCK, MINING -> new MovementOutput(
+            case THROWING_PROJECTILE, USING_WIND_CHARGE, USING_PEARL, PLACING_BLOCK, MINING -> new MovementOutput(
                     output.forwardPressure() * 0.45,
                     output.strafePressure() * 0.50,
                     0.0,

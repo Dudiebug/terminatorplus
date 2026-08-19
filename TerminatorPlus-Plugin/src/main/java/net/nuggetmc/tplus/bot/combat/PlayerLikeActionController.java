@@ -151,7 +151,8 @@ public final class PlayerLikeActionController {
 
     public boolean blocksCombatAction() {
         return switch (state) {
-            case USING_CONSUMABLE, DRINKING_POTION, THROWING_PROJECTILE, PLACING_BLOCK, USING_PEARL -> true;
+            case USING_CONSUMABLE, DRINKING_POTION, THROWING_PROJECTILE, PLACING_BLOCK,
+                    USING_WIND_CHARGE, USING_PEARL -> true;
             default -> false;
         };
     }

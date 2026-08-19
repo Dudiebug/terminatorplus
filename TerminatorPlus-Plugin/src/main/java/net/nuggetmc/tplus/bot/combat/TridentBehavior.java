@@ -22,7 +22,8 @@ public final class TridentBehavior {
     private static final int RELEASE_COOLDOWN = 45;
     public static final double MIN_DISTANCE = 5.0;
     public static final double MAX_DISTANCE = 30.0;
-    public static final double MELEE_FALLBACK_DISTANCE = 5.0;
+    /** A held trident still uses normal player melee reach; ranged use starts at 5 blocks. */
+    public static final double MELEE_FALLBACK_DISTANCE = MeleeBehavior.ATTACK_RANGE;
     private static final double THROW_BASE_SPEED = 2.5;
     private static final double THROW_MOMENTUM_BONUS = 1.4;
 
