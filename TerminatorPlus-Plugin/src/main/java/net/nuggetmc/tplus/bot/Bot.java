@@ -978,12 +978,6 @@ public class Bot extends ServerPlayer implements Terminator {
                             + " left=" + actionController.remainingTicks());
             return;
         }
-        if (entity instanceof org.bukkit.entity.LivingEntity living
-                && !hasCombatLineOfSight(living)) {
-            CombatDebugger.log(this, "attack-skip",
-                    "reason=line-of-sight target=" + entity.getType().name());
-            return;
-        }
         actionController.recordPrimaryAction(this, BotActionState.MELEE_ATTACK, "bot-attack", botInventory.getSelectedHotbarSlot());
 
         // Neural-network training relies on the deterministic legacy damage table so fitness
@@ -1057,27 +1051,6 @@ public class Bot extends ServerPlayer implements Terminator {
                                 + " held=" + mainhandType());
             }
         }
-    }
-
-    /**
-     * Bukkit's direct Player.attack(Entity) call does not perform the client
-     * ray-trace first. Keep combat damage behind the same block visibility
-     * requirement a real player attack has.
-     */
-    public boolean hasCombatLineOfSight(org.bukkit.entity.LivingEntity target) {
-        if (target == null || !target.isValid()) return false;
-        Location eye = getBukkitEntity().getEyeLocation();
-        if (eye.getWorld() == null || target.getWorld() != eye.getWorld()) return false;
-        Location body = target.getLocation().clone().add(0.0, target.getHeight() * 0.5, 0.0);
-        return clearCombatRay(eye, body) || clearCombatRay(eye, target.getEyeLocation());
-    }
-
-    private static boolean clearCombatRay(Location from, Location to) {
-        Vector delta = to.toVector().subtract(from.toVector());
-        double distance = delta.length();
-        if (distance < 1.0e-6) return true;
-        return from.getWorld().rayTraceBlocks(from, delta.normalize(), distance,
-                FluidCollisionMode.NEVER, true) == null;
     }
 
     @Override

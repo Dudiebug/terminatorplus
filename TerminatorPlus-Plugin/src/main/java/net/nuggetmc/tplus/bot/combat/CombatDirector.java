@@ -51,7 +51,6 @@ public final class CombatDirector {
     }
 
     public boolean tick(Bot bot, LivingEntity target) {
-        combo.tick(bot, target);
         if (target == null || !target.isValid()) return false;
         plan(bot, target, bot.getCombatIntent());
         // NN bots route combat through executePlannedCombat() inside move(), which is
@@ -70,7 +69,6 @@ public final class CombatDirector {
      * than execute(): no scanner, consumables, idle melee, or utility branches.
      */
     public boolean tickCommitted(Bot bot, LivingEntity target) {
-        combo.tick(bot, target);
         if (target == null || !target.isValid()) return false;
         CombatState.Phase phase = bot.getCombatState().getPhase();
         if (!isCommittedPhase(phase)) {
@@ -99,7 +97,6 @@ public final class CombatDirector {
      * attacks, mutate loadouts, or bypass CombatDirector execution gates.
      */
     public CombatIntent plan(Bot bot, LivingEntity target, CombatIntent previousIntent) {
-        combo.tick(bot, target);
         if (target == null || !target.isValid()) {
             bot.setCombatIntent(CombatIntent.DEFAULT);
             return bot.getCombatIntent();

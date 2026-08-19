@@ -541,8 +541,7 @@ public final class OpportunityScanner {
         }
 
         if (snap.targetHpFraction < FINISHER_HP_FRAC && snap.distance >= 5.0) {
-            if (ComboBehavior.isInterceptRange(snap.distance)
-                    && inv.hasWindCharge() && inv.hasEnderPearl()
+            if (snap.distance >= 18.0 && inv.hasWindCharge() && inv.hasEnderPearl()
                     && combo.canCombo(bot)
                     && bot.getBotCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, alive)) {
                 return ScannerPlan.of(ScannerPlay.FINISHER_COMBO);
@@ -590,7 +589,7 @@ public final class OpportunityScanner {
             case KNOCKUP_CRYSTAL -> {
                 if (executeKnockupCrystal(bot, target)) {
                     bot.getBotCooldowns().set(KNOCKUP_CD, 60, alive);
-                    bot.getBotCooldowns().set(WindChargeBehavior.COOLDOWN_KEY, WindChargeBehavior.COOLDOWN_TICKS, alive);
+                    bot.getBotCooldowns().set(WindChargeBehavior.COOLDOWN_KEY, 55, alive);
                     return true;
                 }
             }
@@ -767,7 +766,7 @@ public final class OpportunityScanner {
             }
             case FINISHER_COMBO -> {
                 if (combo.canCombo(bot)) {
-                    return combo.start(bot, target, ComboBehavior.ComboType.WIND_PEARL_INTERCEPT);
+                    return combo.start(bot, target, ComboBehavior.ComboType.WIND_PEARL_ENGAGE);
                 }
             }
             case FINISHER_TRIDENT -> {
@@ -856,7 +855,7 @@ public final class OpportunityScanner {
                 && bot.getBotCooldowns().ready(WindChargeBehavior.COOLDOWN_KEY, alive)) {
             if (executeKnockupCrystal(bot, target)) {
                 bot.getBotCooldowns().set(KNOCKUP_CD, 60, alive);
-                bot.getBotCooldowns().set(WindChargeBehavior.COOLDOWN_KEY, WindChargeBehavior.COOLDOWN_TICKS, alive);
+                bot.getBotCooldowns().set(WindChargeBehavior.COOLDOWN_KEY, 55, alive);
                 return true;
             }
         }
@@ -1395,9 +1394,8 @@ public final class OpportunityScanner {
         spawnLoc.getWorld().playSound(feet, Sound.ENTITY_WIND_CHARGE_THROW, 1f, 1.2f);
         consumeOne(bot, Material.WIND_CHARGE);
 
-        bot.getBotCooldowns().set(WindChargeBehavior.COOLDOWN_KEY, WindChargeBehavior.COOLDOWN_TICKS, bot.getAliveTicks());
-        bot.getBotCooldowns().set(ComboBehavior.COOLDOWN_KEY,
-                ComboBehavior.COOLDOWN_TICKS, bot.getAliveTicks());
+        bot.getBotCooldowns().set(WindChargeBehavior.COOLDOWN_KEY, 55, bot.getAliveTicks());
+        bot.getBotCooldowns().set(ComboBehavior.COOLDOWN_KEY, 100, bot.getAliveTicks());
         return true;
     }
 
@@ -1627,7 +1625,7 @@ public final class OpportunityScanner {
             if (executeKnockupCrystal(bot, target)) {
                 CombatDebugger.log(bot, "opp-fire", "name=INTERRUPT via=wind-charge");
                 bot.getBotCooldowns().set(cdKey, cdTicks, alive);
-                bot.getBotCooldowns().set(WindChargeBehavior.COOLDOWN_KEY, WindChargeBehavior.COOLDOWN_TICKS, alive);
+                bot.getBotCooldowns().set(WindChargeBehavior.COOLDOWN_KEY, 55, alive);
                 return true;
             }
         }
@@ -1895,11 +1893,10 @@ public final class OpportunityScanner {
         BotInventory inv = bot.getBotInventory();
         int alive = bot.getAliveTicks();
 
-        if (ComboBehavior.isInterceptRange(snap.distance)
-                && inv.hasWindCharge() && inv.hasEnderPearl()
+        if (snap.distance >= 18.0 && inv.hasWindCharge() && inv.hasEnderPearl()
                 && combo.canCombo(bot)
                 && bot.getBotCooldowns().ready(EnderPearlBehavior.COOLDOWN_KEY, alive)) {
-            return combo.start(bot, target, ComboBehavior.ComboType.WIND_PEARL_INTERCEPT);
+            return combo.start(bot, target, ComboBehavior.ComboType.WIND_PEARL_ENGAGE);
         }
 
         if (snap.distance >= 8.0 && snap.distance <= 28.0 && inv.hasTrident()
@@ -1945,11 +1942,7 @@ public final class OpportunityScanner {
         });
         spawn.getWorld().playSound(spawn, Sound.ENTITY_ENDER_PEARL_THROW, 1f, 1f);
         bot.getBotInventory().decrementMainInventorySlot(slot, 1);
-        CombatDebugger.log(bot, "pearl-throw",
-                "source=finisher dist=" + String.format("%.2f", bot.getLocation().distance(target.getLocation()))
-                        + " slot=" + slot);
-        bot.getBotCooldowns().set(EnderPearlBehavior.COOLDOWN_KEY,
-                EnderPearlBehavior.COOLDOWN_TICKS, bot.getAliveTicks());
+        bot.getBotCooldowns().set(EnderPearlBehavior.COOLDOWN_KEY, 60, bot.getAliveTicks());
         return true;
     }
 
