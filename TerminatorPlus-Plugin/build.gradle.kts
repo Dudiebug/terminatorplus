@@ -14,6 +14,9 @@ dependencies {
     paperweight.paperDevBundle("26.2.build.+")
 
     implementation(project(":TerminatorPlus-API"))
+
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.0")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.0")
 }
 
 tasks {
@@ -26,5 +29,8 @@ tasks {
     }
     processResources {
         filteringCharset = Charsets.UTF_8.name()
+    }
+    test {
+        useJUnitPlatform()
     }
 }

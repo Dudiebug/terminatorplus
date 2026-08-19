@@ -42,10 +42,14 @@ import net.nuggetmc.tplus.bot.combat.CombatState;
 import net.nuggetmc.tplus.bot.combat.MovementBranchFamily;
 import net.nuggetmc.tplus.bot.combat.MovementState;
 import net.nuggetmc.tplus.bot.combat.PlayerLikeActionController;
+import net.nuggetmc.tplus.bot.combat.PlayerTraversalActionExecutor;
 import net.nuggetmc.tplus.bot.combat.WindChargeMovePlan;
 import net.nuggetmc.tplus.bot.loadout.BotInventory;
 import net.nuggetmc.tplus.bot.loadout.Cooldowns;
 import net.nuggetmc.tplus.bot.movement.MovementOutputApplier;
+import net.nuggetmc.tplus.bot.navigation.BukkitNavigationContext;
+import net.nuggetmc.tplus.bot.navigation.MovementV2Controller;
+import net.nuggetmc.tplus.bot.navigation.MovementV2Planner;
 import net.nuggetmc.tplus.command.commands.BotCommand;
 import net.nuggetmc.tplus.nms.MockConnection;
 import net.nuggetmc.tplus.utils.NMSUtils;
@@ -117,8 +121,12 @@ public class Bot extends ServerPlayer implements Terminator {
     private final Set<BukkitTask> scheduledTasks;
     private boolean jumpedThisTick;
     private final MovementOutputApplier movementOutputApplier;
+    private final MovementV2Controller movementV2Controller;
+    private final PlayerTraversalActionExecutor traversalActionExecutor;
     private boolean lastMovementControllerFallback;
     private boolean lastMovementControllerHeld;
+    private int lastMovementV2ControlledTick = -1;
+    private int lastMovementV2ActionTick = -1;
     /** Pending wind-charge self-boost (aim + fire tick). Null when not planning a throw. */
     public WindChargeMovePlan pendingWindChargePlan;
 
@@ -142,6 +150,8 @@ public class Bot extends ServerPlayer implements Terminator {
         this.actionController = new PlayerLikeActionController();
         this.scheduledTasks = ConcurrentHashMap.newKeySet();
         this.movementOutputApplier = new MovementOutputApplier();
+        this.movementV2Controller = new MovementV2Controller();
+        this.traversalActionExecutor = new PlayerTraversalActionExecutor();
         if (addToPlayerList) {
             minecraftServer.getPlayerList().getPlayers().add(this);
             inPlayerList = true;
@@ -403,6 +413,167 @@ public class Bot extends ServerPlayer implements Terminator {
     }
 
     @Override
+    public boolean tryMovementV2Move(org.bukkit.entity.LivingEntity target, Location routeTarget) {
+        if (!movementV2Enabled()) {
+            if (traversalActionExecutor.active()) traversalActionExecutor.cancel(this, "movement-v2-disabled");
+            movementV2Controller.reset();
+            return false;
+        }
+        // Training fitness must not silently change when route steering is
+        // enabled for ordinary bots.
+        if (!trainingLoadout.isBlank()) {
+            cancelMovementV2Action("training-bot");
+            return false;
+        }
+        if (target == null || !target.isValid() || routeTarget == null) {
+            if (traversalActionExecutor.active()) {
+                return continueMovementV2Action();
+            }
+            cancelMovementV2Action("missing-target");
+            return false;
+        }
+        // The legacy movement shell already owns swimming and climbing. The
+        // V2 grid intentionally falls back instead of treating liquids or
+        // climbable blocks as ordinary walkable air.
+        if (!traversalActionExecutor.active()
+                && (isBotInWater() || getLocation().getBlock().isLiquid())) return false;
+        if (actionController.active() && !traversalActionExecutor.active()) return false;
+
+        BukkitNavigationContext context = new BukkitNavigationContext(getLocation());
+        int buildingBlocks = PlayerTraversalActionExecutor.countBuildingBlocks(botInventory);
+        MovementV2Planner.Capabilities capabilities = new MovementV2Planner.Capabilities(
+                movementV2Flag("allow-open", true),
+                movementV2Flag("allow-place", true) && buildingBlocks > 0,
+                movementV2Flag("allow-pillar", true) && buildingBlocks > 0,
+                movementV2Flag("allow-parkour", true),
+                movementV2Flag("allow-clutch-drop", true)
+                        && PlayerTraversalActionExecutor.hasClutchItem(this),
+                movementV2Flag("allow-break", true),
+                buildingBlocks
+        );
+        long maxMicros = Math.max(1L, Math.min(50_000L,
+                plugin.getConfig().getLong("ai.movement.v2.max-micros", 2000L)));
+        MovementV2Planner.Policy policy = new MovementV2Planner.Policy(
+                plugin.getConfig().getInt("ai.movement.v2.max-nodes", 2048),
+                maxMicros * 1_000L,
+                1,
+                plugin.getConfig().getInt("ai.movement.v2.max-normal-drop", 3),
+                plugin.getConfig().getInt("ai.movement.v2.max-clutch-drop", 48),
+                plugin.getConfig().getInt("ai.movement.v2.max-parkour-distance", 4),
+                capabilities.canParkour(),
+                capabilities.canClutch(),
+                capabilities.canPlace(),
+                capabilities.canPillar(),
+                capabilities.canBreak()
+        );
+
+        MovementV2Controller.Decision decision = movementV2Controller.decide(
+                getLocation(),
+                target.getUniqueId(),
+                routeTarget,
+                getCombatIntent(),
+                getAliveTicks(),
+                context,
+                capabilities,
+                policy
+        );
+
+        if (decision.type() == MovementV2Controller.DecisionType.FALLBACK) {
+            if (traversalActionExecutor.active()) traversalActionExecutor.cancel(this, decision.reason());
+            return false;
+        }
+
+        lastMovementV2ControlledTick = getAliveTicks();
+        if (decision.type() == MovementV2Controller.DecisionType.HOLD) {
+            walkRoute(new Vector());
+            return true;
+        }
+        if (decision.type() == MovementV2Controller.DecisionType.ACTION) {
+            lastMovementV2ActionTick = getAliveTicks();
+            PlayerTraversalActionExecutor.Outcome outcome = traversalActionExecutor.tick(this, decision.step(), context);
+            movementV2Controller.recordActionResult(outcome.status(), outcome.reason());
+            return true;
+        }
+
+        if (traversalActionExecutor.active()) traversalActionExecutor.cancel(this, "route-resumed");
+        followMovementV2Step(target, decision.step());
+        return true;
+    }
+
+    private boolean continueMovementV2Action() {
+        MovementV2Planner.Step step = traversalActionExecutor.currentStep();
+        if (step == null) return false;
+        BukkitNavigationContext context = new BukkitNavigationContext(getLocation());
+        PlayerTraversalActionExecutor.Outcome outcome = traversalActionExecutor.tick(this, step, context);
+        movementV2Controller.recordActionResult(outcome.status(), outcome.reason());
+        lastMovementV2ControlledTick = getAliveTicks();
+        lastMovementV2ActionTick = getAliveTicks();
+        return true;
+    }
+
+    public MovementV2Controller.Status movementV2Status() {
+        return movementV2Controller.status();
+    }
+
+    public boolean movementV2ActionUsedThisTick() {
+        return lastMovementV2ActionTick == getAliveTicks();
+    }
+
+    @Override
+    public boolean movementV2ActionActive() {
+        return traversalActionExecutor.active();
+    }
+
+    @Override
+    public void cancelMovementV2Action(String reason) {
+        if (traversalActionExecutor.active()) traversalActionExecutor.cancel(this, reason);
+        movementV2Controller.reset();
+    }
+
+    private void followMovementV2Step(org.bukkit.entity.LivingEntity target, MovementV2Planner.Step step) {
+        Location waypoint = new Location(getBukkitEntity().getWorld(),
+                step.to().x() + 0.5, step.to().y(), step.to().z() + 0.5);
+
+        if (step.kind() == MovementV2Planner.Kind.PARKOUR && isBotOnGround()) {
+            Vector delta = waypoint.toVector().subtract(getLocation().toVector());
+            double horizontal = Math.hypot(delta.getX(), delta.getZ());
+            int ticks = Math.max(4, (int) Math.ceil(horizontal / 0.42));
+            double vy = Math.min(0.42,
+                    (delta.getY() + 0.04 * ticks * (ticks - 1)) / ticks);
+            Vector launch = new Vector(delta.getX() / ticks, vy, delta.getZ() / ticks);
+            setSprinting(true);
+            jump(launch);
+            return;
+        }
+
+        Vector desired = waypoint.toVector().subtract(getLocation().toVector()).setY(0);
+        if (desired.lengthSquared() > 1.0e-6) desired.normalize().multiply(0.36);
+        if (step.kind() == MovementV2Planner.Kind.STEP_UP && isBotOnGround()) {
+            jump(new Vector(desired.getX(), 0.42, desired.getZ()));
+            return;
+        }
+
+        if (usesMovementController()) {
+            MovementOutputApplier.ApplyResult result = movementOutputApplier.tryApply(
+                    this, target, network.movementBrainBank(), waypoint);
+            lastMovementControllerFallback = result.fallback();
+            lastMovementControllerHeld = result.held();
+            LiveDuelMetricsRecorder.recordMovementResult(this, result);
+            if (!result.fallback()) return;
+        }
+
+        walkRoute(desired);
+    }
+
+    private boolean movementV2Enabled() {
+        return plugin.getConfig().getBoolean("ai.movement.v2.enabled", false);
+    }
+
+    private boolean movementV2Flag(String name, boolean fallback) {
+        return plugin.getConfig().getBoolean("ai.movement.v2." + name, fallback);
+    }
+
+    @Override
     public boolean executePlannedCombat(org.bukkit.entity.LivingEntity target) {
         CombatDirector director = plugin.getCombatDirector();
         if (director == null) return false;
@@ -411,6 +582,7 @@ public class Bot extends ServerPlayer implements Terminator {
 
     @Override
     public MovementTrainingSnapshot movementTrainingSnapshot(org.bukkit.entity.LivingEntity target) {
+        if (lastMovementV2ControlledTick == getAliveTicks()) return MovementTrainingSnapshot.unavailable();
         if (target == null || !target.isValid()) return MovementTrainingSnapshot.unavailable();
         CombatIntent intent = getCombatIntent();
         MovementState movement = getMovementState();
@@ -525,6 +697,14 @@ public class Bot extends ServerPlayer implements Terminator {
 
     private void sendPacket(Packet<?> packet) {
         Bukkit.getOnlinePlayers().forEach(p -> ((CraftPlayer) p).getHandle().connection.send(packet));
+    }
+
+    /** Re-advertise the selected mainhand after an NMS inventory-slot swap. */
+    public void refreshMainHandEquipment() {
+        net.minecraft.world.item.ItemStack held = getMainHandItem();
+        sendPacket(new ClientboundSetEquipmentPacket(getId(), List.of(
+                new Pair<>(EquipmentSlot.MAINHAND, held.copy())
+        )));
     }
 
     @Override
@@ -968,6 +1148,18 @@ public class Bot extends ServerPlayer implements Terminator {
         velocity = sum;
     }
 
+    /**
+     * Follow a validated route edge without carrying old sideways momentum
+     * through a corner. Vertical velocity is preserved for falls and jumps.
+     */
+    public void walkRoute(Vector vel) {
+        double y = velocity.getY();
+        Vector routed = vel == null ? new Vector() : vel.clone().setY(0);
+        if (routed.length() > 0.4) routed.normalize().multiply(0.4);
+        routed.setY(y);
+        velocity = routed;
+    }
+
     @Override
     public void attack(org.bukkit.entity.Entity entity) {
         faceLocation(entity.getLocation());
@@ -1172,6 +1364,8 @@ public class Bot extends ServerPlayer implements Terminator {
             plugin.getCombatDirector().cleanupBot(getUUID());
         }
         CombatDebugger.disable(getUUID());
+        traversalActionExecutor.cancel(this, "bot-removed");
+        movementV2Controller.reset();
         MovementOutputApplier.clearBot(getUUID());
         LiveDuelMetricsRecorder.clearBot(getUUID());
 
@@ -1214,6 +1408,7 @@ public class Bot extends ServerPlayer implements Terminator {
 
     @Override
     public void die(DamageSource damageSource) {
+        cancelMovementV2Action("bot-died");
         super.die(damageSource);
         this.dieCheck();
     }
