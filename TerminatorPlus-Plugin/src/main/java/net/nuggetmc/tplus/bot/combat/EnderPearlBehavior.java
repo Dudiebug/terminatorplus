@@ -18,7 +18,7 @@ import org.bukkit.util.Vector;
 public final class EnderPearlBehavior {
 
     public static final String COOLDOWN_KEY = "pearl";
-    public static final int COOLDOWN_TICKS = 60;
+    private static final int COOLDOWN = 60;
     /** Match the user-facing "use pearls beyond 28 blocks" rule. Inside this radius, walk/trident. */
     private static final double MIN_DISTANCE = 28.0;
     /** Vanilla pearls have ~30-block reach before falling out of the air; cap so we don't waste throws. */
@@ -85,7 +85,7 @@ public final class EnderPearlBehavior {
             bot.getBotInventory().restoreSelectedSlotOrBestWeapon(previousSlot);
             return 0;
         }
-        bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN_TICKS, alive);
-        return COOLDOWN_TICKS;
+        bot.getBotCooldowns().set(COOLDOWN_KEY, COOLDOWN, alive);
+        return COOLDOWN;
     }
 }
