@@ -174,6 +174,19 @@ public final class CombatDirector {
                             + "]");
         }
 
+        // A totem uses the offhand and remains a valid emergency swap. Other
+        // passive behaviors can replace the leased mainhand item or launch a
+        // second action, so stop them while traversal owns the hands/hotbar.
+        if (bot.movementV2ActionUsedThisTick()
+                || bot.getActionController().isMovementV2TraversalAction()) {
+            totem.tick(bot, target);
+            CombatDebugger.log(bot, "action-hold",
+                    "state=" + bot.getActionController().state()
+                            + " src=" + bot.getActionController().source()
+                            + " left=" + bot.getActionController().remainingTicks());
+            return true;
+        }
+
         elytra.tick(bot, target);
         totem.tick(bot, target);
         consumable.tick(bot, target);

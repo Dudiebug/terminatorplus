@@ -118,8 +118,8 @@ public final class BotInventory {
         if (slot < 0 || slot >= HOTBAR_SIZE) return;
         // No-op early return: CombatDirector / OpportunityScanner call this
         // every tick with the slot the bot is already holding. Without this
-        // guard, the setItem(item.clone(), HAND) call below writes a brand
-        // new ItemStack reference into the mainhand every tick. Vanilla
+        // guard, repeatedly re-advertising and rewriting the held stack used
+        // to create a brand-new mainhand reference every tick. Vanilla
         // Player.tick's item-change detection (getMainHandItem() !=
         // lastItemInMainHand) fires on reference inequality and calls
         // resetAttackStrengthTicker() — pinning the attack charge at ~0.08
@@ -128,12 +128,10 @@ public final class BotInventory {
         // ticker climbs unmolested, and the bot attacks at vanilla cadence.
         if (this.selectedHotbarSlot == slot) return;
         this.selectedHotbarSlot = slot;
-        // Sync NMS (Bukkit API route, since the NMS field is private in
-        // Paper 26.x). setItemInMainHand below writes into whichever
-        // slot this tracker says is selected.
+        // Sync NMS through Bukkit because the NMS selected field is private in
+        // Paper 26.x, then advertise the now-selected stack to viewers.
         raw().setHeldItemSlot(slot);
-        ItemStack item = raw().getItem(slot);
-        bot.setItem(item == null ? new ItemStack(Material.AIR) : item.clone(), EquipmentSlot.HAND);
+        bot.refreshMainHandEquipment();
     }
 
     public ItemStack getSelected() {
@@ -240,6 +238,45 @@ public final class BotInventory {
         return target;
     }
 
+    /**
+     * Temporarily expose a storage item to a player action. Normal promotion
+     * protects melee slots; a short-lived action may borrow the selected slot
+     * when every hotbar slot is a weapon because the caller swaps it back on
+     * completion.
+     */
+    public int leaseToHotbar(int slot) {
+        int promoted = promoteToHotbar(slot);
+        if (promoted >= 0 || slot < HOTBAR_SIZE || slot >= 36) return promoted;
+        return swapMainInventorySlots(slot, selectedHotbarSlot) ? selectedHotbarSlot : -1;
+    }
+
+    /** Re-send the item currently occupying the selected slot after an in-place lease swap. */
+    public void refreshSelectedItem() {
+        raw().setHeldItemSlot(selectedHotbarSlot);
+        bot.refreshMainHandEquipment();
+    }
+
+    /**
+     * Swap two main-inventory slots through the same NMS direct-write path used
+     * by utility-item promotion. Traversal actions use this to return a leased
+     * item to storage instead of permanently rearranging the bot's loadout.
+     */
+    public boolean swapMainInventorySlots(int first, int second) {
+        if (first < 0 || first >= 36 || second < 0 || second >= 36 || first == second) {
+            return false;
+        }
+        PlayerInventory inv = raw();
+        ItemStack firstItem = inv.getItem(first);
+        ItemStack secondItem = inv.getItem(second);
+        net.minecraft.world.entity.player.Inventory nms = bot.getInventory();
+        nms.setItem(first, secondItem == null ? net.minecraft.world.item.ItemStack.EMPTY
+                : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(secondItem));
+        nms.setItem(second, firstItem == null ? net.minecraft.world.item.ItemStack.EMPTY
+                : org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(firstItem));
+        nms.setChanged();
+        return true;
+    }
+
     /** Backwards-compatible alias while callers migrate to the clearer name. */
     public int bringToHotbar(int slot) {
         return promoteToHotbar(slot);
@@ -309,6 +346,13 @@ public final class BotInventory {
             return;
         }
         selectBestMeleeWeapon();
+    }
+
+    /** Restore the exact hotbar selection held before a temporary player action. */
+    public void restoreSelectedSlot(int previousSlot) {
+        if (previousSlot >= 0 && previousSlot < HOTBAR_SIZE) {
+            setSelectedHotbarSlot(previousSlot);
+        }
     }
 
     public int selectBestMeleeWeapon() {
