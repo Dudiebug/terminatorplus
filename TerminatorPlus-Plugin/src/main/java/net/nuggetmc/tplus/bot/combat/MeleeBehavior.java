@@ -22,7 +22,8 @@ import org.bukkit.inventory.ItemStack;
  */
 public final class MeleeBehavior {
 
-    public static final double ATTACK_RANGE = 5.0;
+    /** Keep melee inside the same 3.5-block contract used by the scanner and wiki. */
+    public static final double ATTACK_RANGE = 3.5;
 
     public int ticksFor(Bot bot, LivingEntity target, double distance) {
         if (distance > ATTACK_RANGE) {
