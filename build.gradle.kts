@@ -30,6 +30,7 @@ tasks.jar {
 
 val movementOnlySources = listOf(
     file("TerminatorPlus-Plugin/src/main/java/net/nuggetmc/tplus/bot/movement"),
+    file("TerminatorPlus-Plugin/src/main/java/net/nuggetmc/tplus/bot/navigation"),
     file("TerminatorPlus-API/src/main/java/net/nuggetmc/tplus/api/agent/legacyagent/ai/movement")
 )
 
@@ -83,6 +84,10 @@ tasks.register("checkMovementOnlyContract") {
                         "placeCobweb",
                         "placeLava",
                         "useFirework",
+                        "setType",
+                        "setBlockData",
+                        "breakNaturally",
+                        "breakBlock",
                         "ticksFor"
                     ).joinToString("|") +
                     ")\\s*\\("
