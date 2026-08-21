@@ -1,55 +1,74 @@
-# TerminatorPlus - Release Publishing
+# TerminatorPlus release publishing
 
-The active prerelease branch is `agent/debloat-audit-findings`, targeting
-Paper/Minecraft `26.2`.
+`master` is the source-of-truth branch for current TerminatorPlus development
+and Paper/Minecraft 26.2 releases. Release changes must land through a scoped
+branch and pull request before anything is published.
 
-## To publish
+The retained compatibility branches are:
 
-From the repository root:
+| Branch | Purpose | Toolchain |
+| --- | --- | --- |
+| `master` | Current development and release source | Paper 26.2, Java 25 |
+| `mc-26.1.2` | Older compatibility/reference line | Paper 26.1.2, Java 25 |
+| `mc-1.21.11` | Older compatibility/reference line | Paper 1.21.11, Java 21 |
+
+Do not publish current releases from a feature branch or from one of the older
+compatibility branches unless the release is explicitly scoped to that branch.
+
+## Prerelease procedure
+
+1. Merge the release changes and release notes into the intended target branch.
+2. Check out that branch and synchronize it with `origin`.
+3. Build the repository.
+4. Run the publishing helper with the release version, artifact suffix, and
+   target branch.
+
+For the current line:
 
 ```bash
+git checkout master
+git pull --ff-only origin master
 ./gradlew build -q
-bash publish/publish-releases.sh
+bash publish/publish-releases.sh 6.1.5 mc26.2 master
 ```
 
-The script pushes `agent/debloat-audit-findings`, creates the prerelease
-`v6.1.4-mc26.2`, and attaches
-`build/libs/TerminatorPlus-6.1.4-BETA-mc26.2.jar`.
+The expected default artifact is:
 
-## Branches
+```text
+build/libs/TerminatorPlus-6.1.5-BETA-mc26.2.jar
+```
 
-| Branch         | Paper target                  | Jar                                              |
-|----------------|-------------------------------|--------------------------------------------------|
-| `mc-1.21.11`   | `paper-api:1.21.11-R0.1-SNAPSHOT` (Spigot-reobf, Java 21) | `TerminatorPlus-4.5.2-BETA-mc1.21.11.jar`        |
-| `mc-26.1`      | `paper-api:26.1.1.build.+` (Mojang-mapped, Java 25)        | `TerminatorPlus-4.5.2-BETA-mc26.1.jar`           |
-| `mc-26.1.1`    | `paper-api:26.1.1.build.+` (Mojang-mapped, Java 25)        | `TerminatorPlus-4.5.2-BETA-mc26.1.1.jar`         |
-| `mc-26.1.2`    | `paper-api:26.1.2.build.+` (Mojang-mapped, Java 25)        | `TerminatorPlus-6.1.0-BETA-mc26.1.2.jar`         |
-| `agent/debloat-audit-findings` | `paper-api:26.2.build.+` (Mojang-mapped, Java 25) | `TerminatorPlus-6.1.4-BETA-mc26.2.jar` |
+The expected default notes file is:
 
-`mc-26.1` targets the 26.1.1 dev bundle because Paper never published a base `26.1.build.X` dev bundle — they jumped straight to 26.1.1.
+```text
+wiki/Release-Notes-6.1.5.md
+```
 
-## What changed across the port
+The script creates or updates `v6.1.5-mc26.2` as a prerelease and uploads the
+jar. It deliberately does **not** push source code. Before publishing, it
+requires all of the following:
 
-- **paperweight-userdev** bumped 1.7.5 → 2.0.0-beta.21 (required for 26.x unobfuscated support).
-- **Gradle wrapper** bumped 8.11.1 → 9.0.0 (required by paperweight 2.0).
-- **26.x reobf removed.** Paper 26.1+ runs Mojang-mapped; `reobfJar`/`reobfArtifactConfiguration` deleted on the 26.x branches. Top-level `implementation(project(":TerminatorPlus-Plugin", "reobf"))` → `implementation(project(":TerminatorPlus-Plugin"))`.
-- **Java 25** on 26.x branches; Java 21 retained on mc-1.21.11.
-- **26.2 dependency update.** The active branch uses `paper-api:26.2.build.+`
-  and `paperDevBundle("26.2.build.+")`.
-- **Paper API changes fixed:**
-  - `Material.CHAIN` split into `IRON_CHAIN` + `COPPER_CHAIN` (1.21.11 Paper change).
-  - `EntityType.BOAT` gone; now per-wood type (using `OAK_BOAT`).
-  - `Entity.hurt(DamageSource, float)` is final; override `hurtServer(ServerLevel, DamageSource, float)` instead.
-  - `ServerPlayer.server` is private; use `((CraftServer) Bukkit.getServer()).getServer()`.
-  - `detectEquipmentUpdatesPublic()` folded back into public `detectEquipmentUpdates()`.
-  - `Connection.send(Packet, PacketSendListener, ...)` → `ChannelFutureListener`.
-  - `ChunkPos` became a record; `.x` / `.z` → `.x()` / `.z()`.
-  - `org.apache.commons.lang.StringUtils` no longer shipped; replaced with `String.join`.
-  - User-cache parsing uses Paper's Gson API; the standalone `json-simple` dependency is no longer needed.
-- **MockConnection** reflection rewritten to resolve `packetListener` / `disconnectListener` by field type + declaration order, so it works on both Spigot-reobf'd (1.21.x) and Mojang-mapped (26.x) runtimes without hardcoded obf letters.
+- `gh` is installed and authenticated for GitHub;
+- the checkout is on the requested target branch;
+- the working tree is clean;
+- local `HEAD` exactly matches `origin/<target-branch>`;
+- the requested jar and release-notes file exist.
 
-## Not tested
+This prevents a local feature branch, uncommitted work, or an unpushed commit
+from becoming the release source accidentally.
 
-These are compile-only verified. No Paper server was run. If bot spawn / combat / tracking misbehaves, the likeliest suspects are:
-- `this.entityData.set(new EntityDataAccessor<>(17, EntityDataSerializers.BYTE), (byte) 0x7F)` — hardcoded data-watcher index 17 for the skin-parts bitmask. If Mojang shifted that slot, skins render as default. Can be fixed by resolving the accessor via `Player.DATA_PLAYER_MODE_CUSTOMISATION` (1.21.x) once confirmed.
-- `LevelChunk.loaded` direct field access (Bot.java `loadChunks`) — if the field was removed, chunks won't be forced loaded. Easy to swap to `world.getChunk(i, j, ChunkStatus.FULL)` or similar.
+## Overrides
+
+The defaults can be overridden when a deliberately different artifact, tag,
+title, notes file, owner, or repository is required:
+
+```bash
+PLUGIN_JAR=/path/to/plugin.jar \
+NOTES_FILE=/path/to/notes.md \
+TAG=v6.1.5-mc26.2 \
+TITLE="TerminatorPlus 6.1.5 - mc26.2 (Prerelease)" \
+bash publish/publish-releases.sh 6.1.5 mc26.2 master
+```
+
+`OWNER` and `REPO` are also accepted as environment variables. Overrides should
+be used only for an explicitly reviewed release operation.

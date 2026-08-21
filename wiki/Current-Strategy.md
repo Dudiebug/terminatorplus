@@ -6,7 +6,12 @@ The goal is one strong bot versus one skilled human PvPer in a controlled duel
 arena. Work should improve actual duel behavior or protect the repo from
 regressions.
 
-Primary target branch: `mc-26.2`.
+Primary target branch: `master`.
+
+Use a task-specific feature or fix branch created from up-to-date `master`.
+Open pull requests against `master`; do not commit directly to the default
+branch. Compatibility branches are task-specific rather than the normal
+development base.
 
 ## Priority Order
 

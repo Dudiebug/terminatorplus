@@ -15,8 +15,14 @@
 
 ## Branch rules
 
-- Primary active target: `mc-26.2`.
-- Do not start new current-strategy work from `master`.
+- `master` is the GitHub default and integration branch.
+- Start each task from an up-to-date `master` checkout, then create a
+  task-specific feature or fix branch.
+- Do not commit or push directly to `master`.
+- Open pull requests with `master` as the base unless the task explicitly
+  specifies another integration target.
+- Use compatibility branches only when a task explicitly targets their runtime
+  or release line.
 - Treat older branch docs as compatibility references.
 - If a file says `mc-1.21.11` is primary, update docs or flag it as stale before using it as process guidance.
 
