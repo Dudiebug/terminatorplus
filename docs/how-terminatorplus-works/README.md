@@ -1,6 +1,6 @@
 # How TerminatorPlus Works
 
-This folder is a source-grounded architecture guide for the `mc-26.2`
+This folder is a source-grounded architecture guide for the `master`
 direction of TerminatorPlus.
 
 It is meant to let a human or another AI learn the plugin by reading these
@@ -9,8 +9,11 @@ tree.
 
 Scope rules for this guide:
 
-- Source of truth is the `mc-26.2` branch direction.
-- `master` is not treated here as the primary development branch.
+- Source of truth is the `master` branch direction.
+- Work is performed on task-specific branches created from `master` and merged
+  through pull requests targeting `master`.
+- `mc-26.2` and `mc-1.21.11` are compatibility/release branches unless a task
+  explicitly scopes one of them.
 - Old wiki pages under `wiki/` were left in place on purpose.
 - This guide does not treat legacy wiki claims as runtime truth unless they
   are backed by source.

@@ -5,15 +5,16 @@ It does not rewrite combat, movement, training, or persisted brain formats.
 
 ## Highlights
 
-- Updated the active target branch to `mc-26.2`.
+- At release time, updated the active target branch to `mc-26.2`. This release
+  note is historical; the repository now uses `master` as its default branch.
 - Updated the build version to `6.1.1-BETA-mc26.2`.
 - Updated the plugin runtime version gate to require Minecraft/Paper `26.2`.
 - Updated Paper API dependency from `paper-api:26.1.2.build.+` to
   `paper-api:26.2.build.+`.
 - Updated Paperweight Userdev dev bundle from `26.1.2.build.+` to
   `26.2.build.+`.
-- Updated current docs, wiki install notes, release helper metadata, and CI
-  comments to describe `mc-26.2` as the active target.
+- Updated the then-current docs, wiki install notes, release helper metadata,
+  and CI comments to describe `mc-26.2` as the active target.
 
 ## Compatibility Fixes
 

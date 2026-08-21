@@ -1,12 +1,20 @@
 # TerminatorPlus
 
 TerminatorPlus is now focused on one strong 1v1 PvP bot versus one skilled
-human PvPer on the `mc-26.2` target branch.
+human PvPer on the `master` target branch.
 
 The current priority is duel quality: movement, spacing, vanilla hit timing,
 sword/axe/shield fundamentals, defensive recovery, punish logic, and controlled
 advanced tools. Older broad-feature docs remain useful technical reference, but
 they are not the current strategy unless explicitly rewritten.
+
+## Development workflow
+
+`master` is the GitHub default and integration branch. Start work from an
+up-to-date `master` checkout, create a task-specific feature or fix branch, and
+open a pull request targeting `master`. Do not commit or push directly to
+`master`. Compatibility branches are only used when a task explicitly targets
+their runtime or release line.
 
 [![License: EPL-2.0](https://img.shields.io/github/license/Dudiebug/terminatorplus?color=violet&labelColor=000000&style=for-the-badge)](LICENSE)
 [![Discord](https://img.shields.io/discord/357333217340162069?color=5865F2&label=Discord&logo=Discord&labelColor=23272a&style=for-the-badge)](https://discord.gg/vZVSf2D6mz)

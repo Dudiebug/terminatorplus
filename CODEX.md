@@ -29,18 +29,16 @@ Use this precedence when files disagree:
 If an older file conflicts with this playbook, do not follow the stale process.
 Update or flag the stale doc in a scoped docs task.
 
-## Active branch target
+## Default branch and development workflow
 
-- Primary active target: `master`.
-- Current 1v1 PvP strategy work starts from `master`.
-- `master` is the intended default branch.
-- `mc-26.1.2` is older compatibility/reference unless a task explicitly scopes
-  that branch.
-- `mc-1.21.11` is older compatibility/reference unless a task explicitly scopes
-  that branch.
-
-Do not route current-strategy work through the old multi-branch compatibility
-flow.
+- `master` is the GitHub default branch and canonical integration/source
+  branch.
+- Start each task by updating local `master`, then create a task-specific
+  feature or fix branch from it.
+- Never commit or push directly to `master`. Open a pull request from the
+  feature branch with `master` as its base.
+- `mc-26.2`, `mc-26.1.2`, and `mc-1.21.11` are compatibility/release branches.
+  Use one only when a task explicitly targets that runtime or release line.
 
 ## Build rules
 
@@ -87,13 +85,16 @@ explicitly asks.
 
 ## Branch rules
 
-- Work on the branch named by the task. For current 1v1 strategy, that branch is
-  `master`.
-- Do not treat `mc-26.2` as the development source of truth.
-- Do not treat `mc-1.21.11` as primary for current strategy work.
+- Work on a task-specific branch created from up-to-date `master`.
+- Use `master` as the pull-request base unless the task explicitly specifies
+  another integration target.
+- Do not commit or push directly to `master`.
+- Do not use compatibility branches as the default base for current strategy
+  work.
 - If compatibility work is explicitly scoped, verify the relevant branch before
   editing and keep the change narrow.
-- Do not cherry-pick from `mc-26.2` as a shortcut for current strategy work.
+- Do not cherry-pick from a compatibility branch as a shortcut for current
+  strategy work.
 
 ## Runtime safety rules
 
@@ -244,10 +245,11 @@ A change is acceptable only when:
 
 ## Things not to do
 
-- Do not use `mc-26.2` as current source of truth.
-- Do not use `mc-26.1.2` as current source of truth unless a task explicitly
-  scopes older compatibility work.
-- Do not treat `mc-1.21.11` as primary for current strategy work.
+- Do not commit directly to `master`.
+- Do not use `mc-26.2` or `mc-26.1.2` as the default branch/base unless a task
+  explicitly scopes compatibility work.
+- Do not treat `mc-1.21.11` as the default branch/base for current strategy
+  work.
 - Do not follow old branch-flow guidance that starts current work on
   `mc-1.21.11`.
 - Do not run `shadowJar`, `reobfJar`, or `gradlew clean`.
