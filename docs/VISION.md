@@ -6,7 +6,12 @@ TerminatorPlus is being redirected from a general server-side bot plugin into a 
 
 The goal is not to spawn many weak bots. The goal is to make one bot that can pressure, survive, punish, and adapt against a skilled human PvPer.
 
-Primary target branch: `mc-26.2`.
+Primary target branch: `master`.
+
+All changes should be made on a task-specific feature branch created from
+`master` and merged through a pull request targeting `master`. The compatibility
+branches `mc-26.2`, `mc-26.1.2`, and `mc-1.21.11` are used only when a task
+explicitly scopes their runtime or release line.
 
 ## Old model vs new model
 
@@ -49,7 +54,7 @@ A change is valuable only if it improves actual duel behavior or protects the re
 - Do not rewrite `LegacyAgent` broadly.
 - Do not break neural-network training.
 - Do not make movement code directly execute combat actions.
-- Do not treat `master` as the main development branch.
+- Do not commit directly to `master`; use a feature branch and pull request.
 - Do not turn docs cleanup into gameplay rewrite work.
 
 ## Combat design principles

@@ -84,7 +84,9 @@ These are most likely to pull agents back toward the old broad-feature strategy.
 ```markdown
 > Legacy/reference notice:
 > This page may describe the old general TerminatorPlus strategy.
-> Current strategy is 1v1 PvP bot quality on `mc-26.2`.
+> Current strategy is 1v1 PvP bot quality on `master`.
+> Make changes on a feature branch from `master` and use a pull request back to
+> `master`; do not commit directly to the default branch.
 > Use this page for technical reference only until it is verified against source code and runtime behavior.
 ```
 

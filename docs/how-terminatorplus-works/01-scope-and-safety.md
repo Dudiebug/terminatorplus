@@ -1,7 +1,7 @@
 # 1. Scope and Safety
 
-This guide documents how TerminatorPlus currently works, using the
-`mc-26.2` branch direction as the intended source of truth.
+This guide documents how TerminatorPlus currently works, using the `master`
+branch direction as the intended source of truth.
 
 ## What this documentation is for
 
@@ -21,14 +21,16 @@ The audience is:
 
 ## Branch and evidence rules
 
-This guide is written against the `mc-26.2` line of development.
+This guide is written against the `master` line of development.
 
 That means:
 
-- `master` is not treated as the authoritative current implementation branch
-  for architecture decisions
-- `mc-1.21.11` is not treated as the current primary branch except for
-  compatibility concerns
+- `master` is the authoritative current implementation branch and default
+  pull-request base
+- changes are made on task-specific branches created from `master`, not directly
+  on `master`
+- `mc-26.2` and `mc-1.21.11` are compatibility/release branches unless a task
+  explicitly scopes one of them
 - old wiki pages are treated as reference material, not as source of truth
 
 When source and docs disagree, source wins.

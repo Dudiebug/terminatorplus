@@ -11,10 +11,13 @@ runtime duel tests.
 
 ## Current branch truth
 
-- Primary active development target: `mc-26.2`.
-- Do not start current 1v1 strategy work from `master`.
-- Treat `mc-1.21.11` as an older compatibility branch unless a task explicitly
-  scopes compatibility work.
+- `master` is the GitHub default, canonical integration, and current strategy
+  source branch.
+- Start work on a task-specific branch created from up-to-date `master` and
+  merge it back through a pull request targeting `master`.
+- Do not commit or push directly to `master`.
+- Treat `mc-26.2` and `mc-1.21.11` as compatibility/release branches unless a
+  task explicitly scopes one of those lines.
 
 ## Terms
 

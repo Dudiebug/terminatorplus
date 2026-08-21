@@ -9,12 +9,15 @@ written for the old broad-feature strategy:
 - flashy tools
 - wiki pages as broad user-facing strategy
 
-Current strategy is narrower: one strong 1v1 PvP bot on `mc-26.2`.
+Current strategy is narrower: one strong 1v1 PvP bot on `master`.
 
 ## Rule
 
 Source code defines runtime truth. Current strategy docs define product
 direction. Wiki pages are reference until verified and rewritten.
+
+Repository workflow uses feature branches from `master` and pull requests back
+to `master`. Do not use this legacy wiki as a branch or release-flow authority.
 
 ## Legacy Reference Pages
 

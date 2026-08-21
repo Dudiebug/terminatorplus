@@ -51,7 +51,9 @@ If a build is run, only use:
 
 - Confirm `CODEX.md` exists.
 - Confirm `CLAUDE.md` is only a compatibility redirect.
-- Confirm current strategy target is `mc-26.2`.
+- Confirm `master` is the default/integration branch and pull-request base.
+- Confirm current strategy work uses a task-specific branch created from
+  `master` rather than direct commits.
 - Confirm old `mc-1.21.11` branch-flow guidance is removed or marked
   compatibility-only.
 - Confirm no source/build files changed.
@@ -70,14 +72,15 @@ If a build is run, only use:
 - `CODEX.md` is canonical.
 - `CLAUDE.md` points to `CODEX.md`.
 - No Java/build/runtime files changed.
-- Current work is clearly scoped to `mc-26.2`.
+- Branch governance clearly uses `master` as the default and pull-request base.
 
 ### Rejection criteria
 
 - Any source behavior change.
 - Any Gradle change.
 - Any deletion recommendation for protected runtime systems without tests.
-- Any instruction to use `master` as current source of truth.
+- Any instruction to commit directly to `master` or use a compatibility branch
+  as the default pull-request base.
 - Any instruction to use `mc-1.21.11` as primary for current strategy work.
 
 ---
