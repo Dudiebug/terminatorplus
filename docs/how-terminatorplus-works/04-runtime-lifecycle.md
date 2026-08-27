@@ -33,6 +33,13 @@ In practical terms:
 - if the manager exists, the agent exists
 - if the agent exists, the recurring tick task exists
 
+The scheduler remains plugin-wide, but each registered bot now has one
+`BotRuntime` owned by `BotRuntimeOrchestrator`. That runtime holds transient
+target, stuck-detection, centering, tower, and clutch cooldown state. Adding a
+bot creates the runtime; removing it clears and unregisters the runtime. Public
+consumers can inspect an immutable `BotRuntimeSnapshot` without gaining access
+to mutable controller internals.
+
 That means startup bugs can have tick-loop implications even before a bot is
 created.
 

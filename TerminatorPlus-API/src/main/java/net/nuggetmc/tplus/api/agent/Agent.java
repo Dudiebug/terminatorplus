@@ -15,8 +15,10 @@ import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
+import java.util.UUID;
 
 public abstract class Agent {
 
@@ -94,8 +96,15 @@ public abstract class Agent {
     public void cleanupBot(Terminator bot) {
     }
 
+    public void onBotAdded(Terminator bot) {
+    }
+
     public void onBotRemoved(Terminator bot) {
         cleanupBot(bot);
+    }
+
+    public Optional<BotRuntimeSnapshot> getRuntimeSnapshot(UUID botId) {
+        return Optional.empty();
     }
 
     public void setDrops(boolean enabled) {

@@ -57,7 +57,9 @@ public class BotManagerImpl implements BotManager, Listener {
             Bukkit.broadcast(MiniMessage.miniMessage().deserialize("<yellow>" + bot.getBotName() + " joined the game"));
         }
 
-        bots.add(bot);
+        if (bots.add(bot)) {
+            agent.onBotAdded(bot);
+        }
     }
 
     public List<Bot> getAllByName(String name) {
@@ -222,7 +224,7 @@ public class BotManagerImpl implements BotManager, Listener {
                 bot.setVelocity(randomVelocity().multiply(f));
             }
 
-            bots.add(bot);
+            add(bot);
             i++;
         }
 
