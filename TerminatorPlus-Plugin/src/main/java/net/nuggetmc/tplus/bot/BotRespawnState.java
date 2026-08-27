@@ -44,7 +44,7 @@ record BotRespawnState(
                 bot.getTargetPlayer(),
                 bot.getKills(),
                 bot.getBotInventory().isRespectingLoadout(),
-                bot.trainingLoadout(),
+                bot.getTrainingLoadout(),
                 bot.isInPlayerList()
         );
     }

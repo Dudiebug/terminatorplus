@@ -7,6 +7,8 @@ import net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent;
 import net.nuggetmc.tplus.api.utils.ChatUtils;
 import net.nuggetmc.tplus.bot.Bot;
 import net.nuggetmc.tplus.bot.BotManagerImpl;
+import net.nuggetmc.tplus.bot.gui.BotInspectionDetailGUI;
+import net.nuggetmc.tplus.bot.gui.BotInspectionListGUI;
 import net.nuggetmc.tplus.bot.gui.BotInventoryGUI;
 import net.nuggetmc.tplus.bot.loadout.BotInventory;
 import net.nuggetmc.tplus.bot.preset.BotPreset;
@@ -322,18 +324,35 @@ public class BotCommand extends CommandInstance {
             desc = "Information about loaded bots.",
             autofill = "infoAutofill"
     )
-    public void info(CommandSender sender, @Arg("bot-name") String name) {
+    @Require(ADMIN_PERMISSION)
+    public void info(CommandSender sender, @OptArg("bot-name") String name) {
         if (name == null) {
-            sender.sendMessage(ChatColor.YELLOW + "Bot GUI coming soon!");
+            if (sender instanceof Player player) {
+                new BotInspectionListGUI(manager, 0).open(player);
+            } else {
+                List<Terminator> bots = manager.fetch().stream()
+                        .sorted(Comparator.comparing(Terminator::getBotName, String.CASE_INSENSITIVE_ORDER))
+                        .toList();
+                sender.sendMessage(ChatUtils.LINE);
+                sender.sendMessage(ChatColor.GOLD + "Loaded bots: " + ChatColor.BLUE + bots.size());
+                bots.forEach(bot -> sender.sendMessage(ChatUtils.BULLET_FORMATTED
+                        + ChatColor.GREEN + bot.getBotName() + ChatColor.GRAY + " - "
+                        + bot.getBukkitEntity().getUniqueId()));
+                sender.sendMessage(ChatUtils.LINE);
+            }
             return;
         }
 
-        sender.sendMessage("Processing request...");
         try {
             Terminator bot = manager.getFirst(name, (sender instanceof Player pl) ? pl.getLocation() : null);
 
             if (bot == null) {
                 sender.sendMessage("Could not find bot " + ChatColor.GREEN + name + ChatColor.RESET + "!");
+                return;
+            }
+
+            if (sender instanceof Player player) {
+                new BotInspectionDetailGUI(manager, bot.getBukkitEntity().getUniqueId(), 0).open(player);
                 return;
             }
 
@@ -349,6 +368,14 @@ public class BotCommand extends CommandInstance {
             sender.sendMessage(ChatUtils.BULLET_FORMATTED + "World: " + world);
             sender.sendMessage(ChatUtils.BULLET_FORMATTED + "Position: " + strLoc);
             sender.sendMessage(ChatUtils.BULLET_FORMATTED + "Velocity: " + strVel);
+            manager.getAgent().getRuntimeSnapshot(bot.getBukkitEntity().getUniqueId()).ifPresent(runtime -> {
+                sender.sendMessage(ChatUtils.BULLET_FORMATTED + "Target: " + ChatColor.YELLOW
+                        + (runtime.targetId() == null ? "none" : runtime.targetName()));
+                sender.sendMessage(ChatUtils.BULLET_FORMATTED + "Movement: " + ChatColor.AQUA
+                        + runtime.movementMode());
+                sender.sendMessage(ChatUtils.BULLET_FORMATTED + "Stuck ticks: " + ChatColor.BLUE
+                        + runtime.stuckTicks());
+            });
             sender.sendMessage(ChatUtils.LINE);
         } catch (Exception e) {
             sender.sendMessage(ChatUtils.EXCEPTION_MESSAGE);

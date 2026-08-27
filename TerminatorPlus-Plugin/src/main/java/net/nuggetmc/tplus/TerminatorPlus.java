@@ -7,6 +7,7 @@ import net.nuggetmc.tplus.bot.BotManagerImpl;
 import net.nuggetmc.tplus.bot.combat.CombatDebugger;
 import net.nuggetmc.tplus.bot.combat.CombatDirector;
 import net.nuggetmc.tplus.bot.gui.BotInventoryListener;
+import net.nuggetmc.tplus.bot.gui.BotInspectionListener;
 import net.nuggetmc.tplus.bot.movement.MovementOutputApplier;
 import net.nuggetmc.tplus.bot.preset.PresetManager;
 import net.nuggetmc.tplus.bridge.InternalBridgeImpl;
@@ -85,7 +86,7 @@ public class TerminatorPlus extends JavaPlugin {
         TerminatorPlusAPI.setInternalBridge(new InternalBridgeImpl());
 
         // Register event listeners
-        this.registerEvents(manager, new BotInventoryListener(this));
+        this.registerEvents(manager, new BotInventoryListener(this), new BotInspectionListener(this));
 
         if (!correctVersion) {
             for (int i = 0; i < 20; i++) { // Kids are stupid so we need to make sure they see this

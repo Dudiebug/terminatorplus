@@ -1422,7 +1422,7 @@ public class Bot extends ServerPlayer implements Terminator {
         this.kills = Math.max(0, kills);
     }
 
-    String trainingLoadout() {
+    public String getTrainingLoadout() {
         return trainingLoadout;
     }
 

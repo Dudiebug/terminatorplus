@@ -40,6 +40,13 @@ bot creates the runtime; removing it clears and unregisters the runtime. Public
 consumers can inspect an immutable `BotRuntimeSnapshot` without gaining access
 to mutable controller internals.
 
+`/bot info` uses that snapshot for a read-only inspection GUI. The list takes a
+stable UUID snapshot, displays 45 bots per page, and resolves the selected bot
+by UUID before opening details. Detail and list refreshes are explicit clicks;
+there is no menu refresh scheduler. If a bot disappears while a menu is open,
+the next click or refresh returns a safe removed-bot state instead of retaining
+the mutable bot object.
+
 That means startup bugs can have tick-loop implications even before a bot is
 created.
 
