@@ -31,6 +31,7 @@ import java.util.UUID;
 public final class ComboBehavior {
 
     public static final String COOLDOWN_KEY = "combo";
+    private static final boolean WIND_PEARL_COMBO_ENABLED = false;
     private static final int COOLDOWN_TICKS = 100;
     /** Delay between wind charge spawn and pearl throw. Short enough that the pearl rides the blast wave. */
     private static final int PEARL_DELAY_TICKS = 2;
@@ -79,6 +80,7 @@ public final class ComboBehavior {
     }
 
     public boolean canCombo(Bot bot) {
+        if (!WIND_PEARL_COMBO_ENABLED) return false;
         if (inProgress(bot)) return false;
         return bot.getBotCooldowns().ready(COOLDOWN_KEY, bot.getAliveTicks());
     }

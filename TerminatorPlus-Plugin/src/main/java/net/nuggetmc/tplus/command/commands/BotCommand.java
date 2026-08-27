@@ -4,6 +4,7 @@ import net.nuggetmc.tplus.TerminatorPlus;
 import net.nuggetmc.tplus.api.Terminator;
 import net.nuggetmc.tplus.api.agent.legacyagent.EnumTargetGoal;
 import net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent;
+import net.nuggetmc.tplus.api.agent.legacyagent.LegacyMats;
 import net.nuggetmc.tplus.api.utils.ChatUtils;
 import net.nuggetmc.tplus.bot.Bot;
 import net.nuggetmc.tplus.bot.BotManagerImpl;
@@ -16,6 +17,7 @@ import net.nuggetmc.tplus.command.CommandInstance;
 import net.nuggetmc.tplus.command.annotation.*;
 import net.nuggetmc.tplus.utils.Debugger;
 import org.bukkit.*;
+import org.bukkit.block.Block;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.EquipmentSlot;
@@ -33,6 +35,9 @@ import java.util.stream.Collectors;
 public class BotCommand extends CommandInstance {
 
     private static final String ADMIN_PERMISSION = "terminatorplus.admin";
+    static final double DEFAULT_SCATTER_RADIUS = 8.0;
+    static final double MAX_SCATTER_RADIUS = 64.0;
+    private static final double SCATTER_MIN_SEPARATION = 0.75;
 
     private final TerminatorPlus plugin;
     private final BotManagerImpl manager;
@@ -705,6 +710,243 @@ public class BotCommand extends CommandInstance {
         }
         sender.sendMessage(ChatColor.YELLOW.toString() + moved + ChatColor.RESET
                 + " bot(s) gathered to you.");
+    }
+
+    @Command(
+            name = "scatter",
+            desc = "Distribute every living bot around your current location within an optional radius."
+    )
+    public void scatter(CommandSender sender, @OptArg("radius") String radiusText) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(ChatColor.RED + "This command can only be run by a player.");
+            return;
+        }
+
+        final double radius;
+        try {
+            radius = parseScatterRadius(radiusText);
+        } catch (IllegalArgumentException e) {
+            sender.sendMessage(ChatColor.RED + e.getMessage());
+            sender.sendMessage(ChatColor.GRAY + "Usage: /bot scatter [radius] (default "
+                    + DEFAULT_SCATTER_RADIUS + ").");
+            return;
+        }
+
+        List<Terminator> bots = manager.fetch().stream()
+                .filter(Terminator::isBotAlive)
+                .toList();
+        if (bots.isEmpty()) {
+            sender.sendMessage(ChatColor.RED + "No living bots selected to scatter.");
+            return;
+        }
+
+        List<Location> destinations = findScatterDestinations(player.getLocation(), bots.size(), radius);
+        if (destinations.size() < bots.size()) {
+            sender.sendMessage(ChatColor.RED + "Only found " + destinations.size()
+                    + " safe, unique position(s) for " + bots.size()
+                    + " bot(s); no bots were moved.");
+            return;
+        }
+
+        World world = player.getWorld();
+        int moved = 0;
+        for (int i = 0; i < bots.size(); i++) {
+            Terminator bot = bots.get(i);
+            if (bot.getBukkitEntity().teleport(destinations.get(i))) {
+                moved++;
+                world.spawnParticle(Particle.CLOUD, destinations.get(i), 100, 1, 1, 1, 0.5);
+            }
+        }
+        if (moved == 0) {
+            sender.sendMessage(ChatColor.RED + "No selected bots could be teleported; no bots were moved.");
+            return;
+        }
+        sender.sendMessage(ChatColor.YELLOW.toString() + moved + ChatColor.RESET
+                + " bot(s) teleported into a circular spread within radius "
+                + ChatColor.YELLOW + radius + ChatColor.RESET + ".");
+    }
+
+    static double parseScatterRadius(String radiusText) {
+        if (radiusText == null || radiusText.isBlank()) return DEFAULT_SCATTER_RADIUS;
+
+        final double radius;
+        try {
+            radius = Double.parseDouble(radiusText);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Radius must be a number greater than 0 and no more than "
+                    + MAX_SCATTER_RADIUS + ".");
+        }
+        if (!Double.isFinite(radius) || radius <= 0 || radius > MAX_SCATTER_RADIUS) {
+            throw new IllegalArgumentException("Radius must be a number greater than 0 and no more than "
+                    + MAX_SCATTER_RADIUS + ".");
+        }
+        return radius;
+    }
+
+    static List<ScatterOffset> evenlySpacedOffsets(int count, double radius) {
+        if (count <= 0 || !Double.isFinite(radius) || radius <= 0) return List.of();
+
+        List<ScatterOffset> offsets = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            double distance = radius * Math.sqrt((i + 1.0) / count);
+            double angle = i * Math.PI * (3.0 - Math.sqrt(5.0));
+            offsets.add(new ScatterOffset(Math.cos(angle) * distance, Math.sin(angle) * distance));
+        }
+        return offsets;
+    }
+
+    static List<ScatterOffset> selectScatterOffsets(List<ScatterOffset> candidates, int count, double radius) {
+        if (count <= 0 || candidates == null || candidates.isEmpty()) return List.of();
+
+        List<ScatterOffset> remaining = new ArrayList<>(new LinkedHashSet<>(candidates));
+        List<ScatterOffset> ideals = evenlySpacedOffsets(count, radius);
+        List<ScatterOffset> selected = new ArrayList<>(Collections.nCopies(count, null));
+
+        // Preserve exact ideal points whenever they are safe and spaced apart.
+        for (int i = 0; i < ideals.size(); i++) {
+            ScatterOffset ideal = ideals.get(i);
+            if (remaining.contains(ideal) && isScatterSpacingAvailable(selected, ideal)) {
+                remaining.remove(ideal);
+                selected.set(i, ideal);
+            }
+        }
+
+        for (int i = 0; i < ideals.size(); i++) {
+            if (selected.get(i) != null || remaining.isEmpty()) continue;
+
+            ScatterOffset ideal = ideals.get(i);
+            ScatterOffset best = null;
+            double bestScore = Double.POSITIVE_INFINITY;
+            for (ScatterOffset candidate : remaining) {
+                double distance = Math.hypot(candidate.x(), candidate.z());
+                if (distance > radius + 1.0e-6 || distance < 1.0e-6) continue;
+                if (!isScatterSpacingAvailable(selected, candidate)) continue;
+
+                double desiredDistance = Math.hypot(ideal.x(), ideal.z());
+                double angleScore = desiredDistance < 1.0e-6 ? 0.0
+                        : angleDifference(
+                                Math.atan2(candidate.z(), candidate.x()),
+                                Math.atan2(ideal.z(), ideal.x())) * Math.max(1.0, radius) * 4;
+                double score = angleScore + Math.abs(distance - desiredDistance);
+                if (score < bestScore) {
+                    best = candidate;
+                    bestScore = score;
+                }
+            }
+            if (best != null) {
+                selected.set(i, best);
+                remaining.remove(best);
+            }
+        }
+
+        return selected.stream().filter(Objects::nonNull).toList();
+    }
+
+    private static List<Location> findScatterDestinations(Location center, int count, double radius) {
+        if (center == null || center.getWorld() == null || count <= 0) return List.of();
+
+        Map<ScatterOffset, Location> candidates = new LinkedHashMap<>();
+        for (ScatterOffset offset : evenlySpacedOffsets(count, radius)) {
+            addScatterCandidate(center, offset, candidates);
+        }
+
+        int minX = (int) Math.floor(center.getX() - radius);
+        int maxX = (int) Math.floor(center.getX() + radius);
+        int minZ = (int) Math.floor(center.getZ() - radius);
+        int maxZ = (int) Math.floor(center.getZ() + radius);
+
+        // Deterministic block-center fallbacks cover blocked ideal points.
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                double candidateX = x + 0.5;
+                double candidateZ = z + 0.5;
+                double offsetX = candidateX - center.getX();
+                double offsetZ = candidateZ - center.getZ();
+                if (offsetX * offsetX + offsetZ * offsetZ > radius * radius
+                        || (x == center.getBlockX() && z == center.getBlockZ())) continue;
+                addScatterCandidate(center, new ScatterOffset(offsetX, offsetZ), candidates);
+            }
+        }
+
+        return selectScatterOffsets(new ArrayList<>(candidates.keySet()), count, radius).stream()
+                .map(candidates::get)
+                .toList();
+    }
+
+    private static boolean isScatterSpacingAvailable(List<ScatterOffset> selected, ScatterOffset candidate) {
+        for (ScatterOffset existing : selected) {
+            if (existing != null && Math.hypot(existing.x() - candidate.x(), existing.z() - candidate.z())
+                    < SCATTER_MIN_SEPARATION) return false;
+        }
+        return true;
+    }
+
+    private static void addScatterCandidate(Location center, ScatterOffset offset,
+                                            Map<ScatterOffset, Location> candidates) {
+        Location destination = findSafeScatterLocation(center, offset);
+        if (destination == null) return;
+
+        candidates.putIfAbsent(offset, destination);
+    }
+
+    private static Location findSafeScatterLocation(Location center, ScatterOffset offset) {
+        World world = center.getWorld();
+        double x = center.getX() + offset.x();
+        double z = center.getZ() + offset.z();
+        int blockX = Location.locToBlock(x);
+        int blockZ = Location.locToBlock(z);
+        if (blockX == center.getBlockX() && blockZ == center.getBlockZ()) return null;
+
+        int top = Math.min(world.getMaxHeight() - 2, world.getHighestBlockYAt(blockX, blockZ) + 1);
+        for (int y = top; y > world.getMinHeight(); y--) {
+            Block below = world.getBlockAt(blockX, y - 1, blockZ);
+            if (!isSafeScatterFloor(below)) continue;
+            if (!isSafeScatterBody(world, x, y, z)) continue;
+            return new Location(world, x, y, z, center.getYaw(), center.getPitch());
+        }
+        return null;
+    }
+
+    private static boolean isSafeScatterBody(World world, double x, int y, double z) {
+        for (double dx : new double[]{-0.3, 0.0, 0.3}) {
+            for (double dz : new double[]{-0.3, 0.0, 0.3}) {
+                if (!isSafeScatterClear(world.getBlockAt(Location.locToBlock(x + dx), y,
+                        Location.locToBlock(z + dz)))) return false;
+                if (!isSafeScatterClear(world.getBlockAt(Location.locToBlock(x + dx), y + 1,
+                        Location.locToBlock(z + dz)))) return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isSafeScatterFloor(Block block) {
+        Material material = block.getType();
+        return !isScatterHazard(material)
+                && (LegacyMats.isSolid(material) || LegacyMats.canStandOn(material));
+    }
+
+    private static boolean isSafeScatterClear(Block block) {
+        return !isScatterHazard(block.getType()) && block.isPassable();
+    }
+
+    private static boolean isScatterHazard(Material material) {
+        return material == Material.WATER
+                || material == Material.LAVA
+                || material == Material.FIRE
+                || material == Material.SOUL_FIRE
+                || material == Material.CACTUS
+                || material == Material.MAGMA_BLOCK
+                || material == Material.SWEET_BERRY_BUSH
+                || material == Material.POWDER_SNOW
+                || material == Material.WITHER_ROSE
+                || material.name().endsWith("_CAMPFIRE");
+    }
+
+    private static double angleDifference(double first, double second) {
+        return Math.abs(Math.atan2(Math.sin(first - second), Math.cos(first - second)));
+    }
+
+    record ScatterOffset(double x, double z) {
     }
 
     @Command(
