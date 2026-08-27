@@ -146,6 +146,12 @@ public class LegacyAgent extends Agent {
         survivalController.beforeTarget(bot, loc);
 
         if (livingTarget == null) {
+            // Do not abandon an already-committed bridge, pillar, mine, or
+            // clutch merely because the target disappeared during the action.
+            // A null target may only continue the existing V2 action.
+            if (bot.movementV2ActionActive() && bot.tryMovementV2Move(null, null)) {
+                return;
+            }
             survivalController.onIdle(bot);
             return;
         }
@@ -160,7 +166,8 @@ public class LegacyAgent extends Agent {
                 : Double.MAX_VALUE;
         boolean inMeleeRange = distToTarget <= 4.5;
         Location prev = stuckLastLoc.get(botEntity);
-        if (!inMeleeRange && prev != null && prev.getWorld() == loc.getWorld()
+        if (!bot.movementV2ActionActive()
+                && !inMeleeRange && prev != null && prev.getWorld() == loc.getWorld()
                 && prev.distanceSquared(loc) < 0.01) {
             int count = stuckTicks.getOrDefault(botEntity, 0) + 1;
             if (count >= STUCK_THRESHOLD_TICKS && bot.isBotOnGround()) {
@@ -192,6 +199,15 @@ public class LegacyAgent extends Agent {
 
         bot.tickCommittedCombat(livingTarget);
         planRoutedCombat(bot, livingTarget, movementMode);
+
+        // Disabled-by-default Movement V2 gets first refusal only for the
+        // modern legacy/controller movement modes. Returning false preserves
+        // the obstacle shell and NN fallback below exactly as before.
+        if (usesModernCombatPipeline(movementMode)
+                && bot.tryMovementV2Move(livingTarget, target)) {
+            executeRoutedCombat(bot, livingTarget, movementMode);
+            return;
+        }
 
         // Full-replacement NN keeps the old deterministic 3-tick combat cadence
         // for training compatibility. Legacy and movement-controller modes use
@@ -1858,6 +1874,10 @@ public class LegacyAgent extends Agent {
     @Override
     public void stopAllTasks() {
     	super.stopAllTasks();
+
+        // A disabled agent no longer ticks actions, so release any leased
+        // movement item immediately instead of leaving it in the bot's hand.
+        manager.fetch().forEach(bot -> bot.cancelMovementV2Action("agent-stopped"));
 
         miningAnim.values().stream()
                 .filter(task -> task != null && !task.isCancelled())

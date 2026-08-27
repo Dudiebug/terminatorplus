@@ -51,8 +51,29 @@ public final class MovementOutputApplier {
     }
 
     public ApplyResult tryApply(Bot bot, LivingEntity target, MovementBrainBank bank) {
+        return tryApply(bot, target, bank, target == null ? null : target.getLocation(), false);
+    }
+
+    /**
+     * Evaluate the movement brain against the real combat target while steering
+     * its locomotion output toward a validated route waypoint.
+     */
+    public ApplyResult tryApply(Bot bot, LivingEntity target, MovementBrainBank bank, Location steeringTarget) {
+        return tryApply(bot, target, bank, steeringTarget, true);
+    }
+
+    private ApplyResult tryApply(
+            Bot bot,
+            LivingEntity target,
+            MovementBrainBank bank,
+            Location steeringTarget,
+            boolean routeLocked
+    ) {
         if (bot == null || target == null || !target.isValid()) {
             return ApplyResult.fallback("missing-bot-or-target");
+        }
+        if (steeringTarget == null || steeringTarget.getWorld() != bot.getLocation().getWorld()) {
+            return ApplyResult.fallback("missing-or-cross-world-steering-target");
         }
         if (!enabled || !configEnabled()) {
             writeObservedState(bot, target, false);
@@ -89,13 +110,14 @@ public final class MovementOutputApplier {
         MovementOutputMixer.MixResult mixed = mixer.mix(intent, baseline, nnOutput, nnAvailable);
         MovementOutput output = constrainForActiveAction(bot, mixed.output());
         logMovementTelemetry(bot, intent, baseline, nnOutput, output, mixed, nnAvailable, fallbackReason);
-        if (intent.wantsHoldPosition() || output.holdPosition() >= HOLD_THRESHOLD) {
+        if (intent.wantsHoldPosition() || (!routeLocked && output.holdPosition() >= HOLD_THRESHOLD)) {
             writeObservedState(bot, target, false);
             return ApplyResult.held(output);
         }
 
-        applyMovement(bot, target, output);
-        writeObservedState(bot, target, output.jumpDesire() >= JUMP_THRESHOLD && bot.isBotOnGround());
+        applyMovement(bot, steeringTarget, output, routeLocked);
+        writeObservedState(bot, target,
+                !routeLocked && output.jumpDesire() >= JUMP_THRESHOLD && bot.isBotOnGround());
         return ApplyResult.applied(output);
     }
 
@@ -152,7 +174,8 @@ public final class MovementOutputApplier {
                     output.facingAdjustment() * 0.35,
                     Math.min(output.urgency(), 0.35),
                     Math.max(output.holdPosition(), 0.45));
-            case THROWING_PROJECTILE, USING_PEARL, PLACING_BLOCK, MINING -> new MovementOutput(
+            case THROWING_PROJECTILE, USING_PEARL, OPENING, PLACING_BLOCK, PILLARING,
+                    MINING, FALL_CLUTCH -> new MovementOutput(
                     output.forwardPressure() * 0.45,
                     output.strafePressure() * 0.50,
                     0.0,
@@ -178,9 +201,14 @@ public final class MovementOutputApplier {
         return String.format("%.2f", value);
     }
 
-    private static void applyMovement(Bot bot, LivingEntity target, MovementOutput output) {
+    private static void applyMovement(
+            Bot bot,
+            Location steeringTarget,
+            MovementOutput output,
+            boolean routeLocked
+    ) {
         Location botLoc = bot.getLocation();
-        Vector toTarget = target.getLocation().toVector().subtract(botLoc.toVector()).setY(0);
+        Vector toTarget = steeringTarget.toVector().subtract(botLoc.toVector()).setY(0);
         if (toTarget.lengthSquared() > 1.0e-9) {
             toTarget.normalize();
         } else {
@@ -192,21 +220,29 @@ public final class MovementOutputApplier {
             }
         }
 
-        toTarget.rotateAroundY(output.facingAdjustment() * Math.PI / 3.0);
-        Vector strafe = new Vector(-toTarget.getZ(), 0, toTarget.getX());
-        double forward = output.retreatDesire() > 0.55
-                ? -Math.max(Math.abs(output.forwardPressure()), output.retreatDesire())
-                : output.forwardPressure();
-        Vector desired = toTarget.multiply(forward).add(strafe.multiply(output.strafePressure()));
+        Vector desired;
+        if (routeLocked) {
+            desired = toTarget;
+        } else {
+            toTarget.rotateAroundY(output.facingAdjustment() * Math.PI / 3.0);
+            Vector strafe = new Vector(-toTarget.getZ(), 0, toTarget.getX());
+            double forward = output.retreatDesire() > 0.55
+                    ? -Math.max(Math.abs(output.forwardPressure()), output.retreatDesire())
+                    : output.forwardPressure();
+            desired = toTarget.multiply(forward).add(strafe.multiply(output.strafePressure()));
+        }
         if (desired.lengthSquared() > 1.0) desired.normalize();
 
-        boolean sprinting = output.sprintDesire() >= SPRINT_THRESHOLD && output.retreatDesire() < 0.55;
+        boolean sprinting = output.sprintDesire() >= SPRINT_THRESHOLD
+                && (routeLocked || output.retreatDesire() < 0.55);
         bot.setSprinting(sprinting);
         double speed = (sprinting ? SPRINT_SPEED : WALK_SPEED) * Math.max(0.25, output.urgency());
         desired.multiply(speed);
 
-        if (output.jumpDesire() >= JUMP_THRESHOLD && bot.isBotOnGround()) {
+        if (!routeLocked && output.jumpDesire() >= JUMP_THRESHOLD && bot.isBotOnGround()) {
             bot.jump(new Vector(desired.getX(), 0.42, desired.getZ()));
+        } else if (routeLocked) {
+            bot.walkRoute(desired);
         } else {
             bot.walk(desired);
         }
