@@ -90,8 +90,10 @@ Commit: `2b3bf82 Add read-only bot inspection GUI`
 
 ## Verification completed
 
-All checks below ran in the Java 25 development container used by this
-worktree:
+All checks below ran under Java 25.0.4. The live checks used official stable
+Paper 26.2 build 119 (`bb09b43`, published 2026-08-25); the downloaded server
+jar matched SHA-256
+`a8c9140c3075bd7c04973e9cdc491b21bfe6bad472b674ef932a4ae0fec19629`.
 
 - Focused `BotUtilsTest`: passed.
 - Focused `BotRuntimeOrchestratorTest`: passed.
@@ -100,34 +102,66 @@ worktree:
 - Full `:TerminatorPlus-Plugin:test`: passed after runtime integration.
 - Full `./gradlew clean build`: passed after all implementations; this includes
   API tests, plugin tests, and the movement-only contract check.
-- Official Paper download metadata was checked and Paper 26.2 build 119 was the
-  latest stable build at the time of this handoff.
+
+### Live Movement V2 matrix
+
+The final run used real Paper bot entities, the centralized agent scheduler,
+Bukkit events, survival inventories, and the production planner/action
+executor. Movement V2 remains default-off because the complete matrix did not
+pass.
+
+| Scenario | Legacy | Movement V2 |
+| --- | --- | --- |
+| Ordinary pursuit | completed in 45 ticks | completed in 64 ticks; 0 action failures; 0 same-tick violations |
+| Parkour | completed in 26 ticks | completed in 26 ticks; 0 action failures; 0 same-tick violations |
+| Repeated bridge | bypassed without placing | 5 placements in 64 ticks; cobblestone 12→7; selected slot restored to 2 |
+| Repeated pillar | no placements | 4 placements and reached Y=105.260 in 114 ticks, but recovered from 2 action failures |
+| Door/gate/trapdoor corridor | did not complete | did not complete; one openable crossed, 0 action failures, repeated replanning |
+| Two-block mining wall | no breaks | nondeterministic: focused runs broke both blocks and crossed with the pickaxe/selected slot restored, but the final run found no route and made 0 breaks |
+| Cancelled placement | n/a | cancellation honored; 0 placements; 12 blocks retained; expected failure recorded |
+| Clutch 4/8/16/32/48 | n/a | all five completed with 0 damage, real bucket empty/fill events, bucket and selected slot restored, and 0 same-tick violations |
+| 25-bot performance | p95 3.418 ms, max 174.191 ms | p95 3.254 ms, max 171.102 ms; 112 plans |
+
+Planner maxima occasionally exceeded the configured 2,000 µs phase target
+(2,320.1 µs in pursuit and 2,170.5 µs in openables). The server-tick maxima
+include scenario setup and JVM pauses; p95 is the useful comparison.
+
+The live investigation also found a false occlusion when a ray aimed at one
+half of a door hit its linked half. The executor now aims inside the target's
+collision box and accepts the other half of the same door. A regression test
+covers thin collision-shape targeting. Post-fix openable runs had zero action
+failures, but route completion is still unreliable, so the feature gate was
+not enabled.
+
+### #18–#21 live acceptance
+
+- #18: one centralized scheduler remained active with 46 concurrent GUI-test
+  bots while each exposed independent runtime snapshots; lifecycle/unit tests
+  also passed.
+- #19: `/bot info` opened from a player-like bot, showed 45 entries on page 1
+  and one on page 2, navigated list/detail views, refreshed manually, handled a
+  removed bot with a safe placeholder, cancelled clicks/drags, printed console
+  output, and left the editable `BotInventoryGUI` behavior intact.
+- #20: actual health-zero death produced a pending respawn and restored the
+  same UUID, creation location, skin, inventory/armor/offhand, selected slot,
+  neural network object, target, kills, loadout lock, and player-list mode with
+  zero drops/experience. Disabling respawn and `/bot reset` cancelled pending
+  respawns; a training candidate did not respawn.
+- #21: all 46 generated bot UUIDs were version 2. A Paper smoke run with
+  LuckPerms 5.5.81 and Vault 1.7.3-b131 loaded successfully and produced no
+  main-thread/offline-player lookup warning while bots were created and used.
 
 ## Remaining work
 
-These items are deliberately not represented as complete:
+Issue #17 remains open. Before enabling Movement V2 by default, fix and rerun:
 
-1. Run the live Paper 26.2 arena matrix documented in `docs/MOVEMENT_V2.md`:
-   ordinary pursuit, parkour, bridge, pillar, door/gate/trapdoor interaction,
-   mining, clutch heights, inventory restoration, action cancellation, and
-   bounded planner timing.
-2. Compare legacy and Movement V2 runs for route completion, fallbacks, action
-   failures, same-tick action violations, inventory changes, damage, and server
-   tick impact.
-3. If that matrix passes, change both configuration and code fallbacks for
-   `ai.movement.v2.enabled` to `true`, update the Movement V2 documentation,
-   and rerun the complete build and Paper smoke test.
-4. On Paper, smoke-test `/bot respawn true` through death and verify same UUID,
-   original location, loadout, target/network metadata, no drops, and reset or
-   disable cancellation.
-5. On Paper with a player, smoke-test `/bot info` list/detail navigation,
-   pagination, manual refresh, removed-bot handling, and unchanged editable
-   inventory GUI behavior.
-6. With Vault/LuckPerms installed, confirm generated version-2 bot UUIDs no
-   longer trigger the main-thread lookup warning.
-7. Post the resulting evidence to issues #17–#21 and close only the issues whose
-   acceptance criteria have been demonstrated. No issue has been closed by
-   this branch yet.
+1. reliable physical traversal through opened doors, gates, and trapdoors;
+2. deterministic escalation to mining from live approach positions;
+3. pillar action failures; and
+4. strict planner-budget overruns.
+
+Issues #18–#21 have unit/build evidence and live acceptance evidence. Issues
+#24 and #25 remain explicitly untouched.
 
 ## Handoff commands
 
@@ -138,4 +172,4 @@ git switch codex/issues-17-21
 ```
 
 Use Java 25. Do not enable Movement V2 by default until the remaining live
-matrix passes.
+matrix passes without action failures or planner-budget overruns.

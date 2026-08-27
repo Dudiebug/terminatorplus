@@ -29,6 +29,7 @@ import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.util.BoundingBox;
 import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
 
@@ -320,7 +321,10 @@ public final class PlayerTraversalActionExecutor {
         Block block = context.liveBlockAt(current.actionPos());
         if (block == null || block.getType() != originalActionMaterial) return null;
         if (!authorized(bot, block.getLocation()) || !withinReach(bot, block)) return null;
-        if (lineOfSight && !clearInteractionRay(bot, block, block)) return null;
+        if (lineOfSight) {
+            Block occluder = interactionRayHit(bot, block);
+            if (occluder != null && !sameInteractionTarget(block, occluder)) return null;
+        }
         return block;
     }
 
@@ -594,14 +598,44 @@ public final class PlayerTraversalActionExecutor {
     }
 
     private static boolean clearInteractionRay(Bot bot, Block target, Block allowedAnchor) {
+        Block hit = interactionRayHit(bot, target);
+        return hit == null || hit.equals(target) || hit.equals(allowedAnchor);
+    }
+
+    private static Block interactionRayHit(Bot bot, Block target) {
         Location eye = player(bot).getEyeLocation();
-        Vector direction = target.getLocation().add(0.5, 0.5, 0.5).toVector().subtract(eye.toVector());
+        Vector fallback = target.getLocation().add(0.5, 0.5, 0.5).toVector();
+        Vector direction = interactionPoint(eye.toVector(), target.getBoundingBox(), fallback)
+                .subtract(eye.toVector());
         double distance = direction.length();
-        if (distance <= 1.0e-6) return true;
+        if (distance <= 1.0e-6) return null;
         RayTraceResult hit = eye.getWorld().rayTraceBlocks(eye, direction.normalize(), distance + 0.1,
                 FluidCollisionMode.NEVER, true);
-        if (hit == null || hit.getHitBlock() == null) return true;
-        return hit.getHitBlock().equals(target) || hit.getHitBlock().equals(allowedAnchor);
+        return hit == null ? null : hit.getHitBlock();
+    }
+
+    private static boolean sameInteractionTarget(Block target, Block hit) {
+        if (target.equals(hit)) return true;
+        return target.getBlockData() instanceof Door
+                && hit.getBlockData() instanceof Door
+                && target.getType() == hit.getType()
+                && target.getX() == hit.getX()
+                && target.getZ() == hit.getZ()
+                && Math.abs(target.getY() - hit.getY()) == 1;
+    }
+
+    static Vector interactionPoint(Vector eye, BoundingBox box, Vector fallback) {
+        if (eye == null || box == null || box.getVolume() <= 1.0e-7) return fallback.clone();
+        double inset = 1.0e-4;
+        return new Vector(
+                clamp(eye.getX(), box.getMinX() + inset, box.getMaxX() - inset),
+                clamp(eye.getY(), box.getMinY() + inset, box.getMaxY() - inset),
+                clamp(eye.getZ(), box.getMinZ() + inset, box.getMaxZ() - inset));
+    }
+
+    private static double clamp(double value, double min, double max) {
+        if (min > max) return (min + max) * 0.5;
+        return Math.max(min, Math.min(max, value));
     }
 
     private static Block placementAnchor(Block target) {

@@ -122,20 +122,33 @@ The review found and fixed several easy-to-miss cases:
 - pillar placement waits until the bot's feet clear the full block, and
   parkour never receives a stronger vertical launch than a normal bot jump.
 
-## Known limits and live test list
+## Live verification and known limits
 
-These are intentionally not claimed as proven gameplay behavior:
+On 2026-08-27 the matrix ran on official stable Paper 26.2 build 119 under
+Java 25.0.4. It proved ordinary pursuit, sprint parkour, five consecutive
+bridge placements, four pillar placements, placement cancellation, inventory
+restoration, and water-bucket clutches from 4, 8, 16, 32, and 48 blocks. Every
+clutch fired real bucket empty/fill events, restored the bucket and selected
+slot, and took zero damage. A 25-bot comparison measured p95 server ticks of
+3.418 ms in legacy mode and 3.254 ms with V2.
 
-- exact sprint-jump success under server movement drag and low TPS — **needs
-  runtime test**;
-- bucket and twisting-vines clutch timing at 4, 8, 16, 32, and 48 blocks —
-  **needs runtime test**;
-- repeated bridge placement and repeated pillaring as the bot replans after
-  every placed block — **needs runtime test**;
-- tool damage, drops, enchantments, potion effects, and protection-plugin
-  cancellation during mining — **needs runtime test**;
-- doors, fence gates, trapdoors, copper doors, and paired door halves — **needs
-  runtime test**;
+The feature remains default-off because the complete matrix did not pass:
+
+- the door/gate/trapdoor corridor opened blocks without action failures after
+  the linked-door-half ray fix, but physical route completion remained
+  unreliable;
+- focused mining runs broke both blocks of a two-high stone wall and restored
+  the pickaxe/selected slot, while other identical runs reached the wall but
+  returned `NO_ROUTE` without starting a break;
+- repeated pillaring completed but recovered from two action failures; and
+- observed planner times occasionally exceeded the configured 2,000 µs target.
+
+The following behavior still needs dedicated runtime coverage or fixes:
+
+- copper doors and paired doors beyond the ordinary linked-half case;
+- tool damage, drops, potion effects, and protection-plugin cancellation during
+  mining;
+- twisting-vines clutches in the Nether;
 - slabs, stairs, fences, walls, snow layers, honey, slime, moving pistons, and
   other partial collision shapes. The current grid is deliberately
   conservative; **needs runtime test**;
