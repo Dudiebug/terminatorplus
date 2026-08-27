@@ -93,6 +93,13 @@ public interface Terminator {
 
     void removeBot();
 
+    default boolean isAutoRespawnAllowed() {
+        return true;
+    }
+
+    default void setAutoRespawnAllowed(boolean allowed) {
+    }
+
     int getKills();
 
     void incrementKills();

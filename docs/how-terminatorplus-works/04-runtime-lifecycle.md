@@ -123,6 +123,14 @@ It:
 - removes fake player-list entries if needed
 - closes menus/container state
 
+Automatic respawning is a runtime-only manager option exposed by
+`/bot respawn [true|false]` and defaults to disabled. When enabled, a bot death
+captures its original spawn point, UUID, skin, inventory/loadout, selected
+slot, target, network, kill count, and player-list mode. Drops are suppressed,
+the dead entity completes normal cleanup, and a replacement is created after
+20 ticks. Bots owned by an active training generation opt out so respawning
+cannot interfere with population turnover.
+
 This is one of the clearest "do not simplify casually" areas in the codebase.
 
 ## Runtime state and cleanup risks
