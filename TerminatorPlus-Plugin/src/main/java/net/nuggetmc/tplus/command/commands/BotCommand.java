@@ -74,6 +74,42 @@ public class BotCommand extends CommandInstance {
         createBots(sender, name, skin, loc, amount);
     }
 
+    @Command(
+            name = "respawn",
+            desc = "Enable, disable, or show automatic bot respawning.",
+            autofill = "respawnAutofill"
+    )
+    @Require(ADMIN_PERMISSION)
+    public void respawn(CommandSender sender, @OptArg("enabled") String value) {
+        if (value == null) {
+            sender.sendMessage("Automatic bot respawning is "
+                    + (manager.isRespawnEnabled() ? ChatColor.GREEN + "enabled" : ChatColor.RED + "disabled")
+                    + ChatColor.RESET + ". Pending: " + manager.pendingRespawnCount() + ".");
+            return;
+        }
+
+        Boolean enabled = parseBoolean(value);
+        if (enabled == null) {
+            sender.sendMessage(ChatColor.RED + "You must specify true or false.");
+            return;
+        }
+
+        manager.setRespawnEnabled(enabled);
+        sender.sendMessage("Automatic bot respawning is now "
+                + (enabled ? ChatColor.GREEN + "enabled" : ChatColor.RED + "disabled")
+                + ChatColor.RESET + ".");
+    }
+
+    public List<String> respawnAutofill(CommandSender sender, String[] args) {
+        return args.length == 2 ? List.of("true", "false") : List.of();
+    }
+
+    static Boolean parseBoolean(String value) {
+        if ("true".equalsIgnoreCase(value)) return true;
+        if ("false".equalsIgnoreCase(value)) return false;
+        return null;
+    }
+
     private void createBots(CommandSender sender, String name, String skin, String loc, int amount) {
         Location location = parseSpawnLocation(sender, loc);
         if (location == null) return;

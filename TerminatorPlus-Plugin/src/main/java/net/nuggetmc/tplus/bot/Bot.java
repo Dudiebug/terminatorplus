@@ -88,6 +88,7 @@ public class Bot extends ServerPlayer implements Terminator {
     private Vector velocity;
     private Vector oldVelocity;
     private boolean removeOnDeath;
+    private boolean autoRespawnAllowed;
     private boolean removalCleaned;
     private int aliveTicks;
     private int kills;
@@ -112,6 +113,8 @@ public class Bot extends ServerPlayer implements Terminator {
     private List<Block> standingOn = new ArrayList<>();
     private UUID targetPlayer = null;
     private boolean inPlayerList;
+    private Location originalSpawnLocation;
+    private SkinData skinData;
     private final BotInventory botInventory;
     private final Cooldowns cooldowns;
     private final CombatState combatState;
@@ -141,6 +144,7 @@ public class Bot extends ServerPlayer implements Terminator {
         this.oldVelocity = velocity.clone();
         this.noFallTicks = 60;
         this.removeOnDeath = true;
+        this.autoRespawnAllowed = true;
         this.offset = MathUtils.circleOffset(3);
         this.botInventory = new BotInventory(this);
         this.cooldowns = new Cooldowns();
@@ -196,16 +200,19 @@ public class Bot extends ServerPlayer implements Terminator {
     }
 
     public static Bot createBot(Location loc, String name, SkinData skin) {
+        return createBot(loc, name, skin, BotUtils.randomSteveUUID(),
+                TerminatorPlus.getInstance().getManager().addToPlayerList());
+    }
+
+    static Bot createBot(Location loc, String name, SkinData skin, UUID uuid, boolean addPlayerList) {
         MinecraftServer nmsServer = ((CraftServer) Bukkit.getServer()).getServer();
         ServerLevel nmsWorld = ((CraftWorld) Objects.requireNonNull(loc.getWorld())).getHandle();
 
-        UUID uuid = BotUtils.randomSteveUUID();
-
         GameProfile profile = CustomGameProfile.create(uuid, ChatUtils.trim16(name), skin);
 
-        boolean addPlayerList = TerminatorPlus.getInstance().getManager().addToPlayerList();
-
         Bot bot = new Bot(nmsServer, nmsWorld, profile, addPlayerList);
+        bot.originalSpawnLocation = loc.clone();
+        bot.skinData = skin;
 
         bot.connection = new ServerGamePacketListenerImpl(nmsServer, new MockConnection(), bot, CommonListenerCookie.createInitial(bot.getGameProfile(), false));
 
@@ -1385,6 +1392,44 @@ public class Bot extends ServerPlayer implements Terminator {
         this.removeOnDeath = enabled;
     }
 
+    @Override
+    public boolean isAutoRespawnAllowed() {
+        return autoRespawnAllowed;
+    }
+
+    @Override
+    public void setAutoRespawnAllowed(boolean allowed) {
+        this.autoRespawnAllowed = allowed;
+    }
+
+    Location originalSpawnLocation() {
+        return originalSpawnLocation == null ? getLocation().clone() : originalSpawnLocation.clone();
+    }
+
+    SkinData skinData() {
+        return skinData;
+    }
+
+    boolean hasShieldEnabled() {
+        return shield;
+    }
+
+    void restoreShieldFlag(boolean enabled) {
+        shield = enabled;
+    }
+
+    void restoreKills(int kills) {
+        this.kills = Math.max(0, kills);
+    }
+
+    String trainingLoadout() {
+        return trainingLoadout;
+    }
+
+    void restoreTrainingLoadout(String trainingLoadout) {
+        this.trainingLoadout = trainingLoadout == null ? "" : trainingLoadout;
+    }
+
     private void setDead() {
         sendPacket(new ClientboundRemoveEntitiesPacket(getId()));
 
@@ -1409,6 +1454,14 @@ public class Bot extends ServerPlayer implements Terminator {
     @Override
     public void die(DamageSource damageSource) {
         cancelMovementV2Action("bot-died");
+        if (plugin.getManager() != null) {
+            try {
+                plugin.getManager().prepareRespawn(this);
+            } catch (RuntimeException error) {
+                plugin.getLogger().warning("Could not capture respawn state for " + getBotName()
+                        + ": " + error.getMessage());
+            }
+        }
         super.die(damageSource);
         this.dieCheck();
     }

@@ -329,6 +329,7 @@ public class IntelligenceAgent {
             }
 
             bots.forEach(bot -> {
+                bot.setAutoRespawnAllowed(false);
                 String name = bot.getBotName();
 
                 while (this.bots.containsKey(name)) {
@@ -537,6 +538,7 @@ public class IntelligenceAgent {
                     NeuralNetwork.createMovementControllerNetwork(candidate.bank()));
             Terminator bot = created.stream().findFirst().orElse(null);
             if (bot == null) continue;
+            bot.setAutoRespawnAllowed(false);
 
             if (!bot.applyTrainingLoadout(candidate.loadout())) {
                 print(ChatColor.YELLOW + "Skipping " + bot.getBotName() + "; training loadout "
