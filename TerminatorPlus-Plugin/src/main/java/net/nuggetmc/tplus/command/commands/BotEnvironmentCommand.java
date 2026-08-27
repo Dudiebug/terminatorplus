@@ -311,7 +311,9 @@ public class BotEnvironmentCommand extends CommandInstance {
                     ? "none"
                     : status.lastPlan().status().name().toLowerCase(Locale.ENGLISH)
                     + "/" + status.lastPlan().phase().name().toLowerCase(Locale.ENGLISH)
-                    + "/" + status.lastPlan().expandedNodes() + " nodes";
+                    + "/" + status.lastPlan().expandedNodes() + " nodes"
+                    + "/" + String.format(Locale.ENGLISH, "%.2f", status.lastPlan().elapsedNanos() / 1_000.0)
+                    + "us";
             sender.sendMessage(ChatColor.YELLOW + bot.getBotName() + ChatColor.RESET
                     + " route=" + status.routeIndex() + "/" + status.routeLength()
                     + " plans=" + status.plans()
