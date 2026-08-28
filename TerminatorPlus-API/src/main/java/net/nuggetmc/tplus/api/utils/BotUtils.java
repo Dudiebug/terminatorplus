@@ -26,13 +26,14 @@ public class BotUtils {
     ));
 
     public static UUID randomSteveUUID() {
-        UUID uuid = UUID.randomUUID();
-
-        if (uuid.hashCode() % 2 == 0) {
-            return uuid;
+        while (true) {
+            UUID random = UUID.randomUUID();
+            long npcMostSignificantBits = random.getMostSignificantBits() & 0xffffffffffff0fffL | 0x2000L;
+            UUID uuid = new UUID(npcMostSignificantBits, random.getLeastSignificantBits());
+            if ((uuid.hashCode() & 1) == 0) {
+                return uuid;
+            }
         }
-
-        return randomSteveUUID();
     }
 
     public static boolean overlaps(BoundingBox playerBox, BoundingBox blockBox) {
