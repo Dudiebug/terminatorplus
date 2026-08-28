@@ -57,13 +57,13 @@ public final class BotInventory {
      * re-appear two seconds later, silently overwriting their intent.
      */
     private boolean respectLoadout;
-    private AppliedLoadout appliedLoadout;
+    private SavedInventory savedInventory;
 
     public BotInventory(Bot bot) {
         this.bot = bot;
         this.selectedHotbarSlot = 0;
         this.respectLoadout = false;
-        this.appliedLoadout = null;
+        this.savedInventory = null;
     }
 
     /**
@@ -72,13 +72,18 @@ public final class BotInventory {
      * that the loadout chose to omit.
      */
     public void markLoadoutApplied() {
+        saveForRespawn();
+        this.respectLoadout = true;
+    }
+
+    /** Save the current deliberate inventory state for future autorespawns. */
+    public void saveForRespawn() {
         PlayerInventory inventory = raw();
-        this.appliedLoadout = new AppliedLoadout(
+        this.savedInventory = new SavedInventory(
                 copy(inventory.getStorageContents()),
                 copy(inventory.getArmorContents()),
                 copy(inventory.getExtraContents()),
                 selectedHotbarSlot);
-        this.respectLoadout = true;
     }
 
     /**
@@ -86,8 +91,8 @@ public final class BotInventory {
      * Called by the {@code clear} preset and by any future {@code /bot inv reset} path.
      */
     public void markLoadoutCleared() {
+        saveForRespawn();
         this.respectLoadout = false;
-        this.appliedLoadout = null;
     }
 
     /**
@@ -99,28 +104,25 @@ public final class BotInventory {
     }
 
     public ItemStack[] respawnStorageContents() {
-        return respawnContents(respectLoadout,
-                appliedLoadout == null ? null : appliedLoadout.storage(), raw().getStorageContents());
+        return respawnContents(savedInventory == null ? null : savedInventory.storage(), raw().getStorageContents());
     }
 
     public ItemStack[] respawnArmorContents() {
-        return respawnContents(respectLoadout,
-                appliedLoadout == null ? null : appliedLoadout.armor(), raw().getArmorContents());
+        return respawnContents(savedInventory == null ? null : savedInventory.armor(), raw().getArmorContents());
     }
 
     public ItemStack[] respawnExtraContents() {
-        return respawnContents(respectLoadout,
-                appliedLoadout == null ? null : appliedLoadout.extra(), raw().getExtraContents());
+        return respawnContents(savedInventory == null ? null : savedInventory.extra(), raw().getExtraContents());
     }
 
     public int respawnSelectedHotbarSlot() {
-        return respectLoadout && appliedLoadout != null
-                ? appliedLoadout.selectedHotbarSlot()
+        return savedInventory != null
+                ? savedInventory.selectedHotbarSlot()
                 : selectedHotbarSlot;
     }
 
-    static ItemStack[] respawnContents(boolean respectLoadout, ItemStack[] applied, ItemStack[] current) {
-        return copy(respectLoadout && applied != null ? applied : current);
+    static ItemStack[] respawnContents(ItemStack[] saved, ItemStack[] current) {
+        return copy(saved != null ? saved : current);
     }
 
     private static ItemStack[] copy(ItemStack[] contents) {
@@ -132,7 +134,7 @@ public final class BotInventory {
         return result;
     }
 
-    private record AppliedLoadout(
+    private record SavedInventory(
             ItemStack[] storage,
             ItemStack[] armor,
             ItemStack[] extra,

@@ -233,10 +233,9 @@ public final class MovementOutputApplier {
         }
         if (desired.lengthSquared() > 1.0) desired.normalize();
 
-        boolean sprinting = output.sprintDesire() >= SPRINT_THRESHOLD
-                && (routeLocked || output.retreatDesire() < 0.55);
+        boolean sprinting = shouldSprint(routeLocked, output);
         bot.setSprinting(sprinting);
-        double speed = (sprinting ? SPRINT_SPEED : WALK_SPEED) * Math.max(0.25, output.urgency());
+        double speed = movementSpeed(routeLocked, sprinting, output.urgency());
         desired.multiply(speed);
 
         if (!routeLocked && output.jumpDesire() >= JUMP_THRESHOLD && bot.isBotOnGround()) {
@@ -246,6 +245,17 @@ public final class MovementOutputApplier {
         } else {
             bot.walk(desired);
         }
+    }
+
+    static boolean shouldSprint(boolean routeLocked, MovementOutput output) {
+        return routeLocked || (output.sprintDesire() >= SPRINT_THRESHOLD
+                && output.retreatDesire() < 0.55);
+    }
+
+    static double movementSpeed(boolean routeLocked, boolean sprinting, double urgency) {
+        return routeLocked
+                ? SPRINT_SPEED
+                : (sprinting ? SPRINT_SPEED : WALK_SPEED) * Math.max(0.25, urgency);
     }
 
     private static void writeObservedState(Bot bot, LivingEntity target, boolean justJumped) {

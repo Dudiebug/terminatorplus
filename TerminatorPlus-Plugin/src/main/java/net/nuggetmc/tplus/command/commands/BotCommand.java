@@ -483,6 +483,7 @@ public class BotCommand extends CommandInstance {
             return;
         }
         applyLoadoutSlot(bot, slot, item);
+        bot.getBotInventory().saveForRespawn();
         sender.sendMessage("Gave " + ChatColor.YELLOW + type + ChatColor.RESET + " to "
                 + ChatColor.GREEN + bot.getBotName() + ChatColor.RESET + " at slot "
                 + ChatColor.BLUE + slot + ChatColor.RESET + ".");
@@ -618,6 +619,7 @@ public class BotCommand extends CommandInstance {
                 bot.setItem(armor[1], EquipmentSlot.LEGS);
                 bot.setItem(armor[2], EquipmentSlot.CHEST);
                 bot.setItem(armor[3], EquipmentSlot.HEAD);
+                if (bot instanceof Bot concreteBot) concreteBot.getBotInventory().saveForRespawn();
             }
         });
 
