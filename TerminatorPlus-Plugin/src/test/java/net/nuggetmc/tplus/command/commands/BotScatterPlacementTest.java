@@ -24,6 +24,7 @@ class BotScatterPlacementTest {
     void defaultAndExplicitRadiusAreAccepted() {
         assertEquals(BotCommand.DEFAULT_SCATTER_RADIUS, BotCommand.parseScatterRadius(null));
         assertEquals(12.5, BotCommand.parseScatterRadius("12.5"));
+        assertEquals(1_000_000, BotCommand.parseScatterRadius("1000000"));
     }
 
     @Test
@@ -33,7 +34,6 @@ class BotScatterPlacementTest {
         assertThrows(IllegalArgumentException.class, () -> BotCommand.parseScatterRadius("0.5"));
         assertThrows(IllegalArgumentException.class, () -> BotCommand.parseScatterRadius("-2"));
         assertThrows(IllegalArgumentException.class, () -> BotCommand.parseScatterRadius("NaN"));
-        assertThrows(IllegalArgumentException.class, () -> BotCommand.parseScatterRadius("65"));
     }
 
     @Test
