@@ -72,6 +72,8 @@ record BotRespawnState(
         bot.restoreTrainingLoadout(trainingLoadout);
         if (respectLoadout) {
             bot.getBotInventory().markLoadoutApplied();
+        } else {
+            bot.getBotInventory().saveForRespawn();
         }
         bot.getBukkitEntity().updateInventory();
         RespawnSafety.emitPoof(bot.getLocation(), BotRespawnState::spawnPoof);

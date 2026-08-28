@@ -81,6 +81,8 @@ the server thread; it must never receive a live Bukkit `World` or `Block`.
   intent. A route waypoint changes only where its locomotion output steers.
 - Existing combat policy still decides whether to approach, hold, commit, or
   use a combat item. Movement V2 does not attack or choose combat tactics.
+- Route traversal aligns head and body yaw with the validated movement vector
+  and sprints until the route requests a hold or traversal action.
 
 ## Status command
 

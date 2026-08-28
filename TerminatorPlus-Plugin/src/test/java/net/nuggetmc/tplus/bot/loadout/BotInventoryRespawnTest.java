@@ -9,14 +9,14 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 class BotInventoryRespawnTest {
 
     @Test
-    void appliedLoadoutWinsOverInventoryAtDeath() {
-        ItemStack[] original = new ItemStack[1];
+    void lastSavedInventoryWinsOverInventoryAtDeath() {
+        ItemStack[] saved = new ItemStack[1];
         ItemStack[] atDeath = new ItemStack[2];
 
-        ItemStack[] restored = BotInventory.respawnContents(true, original, atDeath);
+        ItemStack[] restored = BotInventory.respawnContents(saved, atDeath);
 
         assertEquals(1, restored.length);
-        assertNotSame(original, restored);
-        assertEquals(2, BotInventory.respawnContents(false, original, atDeath).length);
+        assertNotSame(saved, restored);
+        assertEquals(2, BotInventory.respawnContents(null, atDeath).length);
     }
 }

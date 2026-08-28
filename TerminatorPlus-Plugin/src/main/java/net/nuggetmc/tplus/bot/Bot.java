@@ -492,6 +492,7 @@ public class Bot extends ServerPlayer implements Terminator {
 
         lastMovementV2ControlledTick = getAliveTicks();
         if (decision.type() == MovementV2Controller.DecisionType.HOLD) {
+            setSprinting(false);
             walkRoute(new Vector());
             return true;
         }
@@ -540,9 +541,14 @@ public class Bot extends ServerPlayer implements Terminator {
     private void followMovementV2Step(org.bukkit.entity.LivingEntity target, MovementV2Planner.Step step) {
         Location waypoint = new Location(getBukkitEntity().getWorld(),
                 step.to().x() + 0.5, step.to().y(), step.to().z() + 0.5);
+        Vector delta = waypoint.toVector().subtract(getLocation().toVector());
+        Vector desired = delta.clone().setY(0);
+        if (desired.lengthSquared() > 1.0e-6) {
+            desired.normalize();
+            faceMovement(desired);
+        }
 
         if (step.kind() == MovementV2Planner.Kind.PARKOUR && isBotOnGround()) {
-            Vector delta = waypoint.toVector().subtract(getLocation().toVector());
             double horizontal = Math.hypot(delta.getX(), delta.getZ());
             int ticks = Math.max(4, (int) Math.ceil(horizontal / 0.42));
             double vy = Math.min(0.42,
@@ -553,9 +559,9 @@ public class Bot extends ServerPlayer implements Terminator {
             return;
         }
 
-        Vector desired = waypoint.toVector().subtract(getLocation().toVector()).setY(0);
-        if (desired.lengthSquared() > 1.0e-6) desired.normalize().multiply(0.36);
+        desired.multiply(0.4);
         if (step.kind() == MovementV2Planner.Kind.STEP_UP && isBotOnGround()) {
+            setSprinting(true);
             jump(new Vector(desired.getX(), 0.42, desired.getZ()));
             return;
         }
@@ -569,7 +575,14 @@ public class Bot extends ServerPlayer implements Terminator {
             if (!result.fallback()) return;
         }
 
+        setSprinting(true);
         walkRoute(desired);
+    }
+
+    private void faceMovement(Vector direction) {
+        if (direction != null && direction.lengthSquared() > 1.0e-6) {
+            faceLocation(getLocation().clone().add(direction));
+        }
     }
 
     private boolean movementV2Enabled() {
@@ -1739,11 +1752,14 @@ public class Bot extends ServerPlayer implements Terminator {
             float[] vals = MathUtils.fetchYawPitch(dir);
             yaw = vals[0];
             pitch = vals[1];
-
-            sendPacket(new ClientboundRotateHeadPacket(getBukkitEntity().getHandle(), (byte) (yaw * 256 / 360f)));
         }
 
         setRot(yaw, pitch);
+        setYHeadRot(yaw);
+        yBodyRot = yaw;
+        if (!keepYaw) {
+            sendPacket(new ClientboundRotateHeadPacket(this, (byte) (yaw * 256 / 360f)));
+        }
     }
 
     @Override
