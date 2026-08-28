@@ -35,6 +35,105 @@ public class BotEnvironmentCommand extends CommandInstance {
         commandHandler.sendRootInfo(this, sender);
     }
 
+    void dispatchCanonical(CommandSender sender, List<String> args) {
+        if (args.isEmpty()) {
+            sendCanonicalHelp(sender);
+            return;
+        }
+
+        String group = args.get(0).toLowerCase(Locale.ROOT);
+        switch (group) {
+            case "help" -> help(sender, args.subList(1, args.size()));
+            case "blocks", "mobs" -> help(sender, args);
+            case "inspect", "material" -> dispatchMaterial(sender, args);
+            case "solid-block" -> dispatchSolidBlock(sender, args);
+            case "custom-mob" -> dispatchCustomMob(sender, args);
+            case "mob-list-mode" -> dispatchMobListMode(sender, args);
+            default -> sendCanonicalHelp(sender);
+        }
+    }
+
+    private void dispatchMaterial(CommandSender sender, List<String> args) {
+        int coordinateStart = 1;
+        if (args.get(0).equalsIgnoreCase("inspect") && args.size() > 1 && args.get(1).equalsIgnoreCase("material")) {
+            coordinateStart = 2;
+        } else if (args.get(0).equalsIgnoreCase("material") && args.size() > 1 && args.get(1).equalsIgnoreCase("inspect")) {
+            coordinateStart = 2;
+        }
+        if (args.size() - coordinateStart != 3) {
+            sender.sendMessage(ChatColor.RED + "Usage: /bot environment inspect material <x> <y> <z>");
+            return;
+        }
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage("This is a player-only command.");
+            return;
+        }
+        getMaterial(player, args.get(coordinateStart), args.get(coordinateStart + 1), args.get(coordinateStart + 2));
+    }
+
+    private void dispatchSolidBlock(CommandSender sender, List<String> args) {
+        if (args.size() < 2) {
+            sendCanonicalHelp(sender);
+            return;
+        }
+        List<String> values = args.subList(2, args.size());
+        switch (args.get(1).toLowerCase(Locale.ROOT)) {
+            case "add" -> addSolid(sender, values);
+            case "remove" -> removeSolid(sender, values);
+            case "list" -> listSolids(sender);
+            case "clear" -> clearSolids(sender);
+            default -> sendCanonicalHelp(sender);
+        }
+    }
+
+    private void dispatchCustomMob(CommandSender sender, List<String> args) {
+        if (args.size() < 2) {
+            sendCanonicalHelp(sender);
+            return;
+        }
+        switch (args.get(1).toLowerCase(Locale.ROOT)) {
+            case "add" -> {
+                if (args.size() != 3) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /bot environment custom-mob add <entity-type>");
+                    return;
+                }
+                addCustomMob(sender, args.get(2));
+            }
+            case "remove" -> {
+                if (args.size() != 3) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /bot environment custom-mob remove <entity-type>");
+                    return;
+                }
+                removeCustomMob(sender, args.get(2));
+            }
+            case "list" -> listCustomMobs(sender);
+            case "clear" -> clearCustomMobs(sender);
+            default -> sendCanonicalHelp(sender);
+        }
+    }
+
+    private void dispatchMobListMode(CommandSender sender, List<String> args) {
+        if (args.size() == 1 || args.get(1).equalsIgnoreCase("get")) {
+            mobListType(sender, List.of());
+            return;
+        }
+        if (args.get(1).equalsIgnoreCase("set") && args.size() == 3) {
+            mobListType(sender, List.of(args.get(2)));
+            return;
+        }
+        sender.sendMessage(ChatColor.RED + "Usage: /bot environment mob-list-mode <get|set> [mode]");
+    }
+
+    private void sendCanonicalHelp(CommandSender sender) {
+        sender.sendMessage(ChatUtils.LINE);
+        sender.sendMessage(ChatColor.GOLD + "Environment commands");
+        sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "/bot environment inspect material <x> <y> <z>");
+        sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "/bot environment solid-block <add|remove|list|clear>");
+        sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "/bot environment custom-mob <add|remove|list|clear>");
+        sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "/bot environment mob-list-mode <get|set> [mode]");
+        sender.sendMessage(ChatUtils.LINE);
+    }
+
     @Command(
             name = "help",
             desc = "Help for /botenvironment.",

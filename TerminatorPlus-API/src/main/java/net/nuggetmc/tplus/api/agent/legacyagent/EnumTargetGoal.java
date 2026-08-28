@@ -1,6 +1,7 @@
 package net.nuggetmc.tplus.api.agent.legacyagent;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 public enum EnumTargetGoal {
@@ -39,7 +40,8 @@ public enum EnumTargetGoal {
     }
 
     public static EnumTargetGoal from(String name) {
-        return VALUES.get(name);
+        if (name == null) return null;
+        return VALUES.get(name.toLowerCase(Locale.ROOT).replace("_", "").replace("-", ""));
     }
 
     public String description() {

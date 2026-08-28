@@ -71,8 +71,226 @@ public class BotCommand extends CommandInstance {
     }
 
     @Command(
+            name = "spawn",
+            desc = "Spawn one or more bots.",
+            autofill = "spawnAutofill"
+    )
+    public void spawn(CommandSender sender, List<String> args) {
+        if (args.isEmpty()) {
+            sendGroupHelp(sender, "/bot spawn", "single <name> [skin] [location]", "multiple <amount> <name> [skin] [location]");
+            return;
+        }
+
+        switch (args.get(0).toLowerCase(Locale.ROOT)) {
+            case "single" -> {
+                if (args.size() < 2) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /bot spawn single <name> [skin] [location]");
+                    return;
+                }
+                String skin = args.size() >= 3 ? args.get(2) : null;
+                String location = args.size() >= 4 ? String.join(" ", args.subList(3, args.size())) : null;
+                createBots(sender, args.get(1), skin, location, 1);
+            }
+            case "multiple" -> {
+                if (args.size() < 3) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /bot spawn multiple <amount> <name> [skin] [location]");
+                    return;
+                }
+                int amount;
+                try {
+                    amount = Integer.parseInt(args.get(1));
+                } catch (NumberFormatException e) {
+                    sender.sendMessage(ChatColor.RED + "Amount must be a number.");
+                    return;
+                }
+                String skin = args.size() >= 4 ? args.get(3) : null;
+                String location = args.size() >= 5 ? String.join(" ", args.subList(4, args.size())) : null;
+                createBots(sender, args.get(2), skin, location, amount);
+            }
+            default -> sendGroupHelp(sender, "/bot spawn", "single <name> [skin] [location]", "multiple <amount> <name> [skin] [location]");
+        }
+    }
+
+    public List<String> spawnAutofill(CommandSender sender, String[] args) {
+        return args.length == 2 ? List.of("single", "multiple") : List.of();
+    }
+
+    @Command(
+            name = "inspect",
+            desc = "Inspect bots and their status.",
+            autofill = "inspectAutofill"
+    )
+    public void inspect(CommandSender sender, List<String> args) {
+        if (args.isEmpty()) {
+            sendGroupHelp(sender, "/bot inspect", "list", "info [bot-name]", "weapons [bot-name]");
+            return;
+        }
+
+        switch (args.get(0).toLowerCase(Locale.ROOT)) {
+            case "list" -> count(sender);
+            case "info" -> info(sender, args.size() >= 2 ? args.get(1) : null);
+            case "weapons" -> weapons(sender, args.size() >= 2 ? args.get(1) : null);
+            default -> sendGroupHelp(sender, "/bot inspect", "list", "info [bot-name]", "weapons [bot-name]");
+        }
+    }
+
+    public List<String> inspectAutofill(CommandSender sender, String[] args) {
+        if (args.length == 2) return List.of("list", "info", "weapons");
+        if (args.length == 3 && (args[1].equalsIgnoreCase("info") || args[1].equalsIgnoreCase("weapons"))) {
+            return manager.fetchNames();
+        }
+        return List.of();
+    }
+
+    @Command(
+            name = "move",
+            desc = "Move bots as a group.",
+            autofill = "moveAutofill"
+    )
+    public void move(CommandSender sender, List<String> args) {
+        if (args.isEmpty()) {
+            sendGroupHelp(sender, "/bot move", "gather", "scatter [radius]");
+            return;
+        }
+
+        switch (args.get(0).toLowerCase(Locale.ROOT)) {
+            case "gather" -> gather(sender);
+            case "scatter" -> {
+                if (args.size() > 2) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /bot move scatter [radius]");
+                    return;
+                }
+                scatter(sender, args.size() == 2 ? args.get(1) : null);
+            }
+            default -> sendGroupHelp(sender, "/bot move", "gather", "scatter [radius]");
+        }
+    }
+
+    public List<String> moveAutofill(CommandSender sender, String[] args) {
+        return args.length == 2 ? List.of("gather", "scatter") : List.of();
+    }
+
+    @Command(
+            name = "equipment",
+            desc = "Manage bot equipment, inventories, and loadouts.",
+            autofill = "equipmentAutofill"
+    )
+    public void equipment(CommandSender sender, List<String> args) {
+        if (args.isEmpty()) {
+            sendGroupHelp(sender, "/bot equipment", "inventory <bot-name>", "give <item> [bot-name] [slot]",
+                    "armor <tier>", "loadout <name> [bot-name]", "mixed-loadout <mix> [bot-prefix]");
+            return;
+        }
+
+        switch (args.get(0).toLowerCase(Locale.ROOT)) {
+            case "inventory" -> {
+                if (args.size() < 2) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /bot equipment inventory <bot-name>");
+                    return;
+                }
+                inventory(sender, args.get(1));
+            }
+            case "give" -> give(sender, args.subList(1, args.size()));
+            case "armor" -> {
+                if (args.size() < 2) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /bot equipment armor <tier>");
+                    return;
+                }
+                armor(sender, args.get(1));
+            }
+            case "loadout" -> {
+                if (args.size() < 2) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /bot equipment loadout <name> [bot-name]");
+                    return;
+                }
+                loadout(sender, args.get(1), args.size() >= 3 ? args.get(2) : null);
+            }
+            case "mixed-loadout", "loadoutmix" -> {
+                if (args.size() < 2) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /bot equipment mixed-loadout <mix> [bot-prefix]");
+                    return;
+                }
+                loadoutMix(sender, args.get(1), args.size() >= 3 ? args.get(2) : null);
+            }
+            default -> sendGroupHelp(sender, "/bot equipment", "inventory <bot-name>", "give <item> [bot-name] [slot]",
+                    "armor <tier>", "loadout <name> [bot-name]", "mixed-loadout <mix> [bot-prefix]");
+        }
+    }
+
+    public List<String> equipmentAutofill(CommandSender sender, String[] args) {
+        if (args.length == 2) return List.of("inventory", "give", "armor", "loadout", "mixed-loadout");
+        if (args.length == 3) {
+            return switch (args[1].toLowerCase(Locale.ROOT)) {
+                case "inventory" -> manager.fetchNames();
+                case "give" -> giveAutofill(sender, new String[]{"give", args[2]});
+                case "armor" -> new ArrayList<>(armorTiers.keySet());
+                case "loadout" -> Arrays.asList(LOADOUT_NAMES);
+                case "mixed-loadout" -> Arrays.asList(LOADOUT_MIX_NAMES);
+                default -> List.of();
+            };
+        }
+        if (args.length == 4 && args[1].equalsIgnoreCase("give")) {
+            return manager.fetchNames();
+        }
+        if (args.length == 5 && args[1].equalsIgnoreCase("give")) {
+            return giveAutofill(sender, new String[]{"give", args[2], args[3], args[4]});
+        }
+        if (args.length == 4 && args[1].equalsIgnoreCase("loadout")) return manager.fetchNames();
+        if (args.length == 4 && args[1].equalsIgnoreCase("mixed-loadout")) return manager.fetchNames();
+        return List.of();
+    }
+
+    @Command(
+            name = "admin",
+            desc = "Administrative bot actions.",
+            autofill = "adminAutofill"
+    )
+    @Require(ADMIN_PERMISSION)
+    public void admin(CommandSender sender, List<String> args) {
+        if (args.size() == 1 && args.get(0).equalsIgnoreCase("reset")) {
+            reset(sender);
+            return;
+        }
+        sendGroupHelp(sender, "/bot admin", "reset");
+    }
+
+    public List<String> adminAutofill(CommandSender sender, String[] args) {
+        return args.length == 2 ? List.of("reset") : List.of();
+    }
+
+    @Command(
+            name = "environment",
+            desc = "Inspect and configure bot environment data.",
+            autofill = "environmentAutofill"
+    )
+    public void environment(CommandSender sender, List<String> args) {
+        BotEnvironmentCommand environment = environmentCommand();
+        if (environment == null) {
+            sender.sendMessage(ChatColor.RED + "Environment commands are unavailable.");
+            return;
+        }
+        environment.dispatchCanonical(sender, args);
+    }
+
+    public List<String> environmentAutofill(CommandSender sender, String[] args) {
+        if (args.length == 2) return List.of("inspect", "material", "solid-block", "custom-mob", "mob-list-mode");
+        if (args.length == 3 && (args[1].equalsIgnoreCase("inspect") || args[1].equalsIgnoreCase("material"))) {
+            return List.of("material");
+        }
+        if (args.length == 3 && args[1].equalsIgnoreCase("solid-block")) return List.of("add", "remove", "list", "clear");
+        if (args.length == 3 && args[1].equalsIgnoreCase("custom-mob")) return List.of("add", "remove", "list", "clear");
+        if (args.length == 3 && args[1].equalsIgnoreCase("mob-list-mode")) return List.of("get", "set");
+        if (args.length == 4 && args[1].equalsIgnoreCase("mob-list-mode") && args[2].equalsIgnoreCase("set")) {
+            return Arrays.stream(net.nuggetmc.tplus.api.agent.legacyagent.CustomListMode.values())
+                    .map(mode -> mode.name().toLowerCase(Locale.ROOT)).toList();
+        }
+        return List.of();
+    }
+
+    @Command(
             name = "create",
-            desc = "Create a bot."
+            desc = "Create a bot.",
+            visible = false
     )
     public void create(CommandSender sender, @Arg("name") String name, @OptArg("skin") String skin, @TextArg @OptArg("loc") String loc) {
         createBots(sender, name, skin, loc, 1);
@@ -80,7 +298,8 @@ public class BotCommand extends CommandInstance {
 
     @Command(
             name = "multi",
-            desc = "Create multiple bots at once."
+            desc = "Create multiple bots at once.",
+            visible = false
     )
     public void multi(CommandSender sender, @Arg("amount") int amount, @Arg("name") String name, @OptArg("skin") String skin, @TextArg @OptArg("loc") String loc) {
         createBots(sender, name, skin, loc, amount);
@@ -89,7 +308,8 @@ public class BotCommand extends CommandInstance {
     @Command(
             name = "respawn",
             desc = "Enable, disable, or show automatic bot respawning.",
-            autofill = "respawnAutofill"
+            autofill = "respawnAutofill",
+            visible = false
     )
     @Require(ADMIN_PERMISSION)
     public void respawn(CommandSender sender, @OptArg("enabled") String value) {
@@ -125,7 +345,8 @@ public class BotCommand extends CommandInstance {
     @Command(
             name = "movementv2",
             desc = "Enable, disable, or show Movement V2.",
-            autofill = "movementV2Autofill"
+            autofill = "movementV2Autofill",
+            visible = false
     )
     @Require(ADMIN_PERMISSION)
     public void movementV2(CommandSender sender, @OptArg("on-off-status") String action) {
@@ -170,7 +391,8 @@ public class BotCommand extends CommandInstance {
     @Command(
             name = "give",
             desc = "Give an item to bot(s). Usage: /bot give <item> [bot-name] [slot]",
-            autofill = "giveAutofill"
+            autofill = "giveAutofill",
+            visible = false
     )
     public void give(CommandSender sender, List<String> args) {
         if (args.isEmpty()) {
@@ -249,7 +471,8 @@ public class BotCommand extends CommandInstance {
     @Command(
             name = "place",
             desc = "Set the block bots use when placing blocks.",
-            autofill = "placeAutofill"
+            autofill = "placeAutofill",
+            visible = false
     )
     public void place(CommandSender sender, @Arg("material") String materialName) {
         Material material = materialName == null ? null : Material.matchMaterial(materialName);
@@ -335,7 +558,8 @@ public class BotCommand extends CommandInstance {
     @Command(
             name = "armor",
             desc = "Gives all bots an armor set.",
-            autofill = "armorAutofill"
+            autofill = "armorAutofill",
+            visible = false
     )
     public void armor(CommandSender sender, @Arg("armor-tier") String armorTier) {
         String tier = armorTier.toLowerCase();
@@ -371,7 +595,8 @@ public class BotCommand extends CommandInstance {
     @Command(
             name = "info",
             desc = "Information about loaded bots.",
-            autofill = "infoAutofill"
+            autofill = "infoAutofill",
+            visible = false
     )
     public void info(CommandSender sender, @OptArg("bot-name") String name) {
         if (name == null) {
@@ -415,7 +640,8 @@ public class BotCommand extends CommandInstance {
             desc = "Counts the amount of bots on screen by name.",
             aliases = {
                     "list"
-            }
+            },
+            visible = false
     )
     public void count(CommandSender sender) {
         List<String> names = manager.fetchNames();
@@ -432,7 +658,8 @@ public class BotCommand extends CommandInstance {
 
     @Command(
             name = "reset",
-            desc = "Remove all loaded bots."
+            desc = "Remove all loaded bots.",
+            visible = false
     )
     @Require(ADMIN_PERMISSION)
     public void reset(CommandSender sender) {
@@ -457,23 +684,28 @@ public class BotCommand extends CommandInstance {
             autofill = "settingsAutofill"
     )
     public void settings(CommandSender sender, List<String> args) {
-        String arg1 = args.isEmpty() ? null : args.get(0);
+        String arg1 = args.isEmpty() ? null : canonicalSettingsAction(args.get(0));
         String arg2 = args.size() < 2 ? null : args.get(1);
 
         String extra = ChatColor.GRAY + " [" + ChatColor.YELLOW + "/bot settings" + ChatColor.GRAY + "]";
 
-        if (arg1 == null || (!arg1.equalsIgnoreCase("setgoal") && !arg1.equalsIgnoreCase("mobtarget") && !arg1.equalsIgnoreCase("playertarget")
-                && !arg1.equalsIgnoreCase("addplayerlist") && !arg1.equalsIgnoreCase("region"))) {
+        if (arg1 == null || (!arg1.equalsIgnoreCase("combat-goal") && !arg1.equalsIgnoreCase("target-mobs") && !arg1.equalsIgnoreCase("target-player")
+                && !arg1.equalsIgnoreCase("show-in-player-list") && !arg1.equalsIgnoreCase("target-region")
+                && !arg1.equalsIgnoreCase("auto-respawn") && !arg1.equalsIgnoreCase("movement-v2")
+                && !arg1.equalsIgnoreCase("placement-material"))) {
             sender.sendMessage(ChatUtils.LINE);
             sender.sendMessage(ChatColor.GOLD + "Bot Settings" + extra);
-            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "setgoal" + ChatUtils.BULLET_FORMATTED + "Set the global bot target selection method.");
-            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "mobtarget" + ChatUtils.BULLET_FORMATTED + "Allow all bots to be targeted by hostile mobs.");
-            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "playertarget" + ChatUtils.BULLET_FORMATTED + "Sets a player name for spawned bots to focus on if the goal is PLAYER.");
-            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "addplayerlist" + ChatUtils.BULLET_FORMATTED + "Adds newly spawned bots to the player list. This allows the bots to be affected by player selectors like @a and @p.");
-            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "region" + ChatUtils.BULLET_FORMATTED + "Sets a region for the bots to prioritize entities inside.");
+            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "combat-goal" + ChatUtils.BULLET_FORMATTED + "Set the global bot target selection method.");
+            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "target-mobs" + ChatUtils.BULLET_FORMATTED + "Allow all bots to be targeted by hostile mobs.");
+            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "target-player" + ChatUtils.BULLET_FORMATTED + "Set a player name for spawned bots to focus on if the goal is PLAYER.");
+            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "target-region" + ChatUtils.BULLET_FORMATTED + "Set a region for the bots to prioritize entities inside.");
+            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "show-in-player-list" + ChatUtils.BULLET_FORMATTED + "Add newly spawned bots to the player list.");
+            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "auto-respawn" + ChatUtils.BULLET_FORMATTED + "Enable or disable automatic bot respawning.");
+            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "movement-v2" + ChatUtils.BULLET_FORMATTED + "Enable, disable, or inspect Movement V2.");
+            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "placement-material" + ChatUtils.BULLET_FORMATTED + "Set the block bots use when placing blocks.");
             sender.sendMessage(ChatUtils.LINE);
             return;
-        } else if (arg1.equalsIgnoreCase("setgoal")) {
+        } else if (arg1.equalsIgnoreCase("combat-goal")) {
             if (arg2 == null) {
                 sender.sendMessage("The global bot goal is currently " + ChatColor.BLUE + agent.getTargetType() + ChatColor.RESET + ".");
                 return;
@@ -490,7 +722,7 @@ public class BotCommand extends CommandInstance {
             }
             agent.setTargetType(goal);
             sender.sendMessage("The global bot goal has been set to " + ChatColor.BLUE + goal.name() + ChatColor.RESET + ".");
-        } else if (arg1.equalsIgnoreCase("mobtarget")) {
+        } else if (arg1.equalsIgnoreCase("target-mobs")) {
             if (arg2 == null) {
                 sender.sendMessage("Mob targeting is currently " + (manager.isMobTarget() ? ChatColor.GREEN + "enabled" : ChatColor.RED + "disabled") + ChatColor.RESET + ".");
                 return;
@@ -502,7 +734,7 @@ public class BotCommand extends CommandInstance {
             }
             manager.setMobTarget(enabled);
             sender.sendMessage("Mob targeting is now " + (manager.isMobTarget() ? ChatColor.GREEN + "enabled" : ChatColor.RED + "disabled") + ChatColor.RESET + ".");
-        } else if (arg1.equalsIgnoreCase("playertarget")) {
+        } else if (arg1.equalsIgnoreCase("target-player")) {
             if (args.size() < 2) {
                 sender.sendMessage(ChatColor.RED + "You must specify a player name!");
                 return;
@@ -517,7 +749,7 @@ public class BotCommand extends CommandInstance {
                 fetch.setTargetPlayer(player.getUniqueId());
             }
             sender.sendMessage("All spawned bots are now set to target " + ChatColor.BLUE + player.getName() + ChatColor.RESET + ". They will target the closest player if they can't be found.\nYou may need to set the goal to PLAYER.");
-        } else if (arg1.equalsIgnoreCase("addplayerlist")) {
+        } else if (arg1.equalsIgnoreCase("show-in-player-list")) {
             if (arg2 == null) {
                 sender.sendMessage("Adding bots to the player list is currently " + (manager.addToPlayerList() ? ChatColor.GREEN + "enabled" : ChatColor.RED + "disabled") + ChatColor.RESET + ".");
                 return;
@@ -529,7 +761,7 @@ public class BotCommand extends CommandInstance {
             }
             manager.setAddToPlayerList(enabled);
             sender.sendMessage("Adding bots to the player list is now " + (manager.addToPlayerList() ? ChatColor.GREEN + "enabled" : ChatColor.RED + "disabled") + ChatColor.RESET + ".");
-        } else if (arg1.equalsIgnoreCase("region")) {
+        } else if (arg1.equalsIgnoreCase("target-region")) {
             if (arg2 == null) {
                 if (agent.getRegion() == null) {
                     sender.sendMessage("No region has been set.");
@@ -587,7 +819,7 @@ public class BotCommand extends CommandInstance {
                 }
             } catch (NumberFormatException e) {
                 sender.sendMessage("The region bounds and weights must be valid numbers!");
-                sender.sendMessage("Correct syntax: " + ChatColor.YELLOW + "/bot settings region <x1> <y1> <z1> <x2> <y2> <z2> <wX> <wY> <wZ>"
+                sender.sendMessage("Correct syntax: " + ChatColor.YELLOW + "/bot settings target-region <x1> <y1> <z1> <x2> <y2> <z2> <wX> <wY> <wZ>"
                         + ChatColor.RESET);
                 return;
             }
@@ -600,6 +832,27 @@ public class BotCommand extends CommandInstance {
                 sender.sendMessage("The region Y weight is " + ChatColor.BLUE + agent.getRegionWeightY() + ChatColor.RESET + ".");
                 sender.sendMessage("The region Z weight is " + ChatColor.BLUE + agent.getRegionWeightZ() + ChatColor.RESET + ".");
             }
+        } else if (arg1.equalsIgnoreCase("auto-respawn")) {
+            if (!requireAdmin(sender)) return;
+            if (arg2 == null || arg2.equalsIgnoreCase("status")) {
+                respawn(sender, null);
+                return;
+            }
+            Boolean enabled = parseToggleValue(arg2);
+            if (enabled == null) {
+                sender.sendMessage(ChatColor.RED + "Usage: /bot settings auto-respawn <true|false|on|off>");
+                return;
+            }
+            respawn(sender, Boolean.toString(enabled));
+        } else if (arg1.equalsIgnoreCase("movement-v2")) {
+            if (!requireAdmin(sender)) return;
+            movementV2(sender, arg2);
+        } else if (arg1.equalsIgnoreCase("placement-material")) {
+            if (arg2 == null) {
+                sender.sendMessage(ChatColor.RED + "Usage: /bot settings placement-material <material>");
+                return;
+            }
+            place(sender, arg2);
         }
     }
 
@@ -607,28 +860,30 @@ public class BotCommand extends CommandInstance {
         List<String> output = new ArrayList<>();
 
         if (args.length == 2) {
-            output.add("setgoal");
-            output.add("mobtarget");
-            output.add("playertarget");
-            output.add("addplayerlist");
-            output.add("region");
+            output.add("combat-goal");
+            output.add("target-mobs");
+            output.add("target-player");
+            output.add("target-region");
+            output.add("show-in-player-list");
+            output.add("auto-respawn");
+            output.add("movement-v2");
+            output.add("placement-material");
         } else if (args.length == 3) {
-            if (args[1].equalsIgnoreCase("setgoal")) {
+            String action = canonicalSettingsAction(args[1]);
+            if ("combat-goal".equals(action)) {
                 Arrays.stream(EnumTargetGoal.values()).forEach(goal -> output.add(goal.name().replace("_", "").toLowerCase()));
             }
-            if (args[1].equalsIgnoreCase("mobtarget")) {
+            if ("target-mobs".equals(action) || "show-in-player-list".equals(action) || "auto-respawn".equals(action)) {
                 output.add("true");
                 output.add("false");
             }
-            if (args[1].equalsIgnoreCase("playertarget")) {
+            if ("target-player".equals(action)) {
                 for (Player player : Bukkit.getOnlinePlayers()) {
                     output.add(player.getName());
                 }
             }
-            if (args[1].equalsIgnoreCase("addplayerlist")) {
-                output.add("true");
-                output.add("false");
-            }
+            if ("movement-v2".equals(action)) output.addAll(List.of("on", "off", "status"));
+            if ("placement-material".equals(action)) output.addAll(placeAutofill(sender, new String[]{"place", args[2]}));
         }
 
         return output;
@@ -636,23 +891,70 @@ public class BotCommand extends CommandInstance {
 
     @Command(
             name = "debug",
-            desc = "Debug plugin code.",
-            visible = false,
+            desc = "Inspect bot behavior and debug output.",
             autofill = "debugAutofill"
     )
     @Require(ADMIN_PERMISSION)
-    public void debug(CommandSender sender, @Arg("expression") String expression) {
-        new Debugger(sender).execute(expression);
+    public void debug(CommandSender sender, List<String> args) {
+        if (args.isEmpty()) {
+            sendGroupHelp(sender, "/bot debug", "behavior <expression>", "combat <bot-name|all> <on|off>", "movement [bot-name]");
+            return;
+        }
+
+        String action = args.get(0).toLowerCase(Locale.ROOT);
+        if (action.equals("behavior") || action.equals("expression")) {
+            if (args.size() < 2) {
+                sender.sendMessage(ChatColor.RED + "Usage: /bot debug behavior <expression>");
+                return;
+            }
+            new Debugger(sender).execute(String.join(" ", args.subList(1, args.size())));
+        } else if (action.equals("combat")) {
+            if (args.size() != 3) {
+                sender.sendMessage(ChatColor.RED + "Usage: /bot debug combat <bot-name|all> <on|off>");
+                return;
+            }
+            combatDebug(sender, args.get(1), args.get(2));
+        } else if (action.equals("movement")) {
+            if (args.size() > 2) {
+                sender.sendMessage(ChatColor.RED + "Usage: /bot debug movement [bot-name]");
+                return;
+            }
+            BotEnvironmentCommand environment = environmentCommand();
+            if (environment == null) {
+                sender.sendMessage(ChatColor.RED + "Movement debug is unavailable.");
+                return;
+            }
+            environment.movementV2Status(sender, args.size() == 2 ? List.of(args.get(1)) : List.of());
+        } else {
+            // Keep the old /bot debug <expression> form working.
+            new Debugger(sender).execute(String.join(" ", args));
+        }
     }
 
     public List<String> debugAutofill(CommandSender sender, String[] args) {
-        return args.length == 2 ? new ArrayList<>(Debugger.AUTOFILL_METHODS) : new ArrayList<>();
+        if (args.length == 2) {
+            List<String> output = new ArrayList<>(List.of("behavior", "combat", "movement", "expression"));
+            output.addAll(Debugger.AUTOFILL_METHODS);
+            return output;
+        }
+        if (args.length == 3 && args[1].equalsIgnoreCase("combat")) {
+            List<String> output = new ArrayList<>(manager.fetchNames());
+            output.add("all");
+            return output;
+        }
+        if (args.length == 4 && args[1].equalsIgnoreCase("combat")) return List.of("on", "off");
+        if (args.length == 3 && (args[1].equalsIgnoreCase("behavior") || args[1].equalsIgnoreCase("expression"))) {
+            return new ArrayList<>(Debugger.AUTOFILL_METHODS);
+        }
+        if (args.length == 3 && args[1].equalsIgnoreCase("movement")) return manager.fetchNames();
+        return List.of();
     }
 
     @Command(
             name = "weapons",
             desc = "Show which combat behaviors each bot's inventory unlocks.",
-            autofill = "weaponsAutofill"
+            autofill = "weaponsAutofill",
+            visible = false
     )
     public void weapons(CommandSender sender, @OptArg("bot-name") String botName) {
         Location viewer = sender instanceof Player p ? p.getLocation() : null;
@@ -709,7 +1011,8 @@ public class BotCommand extends CommandInstance {
             name = "combatdebug",
             desc = "Toggle full combat + movement trace logging for one bot or all bots.",
             aliases = {"cdbg", "comatdebug"},
-            autofill = "combatDebugAutofill"
+            autofill = "combatDebugAutofill",
+            visible = false
     )
     @Require(ADMIN_PERMISSION)
     public void combatDebug(CommandSender sender, @Arg("name-or-all") String target, @Arg("on-off") String state) {
@@ -776,7 +1079,8 @@ public class BotCommand extends CommandInstance {
     @Command(
             name = "gather",
             desc = "Teleport every living bot to your current location.",
-            aliases = {"tpall"}
+            aliases = {"tpall"},
+            visible = false
     )
     public void gather(CommandSender sender) {
         if (!(sender instanceof Player player)) {
@@ -796,7 +1100,8 @@ public class BotCommand extends CommandInstance {
 
     @Command(
             name = "scatter",
-            desc = "Distribute every living bot around your current location within an optional radius."
+            desc = "Distribute every living bot around your current location within an optional radius.",
+            visible = false
     )
     public void scatter(CommandSender sender, @OptArg("radius") String radiusText) {
         if (!(sender instanceof Player player)) {
@@ -1065,7 +1370,8 @@ public class BotCommand extends CommandInstance {
             name = "inventory",
             desc = "Opens the inventory editor GUI for a bot.",
             aliases = {"inv"},
-            autofill = "inventoryAutofill"
+            autofill = "inventoryAutofill",
+            visible = false
     )
     public void inventory(CommandSender sender, @Arg("bot-name") String name) {
         if (!(sender instanceof Player player)) {
@@ -1188,7 +1494,6 @@ public class BotCommand extends CommandInstance {
         List<String> out = new ArrayList<>();
         if (args.length == 2) {
             out.add("save");
-            out.add("load");
             out.add("apply");
             out.add("list");
             out.add("delete");
@@ -1211,7 +1516,8 @@ public class BotCommand extends CommandInstance {
     @Command(
             name = "loadout",
             desc = "Apply a predefined combat loadout. Usage: /bot loadout <name> [bot-name]",
-            autofill = "loadoutAutofill"
+            autofill = "loadoutAutofill",
+            visible = false
     )
     public void loadout(CommandSender sender, @Arg("name") String name, @OptArg("bot-name") String botName) {
         String key = name == null ? "" : name.toLowerCase();
@@ -1296,7 +1602,8 @@ public class BotCommand extends CommandInstance {
     @Command(
             name = "loadoutmix",
             desc = "Apply rotating combat loadouts. Usage: /bot loadoutmix <alltypes|core|problem> [bot-prefix]",
-            autofill = "loadoutMixAutofill"
+            autofill = "loadoutMixAutofill",
+            visible = false
     )
     public void loadoutMix(CommandSender sender, @Arg("mix") String mix, @OptArg("bot-prefix") String botPrefix) {
         String key = mix == null ? "" : mix.toLowerCase();
@@ -1729,6 +2036,48 @@ public class BotCommand extends CommandInstance {
         Terminator t = manager.getFirst(name, near);
         if (t instanceof Bot b) return b;
         return null;
+    }
+
+    static String canonicalSettingsAction(String action) {
+        if (action == null) return null;
+        return switch (action.toLowerCase(Locale.ROOT)) {
+            case "setgoal", "combat-goal", "target-goal" -> "combat-goal";
+            case "mobtarget", "target-mobs" -> "target-mobs";
+            case "playertarget", "target-player" -> "target-player";
+            case "region", "target-region" -> "target-region";
+            case "addplayerlist", "show-in-player-list" -> "show-in-player-list";
+            case "respawn", "auto-respawn" -> "auto-respawn";
+            case "movementv2", "movement-v2" -> "movement-v2";
+            case "place", "placement-material" -> "placement-material";
+            default -> null;
+        };
+    }
+
+    private Boolean parseToggleValue(String value) {
+        if ("on".equalsIgnoreCase(value)) return true;
+        if ("off".equalsIgnoreCase(value)) return false;
+        return parseBoolean(value);
+    }
+
+    private boolean requireAdmin(CommandSender sender) {
+        if (sender.hasPermission(ADMIN_PERMISSION)) return true;
+        sender.sendMessage(ChatColor.RED + "You do not have permission to use this subcommand.");
+        sender.sendMessage(ChatColor.RED + "Required: " + ChatColor.YELLOW + ADMIN_PERMISSION);
+        return false;
+    }
+
+    private void sendGroupHelp(CommandSender sender, String command, String... entries) {
+        sender.sendMessage(ChatUtils.LINE);
+        sender.sendMessage(ChatColor.GOLD + "Command help" + ChatColor.GRAY + " [" + ChatColor.YELLOW + command + ChatColor.GRAY + "]");
+        for (String entry : entries) {
+            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + command + " " + entry);
+        }
+        sender.sendMessage(ChatUtils.LINE);
+    }
+
+    private BotEnvironmentCommand environmentCommand() {
+        CommandInstance command = commandHandler.getCommand("botenvironment");
+        return command instanceof BotEnvironmentCommand environment ? environment : null;
     }
 
     private Boolean parseBooleanValue(String value) {

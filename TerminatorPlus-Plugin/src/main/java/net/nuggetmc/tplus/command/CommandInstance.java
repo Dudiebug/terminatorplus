@@ -3,6 +3,7 @@ package net.nuggetmc.tplus.command;
 import net.nuggetmc.tplus.TerminatorPlus;
 import net.nuggetmc.tplus.api.utils.ChatUtils;
 import net.nuggetmc.tplus.command.annotation.Arg;
+import net.nuggetmc.tplus.command.annotation.Command;
 import net.nuggetmc.tplus.command.annotation.OptArg;
 import net.nuggetmc.tplus.command.annotation.TextArg;
 import net.nuggetmc.tplus.command.exception.ArgCountException;
@@ -292,11 +293,18 @@ public abstract class CommandInstance extends BukkitCommand {
     @SuppressWarnings("unchecked")
     public List<String> tabComplete(@Nonnull CommandSender sender, @Nonnull String label, @Nonnull String[] args) {
         if (args.length == 1) {
-            List<String> result = methods.keySet().stream().filter(c -> !c.isEmpty() && c.contains(args[0])).collect(Collectors.toList());
+            String prefix = args[0].toLowerCase(Locale.ROOT);
+            List<String> result = methods.values().stream()
+                    .filter(method -> visibleTo(sender, method))
+                    .map(CommandMethod::getName)
+                    .filter(name -> !name.isEmpty() && name.toLowerCase(Locale.ROOT).startsWith(prefix))
+                    .collect(Collectors.toList());
             if (result.isEmpty()) {
-                // Add aliases also
-                methods.forEach((s, m) -> result.addAll(m.getAliases()));
-                return result.stream().filter(c -> c.contains(args[0])).collect(Collectors.toList());
+                methods.values().stream()
+                        .filter(method -> visibleTo(sender, method))
+                        .flatMap(method -> method.getAliases().stream())
+                        .filter(alias -> alias.toLowerCase(Locale.ROOT).startsWith(prefix))
+                        .forEach(result::add);
             }
             return result;
         }
@@ -320,5 +328,12 @@ public abstract class CommandInstance extends BukkitCommand {
         }
 
         return new ArrayList<>();
+    }
+
+    private static boolean visibleTo(CommandSender sender, CommandMethod method) {
+        Command command = method.getMethod().getAnnotation(Command.class);
+        if (command == null || !command.visible()) return false;
+        String permission = method.getPermission();
+        return permission == null || permission.isEmpty() || sender.hasPermission(permission);
     }
 }

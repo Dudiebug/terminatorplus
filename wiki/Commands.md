@@ -6,39 +6,66 @@
 
 All bot management commands live under `/bot` (alias `/npc`). AI training is under `/ai`. Environment configuration is under `/botenvironment` (alias `/botenv`). Plugin info is under `/terminatorplus` (alias `/tplus`).
 
+## Canonical command layout
+
+New command paths use the following groups. The older flat paths documented below remain available as compatibility aliases.
+
+```text
+/bot spawn single|multiple
+/bot inspect list|info|weapons
+/bot move gather|scatter
+/bot settings combat-goal|target-mobs|target-player|target-region|show-in-player-list|auto-respawn|movement-v2|placement-material
+/bot equipment inventory|give|armor|loadout|mixed-loadout
+/bot preset save|apply|list|delete
+/bot debug behavior|combat|movement
+/bot admin reset
+/bot environment inspect material
+/bot environment solid-block add|remove|list|clear
+/bot environment custom-mob add|remove|list|clear
+/bot environment mob-list-mode get|set
+
+/ai spawn random|movement
+/ai train reinforcement|stop
+/ai brain status|load|save|reset
+/ai evaluate
+/ai inspect info
+```
+
+`/bot` still opens the management UI for players. `/botenvironment` and `/botenv` remain supported as legacy environment roots.
+
 ## Spawning
 
-### `/bot create <name> [skin] [loc]`
+### `/bot spawn single <name> [skin] [loc]`
 Spawn one bot. `skin` defaults to a Mojang lookup of `<name>`. `loc` is either a player name or `x y z [world]`.
 
-### `/bot multi <amount> <name> [skin] [loc]`
+### `/bot spawn multiple <amount> <name> [skin] [loc]`
 Spawn many bots at once.
 
-### `/bot reset`
+### `/bot admin reset`
 Remove every spawned bot. **Requires** `terminatorplus.admin`.
 
-## Inventory
+## Equipment
 
-### `/bot inventory <bot-name>` (alias `inv`)
+### `/bot equipment inventory <bot-name>` (legacy `/bot inventory`, alias `inv`)
 Open a 54-slot chest GUI that mirrors the bot's inventory. Edits save on close. See [Inventory GUI](Inventory-GUI).
 
-### `/bot give <item> [bot-name] [slot]`
+### `/bot equipment give <item> [bot-name] [slot]`
 - One arg: sets the default item for every bot.
 - Two args: drop the item into the first empty hotbar slot on the named bot.
 - Three args: place into the specified inventory slot. See the [Inventory GUI slot map](Inventory-GUI#slot-map).
 
-### `/bot place <material>`
+### `/bot settings placement-material <material>`
 Set the global block used by bot building and clutch placement. The default is `COBBLESTONE`.
 
-Example: `/bot place DIAMOND_BLOCK`
+Example: `/bot settings placement-material DIAMOND_BLOCK`
 
-### `/bot armor <tier>`
+### `/bot equipment armor <tier>`
 Apply an armor tier to every bot. Tiers: `none`, `leather`, `chain`, `gold`, `iron`, `diamond`, `netherite`.
 
-### `/bot loadout <name> [bot-name]`
+### `/bot equipment loadout <name> [bot-name]`
 Apply a predefined combat loadout. If `bot-name` is omitted, applies to all bots. See [Loadouts](Loadouts).
 
-### `/bot loadoutmix <mix> [bot-prefix]`
+### `/bot equipment mixed-loadout <mix> [bot-prefix]`
 Apply rotating combat loadouts across bots. Each bot gets a different loadout from the mix.
 
 | Mix | Loadouts |
@@ -47,7 +74,7 @@ Apply rotating combat loadouts across bots. Each bot gets a different loadout fr
 | `core` | `sword`, `axe`, `smp`, `mace`, `trident`, `spear`, `pot` |
 | `problem` / `combatdata` / `bugs` | `mace` (3x), `axe` (3x), `smp` (2x), `vanilla`, `hybrid` |
 
-### `/bot weapons [bot-name]`
+### `/bot inspect weapons [bot-name]`
 Print a per-bot summary of which combat behaviors its inventory unlocks. Useful for debugging "why isn't my bot using the trident?" (answer: usually, it's not in the hotbar).
 
 ## Presets
@@ -66,40 +93,55 @@ Delete a preset file. **Requires** `terminatorplus.admin`.
 
 ## Info
 
-### `/bot info <bot-name>`
+### `/bot inspect info <bot-name>`
 Print the bot's name, world, position, velocity.
 
-### `/bot count` (alias `list`)
+### `/bot inspect list` (legacy `/bot count`, alias `list`)
 Count bots by name.
 
 ## Settings
 
-### `/bot settings setgoal <goal>`
+### `/bot settings combat-goal <goal>`
 Change the global target-selection strategy. Goals: `PLAYER`, `NEAREST`, `NEAREST_PLAYER`, etc.
 
-### `/bot settings mobtarget <true|false>`
+### `/bot settings target-mobs <true|false>`
 Whether hostile mobs target spawned bots.
 
-### `/bot settings addplayerlist <true|false>`
+### `/bot settings show-in-player-list <true|false>`
 Whether newly-spawned bots appear in the tab list (and are affected by `@a`/`@p` selectors).
 
-### `/bot settings playertarget <name>`
+### `/bot settings target-player <name>`
 Set the player that bots focus on when goal is `PLAYER`.
 
-### `/bot settings region <x1> <y1> <z1> <x2> <y2> <z2> [<wX> <wY> <wZ>|strict]`
+### `/bot settings target-region <x1> <y1> <z1> <x2> <y2> <z2> [<wX> <wY> <wZ>|strict]`
 Set region for bot prioritization.
+
+### `/bot settings auto-respawn <true|false>`
+Enable or disable automatic bot respawning. **Requires** `terminatorplus.admin`.
+
+### `/bot settings movement-v2 <on|off|status>`
+Enable, disable, or inspect Movement V2. **Requires** `terminatorplus.admin`.
 
 ## Utility
 
-### `/bot gather` (alias `tpall`)
+### `/bot move gather` (legacy `/bot gather`, alias `tpall`)
 Teleport all bots to your location.
 
-### `/bot combatdebug <name|all> <on|off>` (aliases `cdbg`, `comatdebug`)
+### `/bot move scatter [radius]`
+Distribute living bots in a safe circular spread around your location.
+
+### `/bot debug behavior <expression>`
+Run a debugger behavior expression. **Requires** `terminatorplus.admin`.
+
+### `/bot debug movement [bot-name]`
+Show Movement V2 route and fallback status. **Requires** `terminatorplus.admin`.
+
+### `/bot debug combat <name|all> <on|off>` (legacy `/bot combatdebug`, aliases `cdbg`, `comatdebug`)
 Toggle combat trace logging for specific bots or all bots. Shows telemetry fields like `critPred`, `sweepPred`, `chargeAtVanillaAttack`, `targetHp`, and `targetHpDelta`. **Requires** `terminatorplus.admin`.
 
 ## AI Training (`/ai`)
 
-### `/ai reinforcement <population-size> <name> [skin] [mode-or-options] [round-minutes]`
+### `/ai train reinforcement <population-size> <name> [skin] [mode-or-options] [round-minutes]`
 Begin a training session. Must be run as a player.
 
 - Empty mode defaults to **movement-controller** training.
@@ -111,10 +153,10 @@ Begin a training session. Must be run as a player.
 - Mixed movement training ranks bots by the family they actually produced route samples for and autosaves eligible specialist brains, subject to `save-only-improved-brain`.
 - Use options such as `family=mace:mix=mace_curriculum` or `movement:family=mace:mix=mace_curriculum` for curriculum runs.
 
-### `/ai random <amount> <name> [skin] [loc]`
+### `/ai spawn random <amount> <name> [skin] [loc]`
 Spawn bots with random neural networks.
 
-### `/ai movement <amount> <name> [skin] [loc]`
+### `/ai spawn movement <amount> <name> [skin] [loc]`
 Spawn movement-controller bots that use the loaded movement brain bank.
 
 ### `/ai brain <status|load|save|reset> [bot-name]`
@@ -142,27 +184,26 @@ Useful variants:
 
 Use `/ai evaluate list` to print all variants and scenarios.
 
-### `/ai info <bot-name>`
+### `/ai inspect info <bot-name>`
 Display neural network info about a specific bot.
 
-### `/ai stop`
+### `/ai train stop`
 End the current AI training session.
 
-## Environment (`/botenvironment`, alias `/botenv`)
+## Environment (`/bot environment`; legacy `/botenvironment`, alias `/botenv`)
 
 Configure how bots understand blocks and mobs.
 
 | Subcommand | Purpose |
 | --- | --- |
-| `help [blocks\|mobs]` | Show help |
-| `getMaterial <x> <y> <z>` | Print the block material at a location (player only) |
-| `addSolid <material>` | Add a material to the "solid" list |
-| `removeSolid <material>` | Remove a material from the solid list |
-| `listSolids` / `clearSolids` | List or clear custom solid materials |
-| `addCustomMob <entity>` | Mark a mob as target-eligible |
-| `removeCustomMob <entity>` | Remove a custom mob |
-| `listCustomMobs` / `clearCustomMobs` | List or clear custom mobs |
-| `mobListType <mode>` | Change custom mob list behavior |
+| `inspect material <x> <y> <z>` | Print the block material at a location (player only) |
+| `solid-block add <material>` | Add a material to the "solid" list |
+| `solid-block remove <material>` | Remove a material from the solid list |
+| `solid-block list` / `clear` | List or clear custom solid materials |
+| `custom-mob add <entity>` | Mark a mob as target-eligible |
+| `custom-mob remove <entity>` | Remove a custom mob |
+| `custom-mob list` / `clear` | List or clear custom mobs |
+| `mob-list-mode get` / `set <mode>` | Read or change custom mob list behavior |
 
 ## Plugin
 
