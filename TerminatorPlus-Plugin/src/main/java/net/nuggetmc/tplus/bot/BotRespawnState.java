@@ -33,22 +33,22 @@ record BotRespawnState(
         Location anchor = bot.respawnAnchor();
         if (anchor == null) return null;
 
-        PlayerInventory inventory = bot.getBukkitEntity().getInventory();
+        var botInventory = bot.getBotInventory();
         return new BotRespawnState(
                 bot.getUUID(),
                 bot.getBotName(),
                 anchor,
                 bot.skinData(),
-                copy(inventory.getStorageContents()),
-                copy(inventory.getArmorContents()),
-                copy(inventory.getExtraContents()),
-                bot.getBotInventory().getSelectedHotbarSlot(),
+                botInventory.respawnStorageContents(),
+                botInventory.respawnArmorContents(),
+                botInventory.respawnExtraContents(),
+                botInventory.respawnSelectedHotbarSlot(),
                 cloneItem(bot.defaultItem),
                 bot.getNeuralNetwork(),
                 bot.hasShieldEnabled(),
                 bot.getTargetPlayer(),
                 bot.getKills(),
-                bot.getBotInventory().isRespectingLoadout(),
+                botInventory.isRespectingLoadout(),
                 bot.trainingLoadout(),
                 bot.isInPlayerList()
         );

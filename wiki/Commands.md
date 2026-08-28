@@ -120,6 +120,8 @@ Set region for bot prioritization.
 
 ### `/bot settings auto-respawn <true|false>`
 Enable or disable automatic bot respawning. **Requires** `terminatorplus.admin`.
+Bots with an applied loadout respawn with that original loadout rather than
+their depleted inventory at death.
 
 ### `/bot settings set-spawn [bot-name]` (legacy `/bot setspawn [bot-name]`)
 Set the permanent respawn anchor of every living bot, or one named bot, to your

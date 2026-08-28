@@ -57,11 +57,13 @@ public final class BotInventory {
      * re-appear two seconds later, silently overwriting their intent.
      */
     private boolean respectLoadout;
+    private AppliedLoadout appliedLoadout;
 
     public BotInventory(Bot bot) {
         this.bot = bot;
         this.selectedHotbarSlot = 0;
         this.respectLoadout = false;
+        this.appliedLoadout = null;
     }
 
     /**
@@ -70,6 +72,12 @@ public final class BotInventory {
      * that the loadout chose to omit.
      */
     public void markLoadoutApplied() {
+        PlayerInventory inventory = raw();
+        this.appliedLoadout = new AppliedLoadout(
+                copy(inventory.getStorageContents()),
+                copy(inventory.getArmorContents()),
+                copy(inventory.getExtraContents()),
+                selectedHotbarSlot);
         this.respectLoadout = true;
     }
 
@@ -79,6 +87,7 @@ public final class BotInventory {
      */
     public void markLoadoutCleared() {
         this.respectLoadout = false;
+        this.appliedLoadout = null;
     }
 
     /**
@@ -87,6 +96,48 @@ public final class BotInventory {
      */
     public boolean isRespectingLoadout() {
         return respectLoadout;
+    }
+
+    public ItemStack[] respawnStorageContents() {
+        return respawnContents(respectLoadout,
+                appliedLoadout == null ? null : appliedLoadout.storage(), raw().getStorageContents());
+    }
+
+    public ItemStack[] respawnArmorContents() {
+        return respawnContents(respectLoadout,
+                appliedLoadout == null ? null : appliedLoadout.armor(), raw().getArmorContents());
+    }
+
+    public ItemStack[] respawnExtraContents() {
+        return respawnContents(respectLoadout,
+                appliedLoadout == null ? null : appliedLoadout.extra(), raw().getExtraContents());
+    }
+
+    public int respawnSelectedHotbarSlot() {
+        return respectLoadout && appliedLoadout != null
+                ? appliedLoadout.selectedHotbarSlot()
+                : selectedHotbarSlot;
+    }
+
+    static ItemStack[] respawnContents(boolean respectLoadout, ItemStack[] applied, ItemStack[] current) {
+        return copy(respectLoadout && applied != null ? applied : current);
+    }
+
+    private static ItemStack[] copy(ItemStack[] contents) {
+        if (contents == null) return new ItemStack[0];
+        ItemStack[] result = new ItemStack[contents.length];
+        for (int i = 0; i < contents.length; i++) {
+            result[i] = contents[i] == null ? null : contents[i].clone();
+        }
+        return result;
+    }
+
+    private record AppliedLoadout(
+            ItemStack[] storage,
+            ItemStack[] armor,
+            ItemStack[] extra,
+            int selectedHotbarSlot
+    ) {
     }
 
     public Bot getBot() {
