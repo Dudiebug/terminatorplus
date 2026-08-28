@@ -3,6 +3,10 @@
 > See [Legacy Status](Legacy-Status) for this page's reference status and
 > [Current Strategy](Current-Strategy) for the current target.
 
+## 6.2.0 - Per-Bot Runtime, Inspection, Respawn, and Movement Validation
+
+See [Release Notes 6.2.0](Release-Notes-6.2.0) for the full release notes.
+
 ## 6.1.0 - Legal Action Migration and Live Duel Metrics
 
 See [Release Notes 6.1.0](Release-Notes-6.1.0) for the full patch notes.
