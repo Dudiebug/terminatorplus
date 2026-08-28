@@ -19,7 +19,7 @@ class CommandOrganizationTest {
         for (String method : List.of("spawn", "inspect", "move", "equipment", "settings", "preset", "debug", "admin", "environment")) {
             assertTrue(command(BotCommand.class, method).visible(), method);
         }
-        for (String method : List.of("create", "multi", "give", "place", "armor", "info", "count", "reset", "weapons", "combatDebug", "gather", "scatter", "inventory", "loadout", "loadoutMix")) {
+        for (String method : List.of("create", "multi", "give", "place", "armor", "info", "count", "reset", "weapons", "combatDebug", "gather", "scatter", "setSpawn", "inventory", "loadout", "loadoutMix")) {
             assertFalse(command(BotCommand.class, method).visible(), method);
         }
     }
@@ -30,6 +30,7 @@ class CommandOrganizationTest {
         assertEquals("target-mobs", BotCommand.canonicalSettingsAction("mobtarget"));
         assertEquals("target-region", BotCommand.canonicalSettingsAction("TARGET-REGION"));
         assertEquals("movement-v2", BotCommand.canonicalSettingsAction("movementv2"));
+        assertEquals("set-spawn", BotCommand.canonicalSettingsAction("setspawn"));
         assertEquals("placement-material", BotCommand.canonicalSettingsAction("place"));
         assertEquals(null, BotCommand.canonicalSettingsAction("unknown"));
         assertEquals(EnumTargetGoal.NEAREST_HOSTILE, EnumTargetGoal.from("NEAREST-HOSTILE"));

@@ -335,6 +335,43 @@ public class BotCommand extends CommandInstance {
         return args.length == 2 ? List.of("true", "false") : List.of();
     }
 
+    @Command(
+            name = "setspawn",
+            desc = "Set the respawn anchor for all living bots or one named bot.",
+            aliases = "set-spawn",
+            autofill = "setSpawnAutofill",
+            visible = false
+    )
+    @Require(ADMIN_PERMISSION)
+    public void setSpawn(CommandSender sender, @OptArg("bot-name") String botName) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(ChatColor.RED + "This command can only be run by a player.");
+            return;
+        }
+
+        List<Bot> bots = manager.fetch().stream()
+                .filter(Bot.class::isInstance)
+                .map(Bot.class::cast)
+                .filter(Bot::isBotAlive)
+                .filter(bot -> botName == null || bot.getBotName().equalsIgnoreCase(botName))
+                .toList();
+        if (bots.isEmpty()) {
+            sender.sendMessage(ChatColor.RED + (botName == null
+                    ? "No living bots were found."
+                    : "No living bot named " + botName + " was found."));
+            return;
+        }
+
+        Location spawn = player.getLocation();
+        bots.forEach(bot -> bot.setRespawnAnchor(spawn));
+        sender.sendMessage(ChatColor.YELLOW.toString() + bots.size() + ChatColor.RESET
+                + " bot respawn anchor(s) set to your location.");
+    }
+
+    public List<String> setSpawnAutofill(CommandSender sender, String[] args) {
+        return args.length == 2 ? manager.fetchNames() : List.of();
+    }
+
     static Boolean parseBoolean(String value) {
         if ("true".equalsIgnoreCase(value)) return true;
         if ("false".equalsIgnoreCase(value)) return false;
@@ -691,7 +728,7 @@ public class BotCommand extends CommandInstance {
         if (arg1 == null || (!arg1.equalsIgnoreCase("combat-goal") && !arg1.equalsIgnoreCase("target-mobs") && !arg1.equalsIgnoreCase("target-player")
                 && !arg1.equalsIgnoreCase("show-in-player-list") && !arg1.equalsIgnoreCase("target-region")
                 && !arg1.equalsIgnoreCase("auto-respawn") && !arg1.equalsIgnoreCase("movement-v2")
-                && !arg1.equalsIgnoreCase("placement-material"))) {
+                && !arg1.equalsIgnoreCase("set-spawn") && !arg1.equalsIgnoreCase("placement-material"))) {
             sender.sendMessage(ChatUtils.LINE);
             sender.sendMessage(ChatColor.GOLD + "Bot Settings" + extra);
             sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "combat-goal" + ChatUtils.BULLET_FORMATTED + "Set the global bot target selection method.");
@@ -700,6 +737,7 @@ public class BotCommand extends CommandInstance {
             sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "target-region" + ChatUtils.BULLET_FORMATTED + "Set a region for the bots to prioritize entities inside.");
             sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "show-in-player-list" + ChatUtils.BULLET_FORMATTED + "Add newly spawned bots to the player list.");
             sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "auto-respawn" + ChatUtils.BULLET_FORMATTED + "Enable or disable automatic bot respawning.");
+            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "set-spawn" + ChatUtils.BULLET_FORMATTED + "Set bot respawn anchors to your location.");
             sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "movement-v2" + ChatUtils.BULLET_FORMATTED + "Enable, disable, or inspect Movement V2.");
             sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "placement-material" + ChatUtils.BULLET_FORMATTED + "Set the block bots use when placing blocks.");
             sender.sendMessage(ChatUtils.LINE);
@@ -843,6 +881,9 @@ public class BotCommand extends CommandInstance {
                 return;
             }
             respawn(sender, Boolean.toString(enabled));
+        } else if (arg1.equalsIgnoreCase("set-spawn")) {
+            if (!requireAdmin(sender)) return;
+            setSpawn(sender, arg2);
         } else if (arg1.equalsIgnoreCase("movement-v2")) {
             if (!requireAdmin(sender)) return;
             movementV2(sender, arg2);
@@ -865,6 +906,7 @@ public class BotCommand extends CommandInstance {
             output.add("target-region");
             output.add("show-in-player-list");
             output.add("auto-respawn");
+            output.add("set-spawn");
             output.add("movement-v2");
             output.add("placement-material");
         } else if (args.length == 3) {
@@ -881,6 +923,7 @@ public class BotCommand extends CommandInstance {
                     output.add(player.getName());
                 }
             }
+            if ("set-spawn".equals(action)) output.addAll(manager.fetchNames());
             if ("movement-v2".equals(action)) output.addAll(List.of("on", "off", "status"));
             if ("placement-material".equals(action)) output.addAll(placeAutofill(sender, new String[]{"place", args[2]}));
         }
@@ -2058,6 +2101,7 @@ public class BotCommand extends CommandInstance {
             case "region", "target-region" -> "target-region";
             case "addplayerlist", "show-in-player-list" -> "show-in-player-list";
             case "respawn", "auto-respawn" -> "auto-respawn";
+            case "setspawn", "set-spawn" -> "set-spawn";
             case "movementv2", "movement-v2" -> "movement-v2";
             case "place", "placement-material" -> "placement-material";
             default -> null;

@@ -1,5 +1,7 @@
 package net.nuggetmc.tplus.command.commands;
 
+import net.nuggetmc.tplus.command.annotation.Require;
+import org.bukkit.command.CommandSender;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -13,5 +15,15 @@ class BotCommandRespawnTest {
         assertEquals(Boolean.FALSE, BotCommand.parseBoolean("false"));
         assertNull(BotCommand.parseBoolean("on"));
         assertNull(BotCommand.parseBoolean(""));
+    }
+
+    @Test
+    void setSpawnUsesAdminPermissionAndCanonicalName() throws NoSuchMethodException {
+        Require require = BotCommand.class
+                .getMethod("setSpawn", CommandSender.class, String.class)
+                .getAnnotation(Require.class);
+
+        assertEquals("terminatorplus.admin", require.value());
+        assertEquals("set-spawn", BotCommand.canonicalSettingsAction("setspawn"));
     }
 }

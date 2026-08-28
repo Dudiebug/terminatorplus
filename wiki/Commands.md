@@ -14,7 +14,7 @@ New command paths use the following groups. The older flat paths documented belo
 /bot spawn single|multiple
 /bot inspect list|info|weapons
 /bot move gather|scatter
-/bot settings combat-goal|target-mobs|target-player|target-region|show-in-player-list|auto-respawn|movement-v2|placement-material
+/bot settings combat-goal|target-mobs|target-player|target-region|show-in-player-list|auto-respawn|set-spawn|movement-v2|placement-material
 /bot equipment inventory|give|armor|loadout|mixed-loadout
 /bot preset save|apply|list|delete
 /bot debug behavior|combat|movement
@@ -120,6 +120,10 @@ Set region for bot prioritization.
 
 ### `/bot settings auto-respawn <true|false>`
 Enable or disable automatic bot respawning. **Requires** `terminatorplus.admin`.
+
+### `/bot settings set-spawn [bot-name]` (legacy `/bot setspawn [bot-name]`)
+Set the permanent respawn anchor of every living bot, or one named bot, to your
+current location. **Requires** `terminatorplus.admin` and must be run by a player.
 
 ### `/bot settings movement-v2 <on|off|status>`
 Enable, disable, or inspect Movement V2. **Requires** `terminatorplus.admin`.
