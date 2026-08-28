@@ -26,6 +26,8 @@ ai:
       quarantine-bad-files: true
       legacy-import-behavior: import-compatible-or-reset
       debug-logging: false
+    v2:
+      enabled: true
 ```
 
 | Key | Default | Description |
@@ -42,6 +44,10 @@ ai:
 | `ai.movement.bank.quarantine-bad-files` | `true` | Move bad manifests/brains aside instead of reusing them. |
 | `ai.movement.bank.legacy-import-behavior` | `import-compatible-or-reset` | Import compatible `ai/brain.json` as fallback, otherwise reset safely. |
 | `ai.movement.bank.debug-logging` | `false` | Log route changes to console. |
+| `ai.movement.v2.enabled` | `true` | Enables Movement V2 route planning. Version 6.2.4 enables it once during upgrade; later admin changes persist. |
+
+Use `/bot settings movement-v2 off` to disable Movement V2, or replace `off`
+with `on` or `status` to enable or inspect it.
 
 ## Training
 

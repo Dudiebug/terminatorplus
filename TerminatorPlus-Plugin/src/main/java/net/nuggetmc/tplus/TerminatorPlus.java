@@ -9,6 +9,7 @@ import net.nuggetmc.tplus.bot.combat.CombatDirector;
 import net.nuggetmc.tplus.bot.gui.BotInventoryListener;
 import net.nuggetmc.tplus.bot.gui.BotManagementUI;
 import net.nuggetmc.tplus.bot.movement.MovementOutputApplier;
+import net.nuggetmc.tplus.bot.navigation.MovementV2Settings;
 import net.nuggetmc.tplus.bot.preset.PresetManager;
 import net.nuggetmc.tplus.bridge.InternalBridgeImpl;
 import net.nuggetmc.tplus.command.CommandHandler;
@@ -81,6 +82,7 @@ public class TerminatorPlus extends JavaPlugin {
         instance = this;
         version = getDescription().getVersion();
         saveDefaultConfig();
+        MovementV2Settings.applyDefaultEnabledMigration(this);
 
         mcVersion = Bukkit.getServer().getMinecraftVersion();
         correctVersion = mcVersion.equals(REQUIRED_VERSION);
