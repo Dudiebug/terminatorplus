@@ -79,6 +79,9 @@ the server thread; it must never receive a live Bukkit `World` or `Block`.
   measured against a different movement system.
 - The movement neural network still observes the real opponent and combat
   intent. A route waypoint changes only where its locomotion output steers.
+- The movement neural network is optional. With
+  `ai.movement.neural-enabled: false`, V2 routing stays active and ordinary
+  locomotion uses the deterministic baseline policy.
 - Existing combat policy still decides whether to approach, hold, commit, or
   use a combat item. Movement V2 does not attack or choose combat tactics.
 - Route traversal aligns head and body yaw with the validated movement vector
