@@ -509,11 +509,11 @@ public final class BotManagementUI implements Listener {
         put(session, 17, Material.BOOK, "Help / plugin info", UiAction.OPEN_HELP, null,
                 "Show existing help and plugin information");
         put(session, 19, Material.ENDER_PEARL, "Gather all", UiAction.BOT_GATHER, null,
-                "/bot gather");
+                "/bot move gather");
         put(session, 20, Material.COMPASS, "Circular scatter", UiAction.BOT_SCATTER, null,
-                "/bot scatter (default radius)");
+                "/bot move scatter (default radius)");
         put(session, 21, Material.PAPER, "Count bots", UiAction.BOT_COUNT, null,
-                "/bot count");
+                "/bot inspect list");
     }
 
     private void renderBots(Session session) {
@@ -562,17 +562,17 @@ public final class BotManagementUI implements Listener {
             return;
         }
         put(session, 11, Material.PAPER, "Bot info", UiAction.BOT_INFO, bot.getBotName(),
-                "/bot info " + bot.getBotName());
+                "/bot inspect info " + bot.getBotName());
         put(session, 12, Material.REDSTONE, "AI info", UiAction.AI_INFO, bot.getBotName(),
-                "/ai info " + bot.getBotName());
+                "/ai inspect info " + bot.getBotName());
         put(session, 13, Material.DIAMOND_SWORD, "Weapon status", UiAction.BOT_WEAPONS, bot.getBotName(),
-                "/bot weapons " + bot.getBotName());
+                "/bot inspect weapons " + bot.getBotName());
         put(session, 14, Material.CHEST, "Edit inventory", UiAction.BOT_INVENTORY, bot.getBotName(),
-                "/bot inventory " + bot.getBotName());
+                "/bot equipment inventory " + bot.getBotName());
         put(session, 15, Material.OBSERVER, "Combat debug on", UiAction.BOT_COMBAT_DEBUG,
-                bot.getBotName() + " on", "/bot combatdebug " + bot.getBotName() + " on");
+                bot.getBotName() + " on", "/bot debug combat " + bot.getBotName() + " on");
         put(session, 16, Material.BARRIER, "Combat debug off", UiAction.BOT_COMBAT_DEBUG,
-                bot.getBotName() + " off", "/bot combatdebug " + bot.getBotName() + " off");
+                bot.getBotName() + " off", "/bot debug combat " + bot.getBotName() + " off");
         put(session, 17, Material.SHULKER_BOX, "Apply loadout...", UiAction.BOT_LOADOUT, null,
                 "Enter loadout [bot-name]");
     }
@@ -602,18 +602,18 @@ public final class BotManagementUI implements Listener {
                 "Enter a radius; command validates it");
         put(session, 13, Material.TOTEM_OF_UNDYING,
                 "Respawn: " + (respawnEnabled ? "enabled" : "disabled"), UiAction.BOT_RESPAWN, null,
-                "/bot respawn");
+                "/bot settings auto-respawn");
         put(session, 14, Material.LIME_DYE, "Enable respawn", UiAction.BOT_RESPAWN, "true",
-                "/bot respawn true");
+                "/bot settings auto-respawn true");
         put(session, 15, Material.RED_DYE, "Disable respawn", UiAction.BOT_RESPAWN, "false",
-                "/bot respawn false");
+                "/bot settings auto-respawn false");
         put(session, 16, Material.FEATHER,
                 "Movement V2: " + (movementV2Enabled ? "enabled" : "disabled"), UiAction.BOT_MOVEMENT_V2, "status",
-                "/bot movementv2 status");
+                "/bot settings movement-v2 status");
         put(session, 17, Material.LIME_WOOL, "Enable Movement V2", UiAction.BOT_MOVEMENT_V2, "on",
-                "/bot movementv2 on");
+                "/bot settings movement-v2 on");
         put(session, 18, Material.RED_WOOL, "Disable Movement V2", UiAction.BOT_MOVEMENT_V2, "off",
-                "/bot movementv2 off");
+                "/bot settings movement-v2 off");
     }
 
     private void renderAi(Session session) {
@@ -632,7 +632,7 @@ public final class BotManagementUI implements Listener {
             put(session, 15, Material.WRITABLE_BOOK, "Save selected brain", UiAction.AI_BRAIN_SAVE,
                     bot == null ? null : bot.getBotName(), "/ai brain save <selected bot>");
             put(session, 19, Material.REDSTONE, "AI info (selected)", UiAction.AI_INFO,
-                    bot == null ? null : bot.getBotName(), "/ai info <selected bot>");
+                    bot == null ? null : bot.getBotName(), "/ai inspect info <selected bot>");
         } else {
             put(session, 15, Material.WRITABLE_BOOK, "Save brain...", UiAction.AI_BRAIN_SAVE_INPUT, null,
                     "Enter optional bot name");
@@ -651,9 +651,9 @@ public final class BotManagementUI implements Listener {
 
     private void renderCombat(Session session) {
         put(session, 10, Material.DIAMOND_SWORD, "Weapons (all)", UiAction.BOT_WEAPONS, null,
-                "/bot weapons");
+                "/bot inspect weapons");
         put(session, 11, Material.IRON_SWORD, "Weapons (selected)", UiAction.BOT_WEAPONS,
-                selectedName(session), "/bot weapons <selected bot>");
+                selectedName(session), "/bot inspect weapons <selected bot>");
         put(session, 12, Material.CHEST, "Give item...", UiAction.BOT_GIVE, null,
                 "item [bot-name] [slot]");
         put(session, 13, Material.BRICKS, "Placement material...", UiAction.BOT_PLACE, null,
@@ -675,45 +675,45 @@ public final class BotManagementUI implements Listener {
         String selectedName = selectedName(session);
         put(session, 21, Material.CHEST, selectedName == null ? "Open inventory..." : "Open selected inventory",
                 selectedName == null ? UiAction.BOT_INVENTORY_INPUT : UiAction.BOT_INVENTORY,
-                selectedName, selectedName == null ? "Enter bot-name" : "/bot inventory <selected bot>");
+                selectedName, selectedName == null ? "Enter bot-name" : "/bot equipment inventory <selected bot>");
         put(session, 22, Material.PAPER, "Count bots", UiAction.BOT_COUNT, null,
-                "/bot count");
+                "/bot inspect list");
     }
 
     private void renderAdmin(Session session) {
         put(session, 10, Material.TNT, "Reset all bots", UiAction.BOT_RESET, null,
                 "Confirmation and permission recheck required");
         put(session, 11, Material.LIME_DYE, "Mob targeting on", UiAction.BOT_SETTINGS, "mobtarget true",
-                "/bot settings mobtarget true");
+                "/bot settings target-mobs true");
         put(session, 12, Material.RED_DYE, "Mob targeting off", UiAction.BOT_SETTINGS, "mobtarget false",
-                "/bot settings mobtarget false");
+                "/bot settings target-mobs false");
         put(session, 13, Material.LIME_DYE, "Player-list on", UiAction.BOT_SETTINGS, "addplayerlist true",
-                "/bot settings addplayerlist true");
+                "/bot settings show-in-player-list true");
         put(session, 14, Material.RED_DYE, "Player-list off", UiAction.BOT_SETTINGS, "addplayerlist false",
-                "/bot settings addplayerlist false");
+                "/bot settings show-in-player-list false");
         put(session, 15, Material.COMPASS, "Set target goal...", UiAction.BOT_SETTINGS_INPUT, null,
-                "setgoal value");
+                "combat-goal value");
         put(session, 16, Material.BEACON, "Set region...", UiAction.BOT_SETTINGS_REGION_INPUT, null,
-                "region bounds and weights");
+                "target-region bounds and weights");
         put(session, 17, Material.BARRIER, "Clear region", UiAction.BOT_SETTINGS_REGION_CLEAR, null,
                 "Confirmation required");
         put(session, 18, Material.COMPARATOR, "Debug expression...", UiAction.BOT_DEBUG, null,
-                "Existing debugger expression");
+                "Enter a behavior expression");
         put(session, 19, Material.OBSERVER, "Combat debug all on", UiAction.BOT_COMBAT_DEBUG, "all on",
-                "/bot combatdebug all on");
+                "/bot debug combat all on");
         put(session, 20, Material.REDSTONE_TORCH, "Combat debug all off", UiAction.BOT_COMBAT_DEBUG, "all off",
-                "/bot combatdebug all off");
+                "/bot debug combat all off");
         put(session, 21, Material.PAPER, "Combat debug args...", UiAction.BOT_COMBAT_DEBUG_INPUT, null,
                 "bot-name|all on|off");
     }
 
     private void renderEnvironment(Session session) {
         put(session, 10, Material.BOOK, "Environment help", UiAction.ENV_HELP, null,
-                "/botenvironment help");
+                "/bot environment");
         put(session, 11, Material.BOOK, "Block help", UiAction.ENV_HELP, "blocks",
-                "/botenvironment help blocks");
+                "/bot environment solid-block");
         put(session, 12, Material.BOOK, "Mob help", UiAction.ENV_HELP, "mobs",
-                "/botenvironment help mobs");
+                "/bot environment custom-mob");
         put(session, 13, Material.COMPASS, "Get material...", UiAction.ENV_GET_MATERIAL, null,
                 "x y z (relative values supported)");
         put(session, 14, Material.BRICKS, "Add solid...", UiAction.ENV_ADD_SOLID, null,
@@ -721,7 +721,7 @@ public final class BotManagementUI implements Listener {
         put(session, 15, Material.BARRIER, "Remove solid...", UiAction.ENV_REMOVE_SOLID, null,
                 "material or x y z");
         put(session, 16, Material.PAPER, "List solids", UiAction.ENV_LIST_SOLIDS, null,
-                "/botenvironment listSolids");
+                "/bot environment solid-block list");
         put(session, 17, Material.TNT, "Clear solids", UiAction.ENV_CLEAR_SOLIDS, null,
                 "Confirmation required");
         put(session, 18, Material.ZOMBIE_HEAD, "Add custom mob...", UiAction.ENV_ADD_CUSTOM_MOB, null,
@@ -729,13 +729,13 @@ public final class BotManagementUI implements Listener {
         put(session, 19, Material.BARRIER, "Remove custom mob...", UiAction.ENV_REMOVE_CUSTOM_MOB, null,
                 "entity type");
         put(session, 20, Material.PAPER, "List custom mobs", UiAction.ENV_LIST_CUSTOM_MOBS, null,
-                "/botenvironment listCustomMobs");
+                "/bot environment custom-mob list");
         put(session, 21, Material.TNT, "Clear custom mobs", UiAction.ENV_CLEAR_CUSTOM_MOBS, null,
                 "Confirmation required");
         put(session, 22, Material.COMPARATOR, "Mob list type...", UiAction.ENV_MOB_LIST_TYPE, null,
                 "custom list mode");
         put(session, 23, Material.FEATHER, "Movement V2 status", UiAction.ENV_MOVEMENT_V2_STATUS, null,
-                "/botenvironment movementV2Status [bot-name]");
+                "/bot debug movement [bot-name]");
     }
 
     private void renderHelp(Session session) {
@@ -748,7 +748,7 @@ public final class BotManagementUI implements Listener {
         put(session, 13, Material.REDSTONE, "AI command help", UiAction.AI_HELP, null,
                 "/ai");
         put(session, 14, Material.GRASS_BLOCK, "Environment help", UiAction.ENV_HELP, null,
-                "/botenvironment help");
+                "/bot environment");
     }
 
     private void renderConfirmation(Session session) {
@@ -948,66 +948,66 @@ public final class BotManagementUI implements Listener {
         CANCEL(null, false, false, false, "Cancel"),
 
         BOT_HELP("bot info", false, false, false, "Bot help"),
-        BOT_CREATE("bot create", true, false, false, "Create bot"),
-        BOT_MULTI("bot multi", true, false, false, "Create multiple bots"),
-        BOT_RESPAWN("bot respawn", false, false, true, "Respawn"),
-        BOT_MOVEMENT_V2("bot movementv2", false, false, true, "Movement V2"),
-        BOT_GIVE("bot give", true, false, false, "Give item"),
-        BOT_PLACE("bot place", true, false, false, "Placement material"),
-        BOT_ARMOR("bot armor", true, false, false, "Armor"),
-        BOT_INFO("bot info", false, false, false, "Bot info"),
-        BOT_COUNT("bot count", false, false, false, "Count bots"),
-        BOT_RESET("bot reset", false, true, true, "Reset all bots"),
+        BOT_CREATE("bot spawn single", true, false, false, "Create bot"),
+        BOT_MULTI("bot spawn multiple", true, false, false, "Create multiple bots"),
+        BOT_RESPAWN("bot settings auto-respawn", false, false, true, "Respawn"),
+        BOT_MOVEMENT_V2("bot settings movement-v2", false, false, true, "Movement V2"),
+        BOT_GIVE("bot equipment give", true, false, false, "Give item"),
+        BOT_PLACE("bot settings placement-material", true, false, false, "Placement material"),
+        BOT_ARMOR("bot equipment armor", true, false, false, "Armor"),
+        BOT_INFO("bot inspect info", false, false, false, "Bot info"),
+        BOT_COUNT("bot inspect list", false, false, false, "Count bots"),
+        BOT_RESET("bot admin reset", false, true, true, "Reset all bots"),
         BOT_SETTINGS("bot settings", false, false, false, "Bot settings"),
         BOT_SETTINGS_INPUT("bot settings", true, false, false, "Bot settings"),
-        BOT_SETTINGS_REGION_INPUT("bot settings region", true, false, false, "Set region"),
-        BOT_SETTINGS_REGION_CLEAR("bot settings region clear", false, true, false, "Clear region"),
-        BOT_DEBUG("bot debug", true, false, true, "Debug expression"),
-        BOT_WEAPONS("bot weapons", false, false, false, "Weapon status"),
-        BOT_COMBAT_DEBUG("bot combatdebug", false, false, true, "Combat debug"),
-        BOT_COMBAT_DEBUG_INPUT("bot combatdebug", true, false, true, "Combat debug"),
-        BOT_GATHER("bot gather", false, false, false, "Gather"),
-        BOT_SCATTER("bot scatter", false, false, false, "Circular scatter"),
-        BOT_SCATTER_RADIUS("bot scatter", true, false, false, "Scatter radius"),
-        BOT_INVENTORY("bot inventory", false, false, false, "Inventory"),
-        BOT_INVENTORY_INPUT("bot inventory", true, false, false, "Inventory"),
+        BOT_SETTINGS_REGION_INPUT("bot settings target-region", true, false, false, "Set region"),
+        BOT_SETTINGS_REGION_CLEAR("bot settings target-region clear", false, true, false, "Clear region"),
+        BOT_DEBUG("bot debug behavior", true, false, true, "Debug expression"),
+        BOT_WEAPONS("bot inspect weapons", false, false, false, "Weapon status"),
+        BOT_COMBAT_DEBUG("bot debug combat", false, false, true, "Combat debug"),
+        BOT_COMBAT_DEBUG_INPUT("bot debug combat", true, false, true, "Combat debug"),
+        BOT_GATHER("bot move gather", false, false, false, "Gather"),
+        BOT_SCATTER("bot move scatter", false, false, false, "Circular scatter"),
+        BOT_SCATTER_RADIUS("bot move scatter", true, false, false, "Scatter radius"),
+        BOT_INVENTORY("bot equipment inventory", false, false, false, "Inventory"),
+        BOT_INVENTORY_INPUT("bot equipment inventory", true, false, false, "Inventory"),
         BOT_PRESET_SAVE("bot preset save", true, false, false, "Save preset"),
         BOT_PRESET_APPLY("bot preset apply", true, false, false, "Apply preset"),
         BOT_PRESET_LIST("bot preset list", false, false, false, "List presets"),
         BOT_PRESET_DELETE("bot preset delete", true, true, true, "Delete preset"),
-        BOT_LOADOUT("bot loadout", true, false, false, "Loadout"),
-        BOT_LOADOUT_MIX("bot loadoutmix", true, false, false, "Loadout mix"),
+        BOT_LOADOUT("bot equipment loadout", true, false, false, "Loadout"),
+        BOT_LOADOUT_MIX("bot equipment mixed-loadout", true, false, false, "Loadout mix"),
 
         AI_HELP("ai", false, false, false, "AI help"),
-        AI_RANDOM("ai random", true, false, false, "Random AI bots"),
-        AI_REINFORCEMENT("ai reinforcement", true, false, false, "Training session"),
-        AI_STOP("ai stop", false, true, false, "Stop training"),
+        AI_RANDOM("ai spawn random", true, false, false, "Random AI bots"),
+        AI_REINFORCEMENT("ai train reinforcement", true, false, false, "Training session"),
+        AI_STOP("ai train stop", false, true, false, "Stop training"),
         AI_BRAIN_STATUS("ai brain status", false, false, false, "Brain status"),
         AI_BRAIN_LOAD("ai brain load", false, false, false, "Load brain"),
         AI_BRAIN_SAVE("ai brain save", false, false, false, "Save brain"),
         AI_BRAIN_SAVE_INPUT("ai brain save", true, false, false, "Save brain"),
         AI_BRAIN_RESET("ai brain reset", false, true, false, "Reset brain"),
-        AI_MOVEMENT("ai movement", true, false, false, "Movement bots"),
+        AI_MOVEMENT("ai spawn movement", true, false, false, "Movement bots"),
         AI_EVALUATE("ai evaluate", false, false, false, "Evaluate"),
         AI_EVALUATE_INPUT("ai evaluate", true, false, false, "Evaluate"),
-        AI_INFO("ai info", false, false, false, "AI info"),
-        AI_INFO_INPUT("ai info", true, false, false, "AI info"),
+        AI_INFO("ai inspect info", false, false, false, "AI info"),
+        AI_INFO_INPUT("ai inspect info", true, false, false, "AI info"),
 
         MAIN_INFO("terminatorplus", false, false, false, "Plugin information"),
         MAIN_DEBUG_INFO("terminatorplus debuginfo", false, false, false, "Debug upload"),
 
-        ENV_HELP("botenvironment help", false, false, false, "Environment help"),
-        ENV_GET_MATERIAL("botenvironment getMaterial", true, false, false, "Get material"),
-        ENV_ADD_SOLID("botenvironment addSolid", true, false, false, "Add solid"),
-        ENV_REMOVE_SOLID("botenvironment removeSolid", true, true, false, "Remove solid"),
-        ENV_LIST_SOLIDS("botenvironment listSolids", false, false, false, "List solids"),
-        ENV_CLEAR_SOLIDS("botenvironment clearSolids", false, true, false, "Clear solids"),
-        ENV_ADD_CUSTOM_MOB("botenvironment addCustomMob", true, false, false, "Add custom mob"),
-        ENV_REMOVE_CUSTOM_MOB("botenvironment removeCustomMob", true, true, false, "Remove custom mob"),
-        ENV_LIST_CUSTOM_MOBS("botenvironment listCustomMobs", false, false, false, "List custom mobs"),
-        ENV_CLEAR_CUSTOM_MOBS("botenvironment clearCustomMobs", false, true, false, "Clear custom mobs"),
-        ENV_MOB_LIST_TYPE("botenvironment mobListType", true, false, false, "Mob list type"),
-        ENV_MOVEMENT_V2_STATUS("botenvironment movementV2Status", false, false, false, "Movement V2 status");
+        ENV_HELP("bot environment", false, false, false, "Environment help"),
+        ENV_GET_MATERIAL("bot environment inspect material", true, false, false, "Get material"),
+        ENV_ADD_SOLID("bot environment solid-block add", true, false, false, "Add solid"),
+        ENV_REMOVE_SOLID("bot environment solid-block remove", true, true, false, "Remove solid"),
+        ENV_LIST_SOLIDS("bot environment solid-block list", false, false, false, "List solids"),
+        ENV_CLEAR_SOLIDS("bot environment solid-block clear", false, true, false, "Clear solids"),
+        ENV_ADD_CUSTOM_MOB("bot environment custom-mob add", true, false, false, "Add custom mob"),
+        ENV_REMOVE_CUSTOM_MOB("bot environment custom-mob remove", true, true, false, "Remove custom mob"),
+        ENV_LIST_CUSTOM_MOBS("bot environment custom-mob list", false, false, false, "List custom mobs"),
+        ENV_CLEAR_CUSTOM_MOBS("bot environment custom-mob clear", false, true, false, "Clear custom mobs"),
+        ENV_MOB_LIST_TYPE("bot environment mob-list-mode set", true, false, false, "Mob list type"),
+        ENV_MOVEMENT_V2_STATUS("bot debug movement", false, false, true, "Movement V2 status");
 
         private final String command;
         private final boolean prompt;

@@ -61,8 +61,109 @@ public class AICommand extends CommandInstance implements AIManager {
     }
 
     @Command(
+            name = "spawn",
+            desc = "Spawn AI-controlled bots.",
+            autofill = "spawnAutofill"
+    )
+    public void spawn(CommandSender sender, List<String> args) {
+        if (args.isEmpty()) {
+            sendGroupHelp(sender, "/ai spawn", "random <amount> <name> [skin] [location]", "movement <amount> <name> [skin] [location]");
+            return;
+        }
+
+        if (args.get(0).equalsIgnoreCase("movement")) {
+            movement(sender, args.subList(1, args.size()));
+            return;
+        }
+        if (args.get(0).equalsIgnoreCase("random")) {
+            if (args.size() < 3) {
+                sender.sendMessage(ChatColor.RED + "Usage: /ai spawn random <amount> <name> [skin] [location]");
+                return;
+            }
+            int amount;
+            try {
+                amount = Integer.parseInt(args.get(1));
+            } catch (NumberFormatException e) {
+                sender.sendMessage(ChatColor.RED + "Amount must be a number.");
+                return;
+            }
+            String skin = args.size() >= 4 ? args.get(3) : null;
+            String location = args.size() >= 5 ? String.join(" ", args.subList(4, args.size())) : "";
+            random(sender, args.subList(1, args.size()), amount, args.get(2), skin, location);
+            return;
+        }
+        sendGroupHelp(sender, "/ai spawn", "random <amount> <name> [skin] [location]", "movement <amount> <name> [skin] [location]");
+    }
+
+    public List<String> spawnAutofill(CommandSender sender, String[] args) {
+        return args.length == 2 ? List.of("random", "movement") : List.of();
+    }
+
+    @Command(
+            name = "train",
+            desc = "Start or stop AI training.",
+            autofill = "trainAutofill"
+    )
+    public void train(CommandSender sender, List<String> args) {
+        if (args.isEmpty()) {
+            sendGroupHelp(sender, "/ai train", "reinforcement <population-size> <name> [skin] [mode] [round-minutes]", "stop");
+            return;
+        }
+        if (args.get(0).equalsIgnoreCase("stop")) {
+            stop(sender);
+            return;
+        }
+        if (!args.get(0).equalsIgnoreCase("reinforcement")) {
+            sendGroupHelp(sender, "/ai train", "reinforcement <population-size> <name> [skin] [mode] [round-minutes]", "stop");
+            return;
+        }
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage("This is a player-only command.");
+            return;
+        }
+        if (args.size() < 3) {
+            sender.sendMessage(ChatColor.RED + "Usage: /ai train reinforcement <population-size> <name> [skin] [mode] [round-minutes]");
+            return;
+        }
+        int populationSize;
+        try {
+            populationSize = Integer.parseInt(args.get(1));
+        } catch (NumberFormatException e) {
+            sender.sendMessage(ChatColor.RED + "Population size must be a number.");
+            return;
+        }
+        String skin = args.size() >= 4 ? args.get(3) : null;
+        String mode = args.size() >= 5 ? args.get(4) : null;
+        String roundMinutes = args.size() >= 6 ? args.get(5) : null;
+        reinforcement(player, populationSize, args.get(2), skin, mode, roundMinutes);
+    }
+
+    public List<String> trainAutofill(CommandSender sender, String[] args) {
+        return args.length == 2 ? List.of("reinforcement", "stop") : List.of();
+    }
+
+    @Command(
+            name = "inspect",
+            desc = "Inspect AI state.",
+            autofill = "inspectAutofill"
+    )
+    public void inspect(CommandSender sender, List<String> args) {
+        if (args.size() == 2 && args.get(0).equalsIgnoreCase("info")) {
+            info(sender, args.get(1));
+            return;
+        }
+        sendGroupHelp(sender, "/ai inspect", "info <bot-name>");
+    }
+
+    public List<String> inspectAutofill(CommandSender sender, String[] args) {
+        if (args.length == 2) return List.of("info");
+        return args.length == 3 && args[1].equalsIgnoreCase("info") ? manager.fetchNames() : List.of();
+    }
+
+    @Command(
             name = "random",
-            desc = "Create bots with random neural networks, collecting feed data."
+            desc = "Create bots with random neural networks, collecting feed data.",
+            visible = false
     )
     public void random(CommandSender sender, List<String> args, @Arg("amount") int amount, @Arg("name") String name, @OptArg("skin") String skin, @OptArg("loc") @TextArg String loc) {
         if (sender instanceof Player && args.size() < 2) {
@@ -76,7 +177,8 @@ public class AICommand extends CommandInstance implements AIManager {
 
     @Command(
             name = "reinforcement",
-            desc = "Begin an AI training session."
+            desc = "Begin an AI training session.",
+            visible = false
     )
     public void reinforcement(Player sender, @Arg("population-size") int populationSize, @Arg("name") String name, @OptArg("skin") String skin, @OptArg("mode") String mode, @OptArg("round-minutes") String roundMinutesStr) {
         //FIXME: Sometimes, bots will become invisible, or just stop working if they're the last one alive, this has been partially fixed (invis part) see Terminator#removeBot, which removes the bot.
@@ -129,7 +231,8 @@ public class AICommand extends CommandInstance implements AIManager {
 
     @Command(
             name = "stop",
-            desc = "End a currently running AI training session."
+            desc = "End a currently running AI training session.",
+            visible = false
     )
     public void stop(CommandSender sender) {
         if (agent == null) {
@@ -178,7 +281,8 @@ public class AICommand extends CommandInstance implements AIManager {
 
     @Command(
             name = "movement",
-            desc = "Create movement-controller bot(s) from the persisted movement brain."
+            desc = "Create movement-controller bot(s) from the persisted movement brain.",
+            visible = false
     )
     public void movement(CommandSender sender, List<String> args) {
         if (args.size() < 2) {
@@ -295,7 +399,8 @@ public class AICommand extends CommandInstance implements AIManager {
     @Command(
             name = "info",
             desc = "Display neural network information about a bot.",
-            autofill = "infoAutofill"
+            autofill = "infoAutofill",
+            visible = false
     )
     public void info(CommandSender sender, @Arg("bot-name") String name) {
         sender.sendMessage("Processing request...");
@@ -723,6 +828,15 @@ public class AICommand extends CommandInstance implements AIManager {
         String normalized = MovementTrainingConfig.normalizeFamilyId(value);
         return MovementBrainBank.FALLBACK_BRAIN_NAME.equals(normalized)
                 || net.nuggetmc.tplus.api.agent.legacyagent.ai.movement.MovementNetworkShape.BRANCH_FAMILY_IDS.contains(normalized);
+    }
+
+    private void sendGroupHelp(CommandSender sender, String command, String... entries) {
+        sender.sendMessage(ChatUtils.LINE);
+        sender.sendMessage(ChatColor.GOLD + "Command help" + ChatColor.GRAY + " [" + ChatColor.YELLOW + command + ChatColor.GRAY + "]");
+        for (String entry : entries) {
+            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + command + " " + entry);
+        }
+        sender.sendMessage(ChatUtils.LINE);
     }
 
     private record MovementTrainingRequest(

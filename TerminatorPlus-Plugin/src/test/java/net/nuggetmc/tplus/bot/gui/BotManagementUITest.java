@@ -36,11 +36,11 @@ class BotManagementUITest {
 
     @Test
     void commandMappingUsesExistingPlayerCommands() {
-        assertEquals("bot create", BotManagementUI.commandFor(BotManagementUI.UiAction.BOT_CREATE));
-        assertEquals("bot multi 3 bot", BotManagementUI.commandFor(
+        assertEquals("bot spawn single", BotManagementUI.commandFor(BotManagementUI.UiAction.BOT_CREATE));
+        assertEquals("bot spawn multiple 3 bot", BotManagementUI.commandFor(
                 BotManagementUI.UiAction.BOT_MULTI, "3 bot"));
         assertEquals("ai brain reset", BotManagementUI.commandFor(BotManagementUI.UiAction.AI_BRAIN_RESET));
-        assertEquals("botenvironment movementV2Status", BotManagementUI.commandFor(
+        assertEquals("bot debug movement", BotManagementUI.commandFor(
                 BotManagementUI.UiAction.ENV_MOVEMENT_V2_STATUS));
         assertEquals("terminatorplus debuginfo", BotManagementUI.commandFor(
                 BotManagementUI.UiAction.MAIN_DEBUG_INFO));
@@ -99,7 +99,7 @@ class BotManagementUITest {
     void duplicateNamesCannotUseSelectedBotActions() {
         assertTrue(BotManagementUI.isUniqueBotName("bot", List.of("bot", "other")));
         assertFalse(BotManagementUI.isUniqueBotName("bot", List.of("bot", "BOT")));
-        assertEquals("bot settings region 0 0 0 10 10 10", BotManagementUI.commandFor(
+        assertEquals("bot settings target-region 0 0 0 10 10 10", BotManagementUI.commandFor(
                 BotManagementUI.UiAction.BOT_SETTINGS_REGION_INPUT, "0 0 0 10 10 10"));
     }
 
