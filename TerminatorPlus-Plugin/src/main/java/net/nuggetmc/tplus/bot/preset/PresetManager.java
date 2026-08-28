@@ -158,9 +158,9 @@ public final class PresetManager {
 
         int sel = p.selectedHotbarSlot != null ? p.selectedHotbarSlot : 0;
         bot.selectHotbarSlot(sel);
-        bot.getBotInventory().markLoadoutApplied();
 
         if (p.shield != null) bot.setShield(p.shield);
+        bot.getBotInventory().markLoadoutApplied();
 
         // Global settings (applies to all bots, not just this one).
         if (p.targetGoal != null && plugin.getManager().getAgent() instanceof LegacyAgent la) {
