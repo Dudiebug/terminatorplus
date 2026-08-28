@@ -131,6 +131,8 @@ Teleport all bots to your location.
 
 ### `/bot move scatter [radius]`
 Distribute living bots in a safe circular spread around your location.
+The radius has no command-defined maximum; the world border still determines
+whether destinations are valid.
 
 ### `/bot debug behavior <expression>`
 Run a debugger behavior expression. **Requires** `terminatorplus.admin`.

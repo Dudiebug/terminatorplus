@@ -19,6 +19,7 @@ import net.nuggetmc.tplus.api.utils.ChatUtils;
 import net.nuggetmc.tplus.bot.Bot;
 import net.nuggetmc.tplus.bot.navigation.BukkitNavigationContext;
 import net.nuggetmc.tplus.bot.navigation.MovementV2Controller;
+import net.nuggetmc.tplus.bot.navigation.MovementV2Settings;
 import net.nuggetmc.tplus.command.CommandHandler;
 import net.nuggetmc.tplus.command.CommandInstance;
 import net.nuggetmc.tplus.command.annotation.Arg;
@@ -385,7 +386,7 @@ public class BotEnvironmentCommand extends CommandInstance {
     )
     public void movementV2Status(CommandSender sender, List<String> args) {
         TerminatorPlus plugin = TerminatorPlus.getInstance();
-        boolean enabled = plugin.getConfig().getBoolean("ai.movement.v2.enabled", false);
+        boolean enabled = MovementV2Settings.isEnabled(plugin);
         String requested = args.isEmpty() ? null : args.get(0);
         List<Bot> bots = plugin.getManager().fetch().stream()
                 .filter(Bot.class::isInstance)

@@ -71,7 +71,8 @@ the server thread; it must never receive a live Bukkit `World` or `Block`.
 
 ## Compatibility boundaries
 
-- The feature does nothing unless `ai.movement.v2.enabled` is `true`.
+- The feature is enabled by default. Version 6.2.4 also enables it once when an
+  existing installation upgrades; later admin changes persist.
 - The old movement and obstacle code remains the fallback.
 - Full-replacement neural-network mode is unchanged.
 - Movement training bots are excluded so saved fitness values are not silently
@@ -83,10 +84,11 @@ the server thread; it must never receive a live Bukkit `World` or `Block`.
 
 ## Status command
 
-Use `/botenvironment movementV2Status` for all active bots, or
-`/botenvironment movementV2Status <bot-name>` for one name. The command shows
-the current route position, plan/replan/fallback counts, action failures, the
-last reason, search phase, and expanded node count.
+Use `/bot settings movement-v2 status` to inspect the feature gate, and
+`/bot debug movement [bot-name]` for route diagnostics. The diagnostic command
+shows the current route position, plan/replan/fallback counts, action failures,
+the last reason, search phase, and expanded node count. The legacy
+`/botenvironment movementV2Status [bot-name]` path remains available.
 
 ## Assumptions checked during implementation
 

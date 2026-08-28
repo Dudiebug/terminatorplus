@@ -3,4 +3,4 @@ plugins {
 }
 
 group = "net.nuggetmc"
-version = "6.2.3-BETA-mc26.2"
+version = "6.2.4-BETA-mc26.2"

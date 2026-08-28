@@ -50,6 +50,7 @@ import net.nuggetmc.tplus.bot.movement.MovementOutputApplier;
 import net.nuggetmc.tplus.bot.navigation.BukkitNavigationContext;
 import net.nuggetmc.tplus.bot.navigation.MovementV2Controller;
 import net.nuggetmc.tplus.bot.navigation.MovementV2Planner;
+import net.nuggetmc.tplus.bot.navigation.MovementV2Settings;
 import net.nuggetmc.tplus.command.commands.BotCommand;
 import net.nuggetmc.tplus.nms.MockConnection;
 import net.nuggetmc.tplus.utils.NMSUtils;
@@ -572,7 +573,7 @@ public class Bot extends ServerPlayer implements Terminator {
     }
 
     private boolean movementV2Enabled() {
-        return plugin.getConfig().getBoolean("ai.movement.v2.enabled", false);
+        return MovementV2Settings.isEnabled(plugin);
     }
 
     private boolean movementV2Flag(String name, boolean fallback) {

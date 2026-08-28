@@ -38,8 +38,8 @@ public class BotCommand extends CommandInstance {
     private static final String ADMIN_PERMISSION = "terminatorplus.admin";
     static final double DEFAULT_SCATTER_RADIUS = 8.0;
     static final double MIN_SCATTER_RADIUS = 1.0;
-    static final double MAX_SCATTER_RADIUS = 64.0;
     private static final double SCATTER_MIN_SEPARATION = 0.75;
+    private static final int SCATTER_FALLBACK_RANGE = 4;
 
     private final TerminatorPlus plugin;
     private final BotManagerImpl manager;
@@ -1113,7 +1113,7 @@ public class BotCommand extends CommandInstance {
             radius = parseScatterRadius(radiusText);
         } catch (IllegalArgumentException e) {
             sender.sendMessage(ChatColor.RED + e.getMessage());
-            sender.sendMessage(ChatColor.GRAY + "Usage: /bot scatter [radius] (default "
+            sender.sendMessage(ChatColor.GRAY + "Usage: /bot move scatter [radius] (default "
                     + DEFAULT_SCATTER_RADIUS + ").");
             return;
         }
@@ -1159,12 +1159,12 @@ public class BotCommand extends CommandInstance {
         try {
             radius = Double.parseDouble(radiusText);
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Radius must be a number from " + MIN_SCATTER_RADIUS
-                    + " to " + MAX_SCATTER_RADIUS + ".");
+            throw new IllegalArgumentException("Radius must be a finite number of at least "
+                    + MIN_SCATTER_RADIUS + ".");
         }
-        if (!Double.isFinite(radius) || radius < MIN_SCATTER_RADIUS || radius > MAX_SCATTER_RADIUS) {
-            throw new IllegalArgumentException("Radius must be a number from " + MIN_SCATTER_RADIUS
-                    + " to " + MAX_SCATTER_RADIUS + ".");
+        if (!Double.isFinite(radius) || radius < MIN_SCATTER_RADIUS) {
+            throw new IllegalArgumentException("Radius must be a finite number of at least "
+                    + MIN_SCATTER_RADIUS + ".");
         }
         return radius;
     }
@@ -1232,25 +1232,24 @@ public class BotCommand extends CommandInstance {
         if (center == null || center.getWorld() == null || count <= 0) return List.of();
 
         Map<ScatterOffset, Location> candidates = new LinkedHashMap<>();
-        for (ScatterOffset offset : evenlySpacedOffsets(count, radius)) {
+        List<ScatterOffset> ideals = evenlySpacedOffsets(count, radius);
+        for (ScatterOffset offset : ideals) {
             addScatterCandidate(center, offset, candidates);
         }
 
-        int minX = (int) Math.floor(center.getX() - radius);
-        int maxX = (int) Math.floor(center.getX() + radius);
-        int minZ = (int) Math.floor(center.getZ() - radius);
-        int maxZ = (int) Math.floor(center.getZ() + radius);
-
-        // Deterministic block-center fallbacks cover blocked ideal points.
-        for (int x = minX; x <= maxX; x++) {
-            for (int z = minZ; z <= maxZ; z++) {
-                double candidateX = x + 0.5;
-                double candidateZ = z + 0.5;
-                double offsetX = candidateX - center.getX();
-                double offsetZ = candidateZ - center.getZ();
-                if (offsetX * offsetX + offsetZ * offsetZ > radius * radius
-                        || (x == center.getBlockX() && z == center.getBlockZ())) continue;
-                addScatterCandidate(center, new ScatterOffset(offsetX, offsetZ), candidates);
+        // Search a fixed neighbourhood around each ideal instead of scanning the
+        // whole circle, so runtime depends on bot count rather than radius.
+        for (ScatterOffset ideal : ideals) {
+            int idealX = Location.locToBlock(center.getX() + ideal.x());
+            int idealZ = Location.locToBlock(center.getZ() + ideal.z());
+            for (int dx = -SCATTER_FALLBACK_RANGE; dx <= SCATTER_FALLBACK_RANGE; dx++) {
+                for (int dz = -SCATTER_FALLBACK_RANGE; dz <= SCATTER_FALLBACK_RANGE; dz++) {
+                    double offsetX = idealX + dx + 0.5 - center.getX();
+                    double offsetZ = idealZ + dz + 0.5 - center.getZ();
+                    if (Math.hypot(offsetX, offsetZ) > radius
+                            || (idealX + dx == center.getBlockX() && idealZ + dz == center.getBlockZ())) continue;
+                    addScatterCandidate(center, new ScatterOffset(offsetX, offsetZ), candidates);
+                }
             }
         }
 
