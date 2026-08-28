@@ -2,6 +2,7 @@ package net.nuggetmc.tplus.bot.gui;
 
 import net.nuggetmc.tplus.TerminatorPlus;
 import net.nuggetmc.tplus.api.Terminator;
+import net.nuggetmc.tplus.bot.Bot;
 import net.nuggetmc.tplus.bot.navigation.MovementV2Settings;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -52,6 +53,7 @@ public final class BotManagementUI implements Listener {
     static final String ADMIN_PERMISSION = "terminatorplus.admin";
     static final int BOT_PAGE_SIZE = 28;
     private static final int MAX_PROMPT_LENGTH = 256;
+    private static final long PROMPT_TIMEOUT_TICKS = 20L * 60L;
     private static final String TITLE = ChatColor.GOLD + "TerminatorPlus Management";
 
     private final TerminatorPlus plugin;
@@ -81,6 +83,10 @@ public final class BotManagementUI implements Listener {
     /** Opens or reuses the management session and always starts at the main page. */
     public void open(Player player) {
         if (player == null || shutdown || plugin == null) return;
+        if (!player.hasPermission(MANAGE_PERMISSION)) {
+            player.sendMessage(ChatColor.RED + "You do not have permission to use bot management.");
+            return;
+        }
         if (!Bukkit.isPrimaryThread()) {
             Bukkit.getScheduler().runTask(plugin, () -> open(player));
             return;
@@ -93,7 +99,7 @@ public final class BotManagementUI implements Listener {
             sessions.put(playerId, session);
             lifecycle.sessionOpened();
         }
-        prompts.remove(playerId);
+        clearPrompt(playerId);
         session.resetForOpen();
         render(session);
         player.openInventory(session.inventory);
@@ -126,6 +132,11 @@ public final class BotManagementUI implements Listener {
         event.setCancelled(true);
         if (!(event.getWhoClicked() instanceof Player player)
                 || !session.playerId.equals(player.getUniqueId())) return;
+        if (!player.hasPermission(MANAGE_PERMISSION)) {
+            player.sendMessage(ChatColor.RED + "You no longer have permission to use bot management.");
+            removeSession(session.playerId, true);
+            return;
+        }
 
         Button button = session.buttons.get(event.getRawSlot());
         if (button != null) handle(session, button);
@@ -133,10 +144,16 @@ public final class BotManagementUI implements Listener {
 
     @EventHandler
     public void onInventoryDrag(InventoryDragEvent event) {
-        if (event.getView().getTopInventory().getHolder() instanceof Session) {
+        if (event.getView().getTopInventory().getHolder() instanceof Session session) {
             // A drag can contain both top and bottom raw slots; cancel the
             // entire operation rather than trying to filter individual slots.
             event.setCancelled(true);
+            if (event.getWhoClicked() instanceof Player player
+                    && session.playerId.equals(player.getUniqueId())
+                    && !player.hasPermission(MANAGE_PERMISSION)) {
+                player.sendMessage(ChatColor.RED + "You no longer have permission to use bot management.");
+                removeSession(session.playerId, true);
+            }
         }
     }
 
@@ -161,12 +178,13 @@ public final class BotManagementUI implements Listener {
     @EventHandler
     public void onChat(AsyncPlayerChatEvent event) {
         UUID playerId = event.getPlayer().getUniqueId();
-        if (prompts.get(playerId) == null) return;
+        PendingPrompt pending = prompts.get(playerId);
+        if (pending == null) return;
 
         event.setCancelled(true);
         if (plugin == null) return;
         String message = event.getMessage();
-        Bukkit.getScheduler().runTask(plugin, () -> finishPrompt(playerId, message));
+        Bukkit.getScheduler().runTask(plugin, () -> finishPrompt(playerId, pending, message));
     }
 
     private void handle(Session session, Button button) {
@@ -181,9 +199,11 @@ public final class BotManagementUI implements Listener {
             case OPEN_ENVIRONMENT -> page(session, Page.ENVIRONMENT, "Environment");
             case OPEN_HELP -> page(session, Page.HELP, "Help and plugin info");
             case BACK -> back(session);
+            case PREVIOUS_PAGE -> previousBotPage(session);
             case NEXT_PAGE -> nextBotPage(session);
             case CLOSE -> closeSession(session.playerId, true);
             case SELECT_BOT -> selectBot(session, button.payload());
+            case BOT_INVENTORY -> openSelectedInventory(session);
             case CONFIRM -> confirm(session);
             case CANCEL -> cancelConfirmation(session);
             default -> runAction(session, button);
@@ -197,6 +217,11 @@ public final class BotManagementUI implements Listener {
         Player player = Bukkit.getPlayer(session.playerId);
         if (player == null) {
             removeSession(session.playerId, false);
+            return;
+        }
+        if (!player.hasPermission(MANAGE_PERMISSION)) {
+            player.sendMessage(ChatColor.RED + "You no longer have permission to use bot management.");
+            removeSession(session.playerId, true);
             return;
         }
         if (action.requiresAdmin() && !player.hasPermission(ADMIN_PERMISSION)) {
@@ -252,36 +277,86 @@ public final class BotManagementUI implements Listener {
     private void nextBotPage(Session session) {
         if (session.state.page != Page.BOTS) return;
         int pageCount = pageCount(currentBots().size());
-        if (session.state.pageIndex + 1 >= pageCount) return;
-        session.state.pageIndex++;
+        if (session.state.pageIndex() + 1 >= pageCount) {
+            session.status = "Already on the last bot page (" + pageCount + ").";
+            render(session);
+            return;
+        }
+        session.state.setPageIndex(session.state.pageIndex() + 1, pageCount);
         session.status = "Bot page " + (session.state.pageIndex + 1) + "/" + pageCount;
         render(session);
     }
 
+    private void previousBotPage(Session session) {
+        if (session.state.page != Page.BOTS) return;
+        int pageCount = pageCount(currentBots().size());
+        if (session.state.pageIndex() <= 0) {
+            session.status = "Already on the first bot page (" + pageCount + ").";
+            render(session);
+            return;
+        }
+        session.state.setPageIndex(session.state.pageIndex() - 1, pageCount);
+        session.status = "Bot page " + (session.state.pageIndex() + 1) + "/" + pageCount;
+        render(session);
+    }
+
+    private void openSelectedInventory(Session session) {
+        Player player = Bukkit.getPlayer(session.playerId);
+        Terminator selected = findBot(session.selectedBot);
+        if (!(selected instanceof Bot bot)) {
+            setStatus(session, "The selected bot is no longer active.");
+            return;
+        }
+        if (plugin == null || plugin.getInventoryListener() == null) {
+            setStatus(session, "The bot inventory editor is unavailable.");
+            return;
+        }
+        if (player == null || !player.hasPermission(MANAGE_PERMISSION)) {
+            removeSession(session.playerId, true);
+            return;
+        }
+        if (plugin.getInventoryListener().open(player, bot)) {
+            removeSession(session.playerId, false);
+        }
+    }
+
     private void beginPrompt(Session session, UiAction action, String hint) {
-        prompts.put(session.playerId, new PendingPrompt(action, hint));
+        PendingPrompt previous = prompts.remove(session.playerId);
+        if (previous != null) {
+            previous.cancel();
+            Player player = Bukkit.getPlayer(session.playerId);
+            if (player != null) player.sendMessage(ChatColor.YELLOW + "Previous prompt cancelled.");
+        }
+        PendingPrompt pending = new PendingPrompt(action, hint);
+        prompts.put(session.playerId, pending);
         session.awaitingPrompt = true;
         session.status = "Waiting for chat input";
         Player player = Bukkit.getPlayer(session.playerId);
         if (player != null) {
             player.sendMessage(ChatColor.YELLOW + "Enter " + hint + ChatColor.GRAY + ", or type cancel.");
         }
+        if (plugin != null) {
+            pending.timeoutTask = Bukkit.getScheduler().runTaskLater(plugin,
+                    () -> expirePrompt(session.playerId, pending), PROMPT_TIMEOUT_TICKS);
+        }
         render(session);
         if (player != null) player.closeInventory();
         stopRefreshIfNoOpenSessions();
     }
 
-    private void finishPrompt(UUID playerId, String message) {
+    private void finishPrompt(UUID playerId, PendingPrompt pending, String message) {
         Session session = sessions.get(playerId);
-        PendingPrompt pending = prompts.get(playerId);
         Player player = Bukkit.getPlayer(playerId);
-        if (session == null || pending == null || player == null) {
-            prompts.remove(playerId);
+        if (!isCurrentPrompt(prompts.get(playerId), pending)) return;
+        if (session == null || player == null) {
+            prompts.remove(playerId, pending);
+            pending.cancel();
             return;
         }
 
         if (message != null && message.trim().equalsIgnoreCase("cancel")) {
             prompts.remove(playerId, pending);
+            pending.cancel();
             session.awaitingPrompt = false;
             session.status = "Prompt cancelled";
             render(session);
@@ -293,7 +368,23 @@ public final class BotManagementUI implements Listener {
             return;
         }
 
+        if (!player.hasPermission(requiredPermission(pending.action()))) {
+            prompts.remove(playerId, pending);
+            pending.cancel();
+            session.awaitingPrompt = false;
+            if (!player.hasPermission(MANAGE_PERMISSION)) {
+                player.sendMessage(ChatColor.RED + "You no longer have permission to use bot management.");
+                removeSession(playerId, false);
+                return;
+            }
+            session.status = "Permission recheck failed; nothing was dispatched.";
+            render(session);
+            reopen(session, player);
+            return;
+        }
+
         if (!prompts.remove(playerId, pending)) return;
+        pending.cancel();
         session.awaitingPrompt = false;
         String command = commandFor(pending.action(), message);
         if (pending.action().destructive()) {
@@ -309,6 +400,23 @@ public final class BotManagementUI implements Listener {
                 reopen(session, player);
             }
         }
+    }
+
+    private void expirePrompt(UUID playerId, PendingPrompt pending) {
+        if (!prompts.remove(playerId, pending)) return;
+        pending.cancel();
+        Session session = sessions.get(playerId);
+        if (session == null) return;
+        session.awaitingPrompt = false;
+        session.status = "Prompt expired";
+        Player player = Bukkit.getPlayer(playerId);
+        if (player == null) {
+            removeSession(playerId, false);
+            return;
+        }
+        player.sendMessage(ChatColor.YELLOW + "The input prompt expired. No action was run.");
+        render(session);
+        reopen(session, player);
     }
 
     private void requestConfirmation(Session session, UiAction action, String command) {
@@ -365,8 +473,7 @@ public final class BotManagementUI implements Listener {
         } catch (RuntimeException error) {
             accepted = false;
         }
-        String shown = command.length() > 48 ? command.substring(0, 45) + "..." : command;
-        session.status = (accepted ? "Ran /" : "Rejected /") + shown;
+        session.status = dispatchStatus(accepted, command);
         render(session);
     }
 
@@ -385,6 +492,11 @@ public final class BotManagementUI implements Listener {
             Player player = Bukkit.getPlayer(session.playerId);
             if (player == null) {
                 removeSession(session.playerId, false);
+                continue;
+            }
+            if (!player.hasPermission(MANAGE_PERMISSION)) {
+                player.sendMessage(ChatColor.RED + "You no longer have permission to use bot management.");
+                removeSession(session.playerId, true);
                 continue;
             }
             if (session.awaitingPrompt) continue;
@@ -420,12 +532,20 @@ public final class BotManagementUI implements Listener {
 
     private void removeSession(UUID playerId, boolean closeInventory) {
         Session removed = sessions.remove(playerId);
-        prompts.remove(playerId);
+        clearPrompt(playerId);
         if (removed == null) return;
 
+        removed.awaitingPrompt = false;
         lifecycle.sessionClosed();
         if (closeInventory) closeInventoryIfOwned(removed);
         if (!lifecycle.shouldRefresh()) stopRefreshTask();
+    }
+
+    private void clearPrompt(UUID playerId) {
+        PendingPrompt pending = prompts.remove(playerId);
+        if (pending != null) pending.cancel();
+        Session session = sessions.get(playerId);
+        if (session != null) session.awaitingPrompt = false;
     }
 
     private void closeSession(UUID playerId, boolean closeInventory) {
@@ -434,6 +554,10 @@ public final class BotManagementUI implements Listener {
 
     private void reopen(Session session, Player player) {
         if (shutdown || session == null || player == null || !player.isOnline()) return;
+        if (!player.hasPermission(MANAGE_PERMISSION)) {
+            removeSession(session.playerId, false);
+            return;
+        }
         player.openInventory(session.inventory);
         ensureRefreshTask();
     }
@@ -455,7 +579,9 @@ public final class BotManagementUI implements Listener {
     private void finishShutdown() {
         Collection<Session> active = new ArrayList<>(sessions.values());
         sessions.clear();
+        prompts.values().forEach(PendingPrompt::cancel);
         prompts.clear();
+        active.forEach(session -> session.awaitingPrompt = false);
         lifecycle.shutdown();
         stopRefreshTask();
         for (Session session : active) closeInventoryIfOwned(session);
@@ -518,11 +644,16 @@ public final class BotManagementUI implements Listener {
 
     private void renderBots(Session session) {
         List<Terminator> bots = currentBots();
-        int pageCount = pageCount(bots.size());
-        session.state.pageIndex = Math.min(session.state.pageIndex, pageCount - 1);
-        int start = session.state.pageIndex * BOT_PAGE_SIZE;
+        int pages = pageCount(bots.size());
+        int pageIndex = clampPageIndex(session.state.pageIndex(), pages);
+        session.state.setPageIndex(pageIndex, pages);
+        int start = pageIndex * BOT_PAGE_SIZE;
         int end = Math.min(start + BOT_PAGE_SIZE, bots.size());
         int slot = 10;
+        if (bots.isEmpty()) {
+            put(session, slot, Material.BARRIER, "No active bots", null, null,
+                    "Spawn a bot to make it appear here.");
+        }
         for (int index = start; index < end; index++) {
             Terminator bot = bots.get(index);
             UUID id = botId(bot);
@@ -535,7 +666,7 @@ public final class BotManagementUI implements Listener {
                             + ChatColor.GRAY + " | " + location,
                     "Click for status and actions");
         }
-        session.status = "Bots " + (bots.size()) + " | page " + (session.state.pageIndex + 1) + "/" + pageCount;
+        session.status = "Bots " + bots.size() + " | page " + (pageIndex + 1) + "/" + pages;
     }
 
     private void renderBotDetail(Session session) {
@@ -555,26 +686,35 @@ public final class BotManagementUI implements Listener {
                 "Health: " + bot.getBotHealth() + "/" + bot.getBotMaxHealth(),
                 "Alive: " + bot.isBotAlive(),
                 "World: " + world);
-        if (!isUniqueBotName(bot.getBotName(), currentBots().stream().map(Terminator::getBotName).toList())) {
+        boolean uniqueName = isUniqueBotName(bot.getBotName(), currentBots().stream()
+                .map(Terminator::getBotName).toList());
+        if (!uniqueName) {
             put(session, 12, Material.BARRIER, "Duplicate bot name", null, null,
-                    "Selected actions are disabled because commands target bots by name.",
-                    "Use a unique bot name to avoid affecting the wrong bot.");
-            return;
+                    "Name-based commands are disabled for this selection.",
+                    "The inventory editor still targets this exact bot UUID.");
         }
-        put(session, 11, Material.PAPER, "Bot info", UiAction.BOT_INFO, bot.getBotName(),
-                "/bot inspect info " + bot.getBotName());
-        put(session, 12, Material.REDSTONE, "AI info", UiAction.AI_INFO, bot.getBotName(),
-                "/ai inspect info " + bot.getBotName());
-        put(session, 13, Material.DIAMOND_SWORD, "Weapon status", UiAction.BOT_WEAPONS, bot.getBotName(),
-                "/bot inspect weapons " + bot.getBotName());
-        put(session, 14, Material.CHEST, "Edit inventory", UiAction.BOT_INVENTORY, bot.getBotName(),
-                "/bot equipment inventory " + bot.getBotName());
-        put(session, 15, Material.OBSERVER, "Combat debug on", UiAction.BOT_COMBAT_DEBUG,
-                bot.getBotName() + " on", "/bot debug combat " + bot.getBotName() + " on");
-        put(session, 16, Material.BARRIER, "Combat debug off", UiAction.BOT_COMBAT_DEBUG,
-                bot.getBotName() + " off", "/bot debug combat " + bot.getBotName() + " off");
-        put(session, 17, Material.SHULKER_BOX, "Apply loadout...", UiAction.BOT_LOADOUT, null,
-                "Enter loadout [bot-name]");
+        if (uniqueName) {
+            put(session, 11, Material.PAPER, "Bot info", UiAction.BOT_INFO, bot.getBotName(),
+                    "/bot inspect info " + bot.getBotName());
+            put(session, 12, Material.REDSTONE, "AI info", UiAction.AI_INFO, bot.getBotName(),
+                    "/ai inspect info " + bot.getBotName());
+            put(session, 13, Material.DIAMOND_SWORD, "Weapon status", UiAction.BOT_WEAPONS, bot.getBotName(),
+                    "/bot inspect weapons " + bot.getBotName());
+        }
+        UUID exactBotId = botId(bot);
+        if (exactBotId != null) {
+            put(session, 14, Material.CHEST, "Edit inventory: " + bot.getBotName(), UiAction.BOT_INVENTORY,
+                    exactBotId.toString(), "/bot equipment inventory <exact selected bot>",
+                    "UUID: " + exactBotId);
+        }
+        if (uniqueName) {
+            put(session, 15, Material.OBSERVER, "Combat debug on", UiAction.BOT_COMBAT_DEBUG,
+                    bot.getBotName() + " on", "/bot debug combat " + bot.getBotName() + " on");
+            put(session, 16, Material.BARRIER, "Combat debug off", UiAction.BOT_COMBAT_DEBUG,
+                    bot.getBotName() + " off", "/bot debug combat " + bot.getBotName() + " off");
+            put(session, 17, Material.SHULKER_BOX, "Apply loadout...", UiAction.BOT_LOADOUT, null,
+                    "Enter loadout [bot-name]");
+        }
     }
 
     private void renderCreate(Session session) {
@@ -594,26 +734,29 @@ public final class BotManagementUI implements Listener {
         boolean respawnEnabled = plugin != null && plugin.getManager() != null
                 && plugin.getManager().isRespawnEnabled();
         boolean movementV2Enabled = plugin != null && MovementV2Settings.isEnabled(plugin);
+        boolean admin = hasAdminPermission(session);
         put(session, 10, Material.ENDER_PEARL, "Gather all bots", UiAction.BOT_GATHER, null,
                 "Teleport living bots to you");
         put(session, 11, Material.COMPASS, "Circular scatter", UiAction.BOT_SCATTER, null,
                 "Use the default safe circular radius");
         put(session, 12, Material.SPYGLASS, "Scatter radius...", UiAction.BOT_SCATTER_RADIUS, null,
                 "Enter a radius; command validates it");
-        put(session, 13, Material.TOTEM_OF_UNDYING,
-                "Respawn: " + (respawnEnabled ? "enabled" : "disabled"), UiAction.BOT_RESPAWN, null,
-                "/bot settings auto-respawn");
-        put(session, 14, Material.LIME_DYE, "Enable respawn", UiAction.BOT_RESPAWN, "true",
-                "/bot settings auto-respawn true");
-        put(session, 15, Material.RED_DYE, "Disable respawn", UiAction.BOT_RESPAWN, "false",
-                "/bot settings auto-respawn false");
-        put(session, 16, Material.FEATHER,
-                "Movement V2: " + (movementV2Enabled ? "enabled" : "disabled"), UiAction.BOT_MOVEMENT_V2, "status",
-                "/bot settings movement-v2 status");
-        put(session, 17, Material.LIME_WOOL, "Enable Movement V2", UiAction.BOT_MOVEMENT_V2, "on",
-                "/bot settings movement-v2 on");
-        put(session, 18, Material.RED_WOOL, "Disable Movement V2", UiAction.BOT_MOVEMENT_V2, "off",
-                "/bot settings movement-v2 off");
+        if (admin) {
+            put(session, 13, Material.TOTEM_OF_UNDYING,
+                    "Respawn: " + (respawnEnabled ? "enabled" : "disabled"), UiAction.BOT_RESPAWN, null,
+                    "/bot settings auto-respawn");
+            put(session, 14, Material.LIME_DYE, "Enable respawn", UiAction.BOT_RESPAWN, "true",
+                    "/bot settings auto-respawn true");
+            put(session, 15, Material.RED_DYE, "Disable respawn", UiAction.BOT_RESPAWN, "false",
+                    "/bot settings auto-respawn false");
+            put(session, 16, Material.FEATHER,
+                    "Movement V2: " + (movementV2Enabled ? "enabled" : "disabled"), UiAction.BOT_MOVEMENT_V2, "status",
+                    "/bot settings movement-v2 status");
+            put(session, 17, Material.LIME_WOOL, "Enable Movement V2", UiAction.BOT_MOVEMENT_V2, "on",
+                    "/bot settings movement-v2 on");
+            put(session, 18, Material.RED_WOOL, "Disable Movement V2", UiAction.BOT_MOVEMENT_V2, "off",
+                    "/bot settings movement-v2 off");
+        }
     }
 
     private void renderAi(Session session) {
@@ -629,10 +772,18 @@ public final class BotManagementUI implements Listener {
                 "/ai brain load");
         if (session.selectedBot != null) {
             Terminator bot = findBot(session.selectedBot);
-            put(session, 15, Material.WRITABLE_BOOK, "Save selected brain", UiAction.AI_BRAIN_SAVE,
-                    bot == null ? null : bot.getBotName(), "/ai brain save <selected bot>");
-            put(session, 19, Material.REDSTONE, "AI info (selected)", UiAction.AI_INFO,
-                    bot == null ? null : bot.getBotName(), "/ai inspect info <selected bot>");
+            String name = bot == null ? null : bot.getBotName();
+            if (isUniqueBotName(name, currentBots().stream().map(Terminator::getBotName).toList())) {
+                put(session, 15, Material.WRITABLE_BOOK, "Save selected brain", UiAction.AI_BRAIN_SAVE,
+                        name, "/ai brain save <selected bot>");
+                put(session, 19, Material.REDSTONE, "AI info (selected)", UiAction.AI_INFO,
+                        name, "/ai inspect info <selected bot>");
+            } else {
+                put(session, 15, Material.GRAY_DYE, "Selected brain unavailable", null, null,
+                        "The selected bot name is ambiguous.");
+                put(session, 19, Material.GRAY_DYE, "Selected info unavailable", null, null,
+                        "The selected bot name is ambiguous.");
+            }
         } else {
             put(session, 15, Material.WRITABLE_BOOK, "Save brain...", UiAction.AI_BRAIN_SAVE_INPUT, null,
                     "Enter optional bot name");
@@ -652,8 +803,15 @@ public final class BotManagementUI implements Listener {
     private void renderCombat(Session session) {
         put(session, 10, Material.DIAMOND_SWORD, "Weapons (all)", UiAction.BOT_WEAPONS, null,
                 "/bot inspect weapons");
-        put(session, 11, Material.IRON_SWORD, "Weapons (selected)", UiAction.BOT_WEAPONS,
-                selectedName(session), "/bot inspect weapons <selected bot>");
+        String selectedName = selectedName(session);
+        boolean uniqueSelected = isUniqueBotName(selectedName,
+                currentBots().stream().map(Terminator::getBotName).toList());
+        put(session, 11, uniqueSelected ? Material.IRON_SWORD : Material.GRAY_DYE,
+                uniqueSelected ? "Weapons (selected)" : "Selected weapons unavailable",
+                uniqueSelected ? UiAction.BOT_WEAPONS : null,
+                uniqueSelected ? selectedName : null,
+                uniqueSelected ? "/bot inspect weapons <selected bot>"
+                        : "The selected bot name is ambiguous.");
         put(session, 12, Material.CHEST, "Give item...", UiAction.BOT_GIVE, null,
                 "item [bot-name] [slot]");
         put(session, 13, Material.BRICKS, "Placement material...", UiAction.BOT_PLACE, null,
@@ -670,19 +828,28 @@ public final class BotManagementUI implements Listener {
                 "preset-name bot-name");
         put(session, 19, Material.ENCHANTED_BOOK, "Apply preset...", UiAction.BOT_PRESET_APPLY, null,
                 "preset-name [bot-name]");
-        put(session, 20, Material.TNT, "Delete preset...", UiAction.BOT_PRESET_DELETE, null,
-                "Confirmation required");
-        String selectedName = selectedName(session);
-        put(session, 21, Material.CHEST, selectedName == null ? "Open inventory..." : "Open selected inventory",
-                selectedName == null ? UiAction.BOT_INVENTORY_INPUT : UiAction.BOT_INVENTORY,
-                selectedName, selectedName == null ? "Enter bot-name" : "/bot equipment inventory <selected bot>");
+        if (hasAdminPermission(session)) {
+            put(session, 20, Material.TNT, "Delete preset...", UiAction.BOT_PRESET_DELETE, null,
+                    "Confirmation required");
+        }
+        if (session.selectedBot != null && selectedName == null) {
+            put(session, 21, Material.GRAY_DYE, "Selected inventory unavailable", null, null,
+                    "The selected bot is no longer active.");
+        } else {
+            put(session, 21, Material.CHEST, selectedName == null ? "Open inventory..." : "Open selected inventory",
+                    selectedName == null ? UiAction.BOT_INVENTORY_INPUT : UiAction.BOT_INVENTORY,
+                    selectedName, selectedName == null ? "Enter bot-name" : "/bot equipment inventory <selected bot>");
+        }
         put(session, 22, Material.PAPER, "Count bots", UiAction.BOT_COUNT, null,
                 "/bot inspect list");
     }
 
     private void renderAdmin(Session session) {
-        put(session, 10, Material.TNT, "Reset all bots", UiAction.BOT_RESET, null,
-                "Confirmation and permission recheck required");
+        boolean admin = hasAdminPermission(session);
+        if (admin) {
+            put(session, 10, Material.TNT, "Reset all bots", UiAction.BOT_RESET, null,
+                    "Confirmation and permission recheck required");
+        }
         put(session, 11, Material.LIME_DYE, "Mob targeting on", UiAction.BOT_SETTINGS, "mobtarget true",
                 "/bot settings target-mobs true");
         put(session, 12, Material.RED_DYE, "Mob targeting off", UiAction.BOT_SETTINGS, "mobtarget false",
@@ -697,14 +864,16 @@ public final class BotManagementUI implements Listener {
                 "target-region bounds and weights");
         put(session, 17, Material.BARRIER, "Clear region", UiAction.BOT_SETTINGS_REGION_CLEAR, null,
                 "Confirmation required");
-        put(session, 18, Material.COMPARATOR, "Debug expression...", UiAction.BOT_DEBUG, null,
-                "Enter a behavior expression");
-        put(session, 19, Material.OBSERVER, "Combat debug all on", UiAction.BOT_COMBAT_DEBUG, "all on",
-                "/bot debug combat all on");
-        put(session, 20, Material.REDSTONE_TORCH, "Combat debug all off", UiAction.BOT_COMBAT_DEBUG, "all off",
-                "/bot debug combat all off");
-        put(session, 21, Material.PAPER, "Combat debug args...", UiAction.BOT_COMBAT_DEBUG_INPUT, null,
-                "bot-name|all on|off");
+        if (admin) {
+            put(session, 18, Material.COMPARATOR, "Debug expression...", UiAction.BOT_DEBUG, null,
+                    "Enter a behavior expression");
+            put(session, 19, Material.OBSERVER, "Combat debug all on", UiAction.BOT_COMBAT_DEBUG, "all on",
+                    "/bot debug combat all on");
+            put(session, 20, Material.REDSTONE_TORCH, "Combat debug all off", UiAction.BOT_COMBAT_DEBUG, "all off",
+                    "/bot debug combat all off");
+            put(session, 21, Material.PAPER, "Combat debug args...", UiAction.BOT_COMBAT_DEBUG_INPUT, null,
+                    "bot-name|all on|off");
+        }
     }
 
     private void renderEnvironment(Session session) {
@@ -734,8 +903,10 @@ public final class BotManagementUI implements Listener {
                 "Confirmation required");
         put(session, 22, Material.COMPARATOR, "Mob list type...", UiAction.ENV_MOB_LIST_TYPE, null,
                 "custom list mode");
-        put(session, 23, Material.FEATHER, "Movement V2 status", UiAction.ENV_MOVEMENT_V2_STATUS, null,
-                "/bot debug movement [bot-name]");
+        if (hasAdminPermission(session)) {
+            put(session, 23, Material.FEATHER, "Movement V2 status", UiAction.ENV_MOVEMENT_V2_STATUS, null,
+                    "/bot debug movement [bot-name]");
+        }
     }
 
     private void renderHelp(Session session) {
@@ -768,10 +939,15 @@ public final class BotManagementUI implements Listener {
         }
         if (session.state.page == Page.BOTS) {
             int pages = pageCount(currentBots().size());
-            if (session.state.pageIndex + 1 < pages) {
-                put(session, 51, Material.SPECTRAL_ARROW, "Next page", UiAction.NEXT_PAGE, null,
-                        "Page " + (session.state.pageIndex + 2) + "/" + pages);
-            }
+            int pageIndex = clampPageIndex(session.state.pageIndex(), pages);
+            put(session, 47, pageIndex > 0 ? Material.ARROW : Material.GRAY_DYE,
+                    "Previous page", UiAction.PREVIOUS_PAGE, null,
+                    pageIndex > 0 ? "Page " + pageIndex + "/" + pages : "Already on the first page");
+            put(session, 50, Material.PAPER, "Page " + (pageIndex + 1) + "/" + pages, null, null,
+                    currentBots().isEmpty() ? "No active bots" : "Select a bot above");
+            put(session, 51, pageIndex + 1 < pages ? Material.SPECTRAL_ARROW : Material.GRAY_DYE,
+                    "Next page", UiAction.NEXT_PAGE, null,
+                    pageIndex + 1 < pages ? "Page " + (pageIndex + 2) + "/" + pages : "Already on the last page");
         }
         put(session, 49, Material.PAPER, "Status", null, null, session.status);
         put(session, 53, Material.BARRIER, "Close", UiAction.CLOSE, null);
@@ -838,8 +1014,26 @@ public final class BotManagementUI implements Listener {
         return action != null && action.destructive();
     }
 
+    static boolean visibleForPermission(UiAction action, boolean admin) {
+        return action != null && (!action.requiresAdmin() || admin);
+    }
+
+    static String dispatchStatus(boolean accepted, String command) {
+        String value = command == null ? "" : command;
+        String shown = value.length() > 48 ? value.substring(0, 45) + "..." : value;
+        return (accepted ? "Dispatched /" : "Rejected /") + shown;
+    }
+
     static long refreshIntervalTicks() {
         return REFRESH_INTERVAL_TICKS;
+    }
+
+    static long promptTimeoutTicks() {
+        return PROMPT_TIMEOUT_TICKS;
+    }
+
+    static boolean isCurrentPrompt(PendingPrompt active, PendingPrompt candidate) {
+        return active != null && active == candidate && !candidate.cancelled();
     }
 
     static Page initialPage() {
@@ -908,8 +1102,18 @@ public final class BotManagementUI implements Listener {
         return bot == null || bot.getBukkitEntity() == null ? null : bot.getBukkitEntity().getUniqueId();
     }
 
-    private static int pageCount(int count) {
+    static int pageCount(int count) {
         return Math.max(1, (count + BOT_PAGE_SIZE - 1) / BOT_PAGE_SIZE);
+    }
+
+    static int clampPageIndex(int index, int pages) {
+        int last = Math.max(0, pages - 1);
+        return Math.max(0, Math.min(index, last));
+    }
+
+    private boolean hasAdminPermission(Session session) {
+        Player player = Bukkit.getPlayer(session.playerId);
+        return player != null && player.hasPermission(ADMIN_PERMISSION);
     }
 
     private String selectedName(Session session) {
@@ -941,6 +1145,7 @@ public final class BotManagementUI implements Listener {
         OPEN_ENVIRONMENT(null, false, false, false, "Environment"),
         OPEN_HELP(null, false, false, false, "Help and plugin info"),
         BACK(null, false, false, false, "Back"),
+        PREVIOUS_PAGE(null, false, false, false, "Previous page"),
         NEXT_PAGE(null, false, false, false, "Next page"),
         CLOSE(null, false, false, false, "Close"),
         SELECT_BOT(null, false, false, false, "Select bot"),
@@ -1073,6 +1278,10 @@ public final class BotManagementUI implements Listener {
             pageIndex = 0;
         }
 
+        void setPageIndex(int index, int pages) {
+            pageIndex = clampPageIndex(index, pages);
+        }
+
         Page page() {
             return page;
         }
@@ -1118,7 +1327,34 @@ public final class BotManagementUI implements Listener {
     private record Button(UiAction action, String payload) {
     }
 
-    private record PendingPrompt(UiAction action, String hint) {
+    static final class PendingPrompt {
+        private final UiAction action;
+        private final String hint;
+        private BukkitTask timeoutTask;
+        private boolean cancelled;
+
+        PendingPrompt(UiAction action, String hint) {
+            this.action = action;
+            this.hint = hint;
+        }
+
+        UiAction action() {
+            return action;
+        }
+
+        String hint() {
+            return hint;
+        }
+
+        void cancel() {
+            if (timeoutTask != null && !timeoutTask.isCancelled()) timeoutTask.cancel();
+            timeoutTask = null;
+            cancelled = true;
+        }
+
+        boolean cancelled() {
+            return cancelled;
+        }
     }
 
     private record Confirmation(UiAction action, String command, Page returnPage) {

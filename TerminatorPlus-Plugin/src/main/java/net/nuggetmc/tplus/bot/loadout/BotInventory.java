@@ -632,7 +632,7 @@ public final class BotInventory {
     }
 
     // -------------------------------------------------------------------------
-    // Inventory copy (used to propagate GUI edits to all same-name bots)
+    // Explicit inventory copy utility for callers that intentionally clone a kit.
     // -------------------------------------------------------------------------
 
     /**
@@ -668,7 +668,9 @@ public final class BotInventory {
      * armor, offhand) and reorganises them into the best combat configuration:
      * best armor → armor slots, weapons/tools → hotbar (by priority), leftover → storage.
      *
-     * Called automatically when the inventory GUI closes.
+     * Called explicitly when a user opts into auto-equip while saving an
+     * inventory edit, or by command/loadout code that needs the deterministic
+     * combat layout.
      */
     public void autoEquip() {
         PlayerInventory inv = raw();

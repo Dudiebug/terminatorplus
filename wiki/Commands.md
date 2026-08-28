@@ -47,7 +47,9 @@ Remove every spawned bot. **Requires** `terminatorplus.admin`.
 ## Equipment
 
 ### `/bot equipment inventory <bot-name>` (legacy `/bot inventory`, alias `inv`)
-Open a 54-slot chest GUI that mirrors the bot's inventory. Edits save on close. See [Inventory GUI](Inventory-GUI).
+Open a 54-slot chest GUI that edits one exact bot. Click **Save changes** to
+apply; closing discards unsaved edits. Ambiguous duplicate names are rejected.
+See [Inventory GUI](Inventory-GUI).
 
 ### `/bot equipment give <item> [bot-name] [slot]`
 - One arg: sets the default item for every bot.

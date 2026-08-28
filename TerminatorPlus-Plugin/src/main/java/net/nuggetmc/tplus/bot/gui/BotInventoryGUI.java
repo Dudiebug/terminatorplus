@@ -5,46 +5,67 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.inventory.meta.ItemMeta;
+
+import java.util.Objects;
+import java.util.UUID;
 
 /**
- * Double-chest style GUI that mirrors a bot's full inventory.
+ * Transactional editor for one exact bot inventory.
  *
- * <p>Slot layout (54 slots / 6 rows):
- * <pre>
- *  0-8    -> hotbar (bot slots 0-8)
- *  9-17   -> storage row 1 (bot slots 9-17)
- *  18-26  -> storage row 2 (bot slots 18-26)
- *  27-35  -> storage row 3 (bot slots 27-35)
- *  36     -> head         (bot helmet)
- *  37     -> chest        (bot chestplate / elytra)
- *  38     -> legs         (bot leggings)
- *  39     -> feet         (bot boots)
- *  40     -> offhand      (bot offhand)
- *  41-44  -> filler (barrier glass)
- *  45-53  -> filler (barrier glass)
- * </pre>
+ * <p>The chest is a working copy. The bot is changed only by {@link #save()}.
+ * Closing the chest without saving discards the working copy.</p>
  */
 public final class BotInventoryGUI implements InventoryHolder {
 
     public static final int SIZE = 54;
+    public static final int EDITABLE_SLOTS = 41;
+    public static final int BOOTS_SLOT = 36;
+    public static final int LEGGINGS_SLOT = 37;
+    public static final int CHEST_SLOT = 38;
+    public static final int HELMET_SLOT = 39;
+    public static final int OFFHAND_SLOT = 40;
+
+    public static final int AUTO_EQUIP_SLOT = 45;
+    public static final int SAVE_SLOT = 48;
+    public static final int STATUS_SLOT = 49;
+    public static final int DISCARD_SLOT = 51;
+    public static final int CLOSE_SLOT = 53;
 
     private final Bot bot;
+    private final UUID viewerId;
+    private final ItemStack originalCursor;
     private final Inventory inventory;
+    private final EditState edits;
+    private boolean autoEquip;
+    private boolean closed;
 
-    public BotInventoryGUI(Bot bot) {
-        this.bot = bot;
+    BotInventoryGUI(Bot bot, Player viewer) {
+        this.bot = Objects.requireNonNull(bot, "bot");
+        Objects.requireNonNull(viewer, "viewer");
+        this.viewerId = viewer.getUniqueId();
+        this.originalCursor = cloneOrNull(viewer.getItemOnCursor());
         this.inventory = Bukkit.createInventory(this, SIZE,
-                ChatColor.GOLD + "Bot: " + ChatColor.YELLOW + bot.getBotName());
-        syncFromBot();
+                ChatColor.GOLD + "Inventory: " + ChatColor.YELLOW + bot.getBotName());
+        this.edits = EditState.capture(bot);
+        render();
     }
 
     public Bot getBot() {
         return bot;
+    }
+
+    public UUID getBotId() {
+        return bot.getUUID();
+    }
+
+    UUID getViewerId() {
+        return viewerId;
     }
 
     @Override
@@ -56,68 +77,241 @@ public final class BotInventoryGUI implements InventoryHolder {
         viewer.openInventory(inventory);
     }
 
-    /** Pull bot state into the GUI inventory (call when opening). */
-    public void syncFromBot() {
-        PlayerInventory pi = bot.getBukkitEntity().getInventory();
-        for (int i = 0; i < 36; i++) {
-            ItemStack it = pi.getItem(i);
-            inventory.setItem(i, it == null ? null : it.clone());
-        }
-        inventory.setItem(36, cloneOrNull(pi.getHelmet()));
-        inventory.setItem(37, cloneOrNull(pi.getChestplate()));
-        inventory.setItem(38, cloneOrNull(pi.getLeggings()));
-        inventory.setItem(39, cloneOrNull(pi.getBoots()));
-        inventory.setItem(40, cloneOrNull(pi.getItemInOffHand()));
-
-        ItemStack filler = buildFiller();
-        for (int i = 41; i < SIZE; i++) {
-            inventory.setItem(i, filler);
-        }
+    public boolean isAutoEquipEnabled() {
+        return autoEquip;
     }
 
-    private static ItemStack cloneOrNull(ItemStack it) {
-        return it == null ? null : it.clone();
+    void toggleAutoEquip() {
+        autoEquip = !autoEquip;
+        renderControls();
     }
 
-    /** Push GUI state back onto the bot (call when closing). */
-    public void syncToBot() {
-        bot.getBotInventory().applyMainInventorySnapshot(inventory.getContents());
+    public boolean hasChanges() {
+        return edits.changed(editableContents());
+    }
 
-        // Armor + offhand go through bot.setItem() so ClientboundSetEquipmentPacket is sent.
-        bot.setItem(safe(inventory.getItem(36)), org.bukkit.inventory.EquipmentSlot.HEAD);
-        bot.setItem(safe(inventory.getItem(37)), org.bukkit.inventory.EquipmentSlot.CHEST);
-        bot.setItem(safe(inventory.getItem(38)), org.bukkit.inventory.EquipmentSlot.LEGS);
-        bot.setItem(safe(inventory.getItem(39)), org.bukkit.inventory.EquipmentSlot.FEET);
-        bot.setItem(safe(inventory.getItem(40)), org.bukkit.inventory.EquipmentSlot.OFF_HAND);
+    /**
+     * Validate and apply the working copy. Returns false without changing the
+     * bot when the copy is invalid or this editor has already finished.
+     */
+    public boolean save() {
+        if (closed || !isBotUsable()) return false;
+        ItemStack[] snapshot = editableContents();
+        if (validationError(snapshot) != null) return false;
 
-        // Auto-organise: move items into the best slots and select the primary weapon.
-        bot.getBotInventory().autoEquip();
-        // A GUI save is a deliberate authoritative edit - lock out the 40-tick
-        // movement-kit refill so the user's "I removed the pearls on purpose"
-        // decision survives the next ensureMovementKit tick.
+        bot.getBotInventory().applyMainInventorySnapshot(snapshot);
+        bot.setItem(safe(snapshot[BOOTS_SLOT]), EquipmentSlot.FEET);
+        bot.setItem(safe(snapshot[LEGGINGS_SLOT]), EquipmentSlot.LEGS);
+        bot.setItem(safe(snapshot[CHEST_SLOT]), EquipmentSlot.CHEST);
+        bot.setItem(safe(snapshot[HELMET_SLOT]), EquipmentSlot.HEAD);
+        bot.setItemOffhand(safe(snapshot[OFFHAND_SLOT]));
+
+        if (autoEquip) {
+            bot.getBotInventory().autoEquip();
+        } else {
+            bot.getBotInventory().setSelectedHotbarSlot(edits.selectedHotbarSlot());
+            bot.getBotInventory().refreshSelectedItem();
+        }
         bot.getBotInventory().markLoadoutApplied();
+        closed = true;
+        return true;
     }
 
-    /** Slots in the GUI that are decorative/locked. */
+    /** Discard the working copy and restore the cursor captured on open. */
+    void discard(Player viewer) {
+        if (closed) return;
+        if (viewer != null && viewerId.equals(viewer.getUniqueId())) {
+            viewer.setItemOnCursor(cloneOrNull(originalCursor));
+        }
+        closed = true;
+    }
+
+    boolean isClosed() {
+        return closed;
+    }
+
+    boolean isBotUsable() {
+        try {
+            return bot.isBotAlive();
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    ItemStack[] editableContents() {
+        ItemStack[] contents = new ItemStack[EDITABLE_SLOTS];
+        for (int i = 0; i < EDITABLE_SLOTS; i++) {
+            ItemStack item = inventory.getItem(i);
+            contents[i] = item == null ? null : item.clone();
+        }
+        return contents;
+    }
+
+    private void render() {
+        inventory.clear();
+        PlayerInventory playerInventory = bot.getBukkitEntity().getInventory();
+        for (int i = 0; i < 36; i++) {
+            inventory.setItem(i, cloneOrNull(playerInventory.getItem(i)));
+        }
+        inventory.setItem(BOOTS_SLOT, cloneOrNull(playerInventory.getBoots()));
+        inventory.setItem(LEGGINGS_SLOT, cloneOrNull(playerInventory.getLeggings()));
+        inventory.setItem(CHEST_SLOT, cloneOrNull(playerInventory.getChestplate()));
+        inventory.setItem(HELMET_SLOT, cloneOrNull(playerInventory.getHelmet()));
+        inventory.setItem(OFFHAND_SLOT, cloneOrNull(playerInventory.getItemInOffHand()));
+
+        ItemStack filler = filler();
+        for (int slot = EDITABLE_SLOTS; slot < SIZE; slot++) {
+            if (!isControlSlot(slot)) inventory.setItem(slot, filler.clone());
+        }
+        renderControls();
+    }
+
+    private void renderControls() {
+        inventory.setItem(AUTO_EQUIP_SLOT, item(
+                autoEquip ? Material.LIME_DYE : Material.GRAY_DYE,
+                "Auto-equip on save: " + (autoEquip ? "ON" : "OFF"),
+                autoEquip ? "Save will use the deterministic combat layout."
+                        : "Save keeps every item in its edited slot."));
+        inventory.setItem(SAVE_SLOT, item(Material.LIME_WOOL, "Save changes",
+                "Apply the edited 41-slot inventory to " + bot.getBotName()));
+        inventory.setItem(STATUS_SLOT, item(Material.PAPER, "Bot: " + bot.getBotName(),
+                "UUID: " + bot.getUUID(),
+                "Changes stay local until Save.",
+                "Auto-equip: " + (autoEquip ? "on" : "off")));
+        inventory.setItem(DISCARD_SLOT, item(Material.RED_WOOL, "Discard changes",
+                "Close without changing " + bot.getBotName()));
+        inventory.setItem(CLOSE_SLOT, item(Material.BARRIER, "Close (discard)",
+                "Unsaved changes will be discarded."));
+    }
+
+    static boolean isEditableSlot(int slot) {
+        return slot >= 0 && slot < EDITABLE_SLOTS;
+    }
+
+    static boolean isControlSlot(int slot) {
+        return slot == AUTO_EQUIP_SLOT || slot == SAVE_SLOT || slot == STATUS_SLOT
+                || slot == DISCARD_SLOT || slot == CLOSE_SLOT;
+    }
+
+    /** Slots that are decorative and cannot receive or provide items. */
     public static boolean isFillerSlot(int slot) {
-        return slot >= 41 && slot < SIZE;
+        return slot >= EDITABLE_SLOTS && slot < SIZE && !isControlSlot(slot);
     }
 
     public static boolean isArmorOrOffhand(int slot) {
-        return slot >= 36 && slot < 41;
+        return slot >= BOOTS_SLOT && slot <= OFFHAND_SLOT;
     }
 
-    private static ItemStack safe(ItemStack it) {
-        return it == null ? new ItemStack(Material.AIR) : it;
+    static Control actionForSlot(int slot) {
+        if (slot == AUTO_EQUIP_SLOT) return Control.AUTO_EQUIP;
+        if (slot == SAVE_SLOT) return Control.SAVE;
+        if (slot == DISCARD_SLOT) return Control.DISCARD;
+        if (slot == CLOSE_SLOT) return Control.CLOSE;
+        return null;
     }
 
-    private static ItemStack buildFiller() {
-        ItemStack it = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
-        ItemMeta meta = it.getItemMeta();
-        if (meta != null) {
-            meta.setDisplayName(" ");
-            it.setItemMeta(meta);
+    /** Check the only slots that a chest inventory cannot validate itself. */
+    static String validationError(ItemStack[] contents) {
+        if (contents == null || contents.length < EDITABLE_SLOTS) return "The editor contents are incomplete.";
+        for (int slot = BOOTS_SLOT; slot <= HELMET_SLOT; slot++) {
+            if (!isValidItemForSlot(slot, contents[slot])) {
+                return "That item cannot be placed in equipment slot " + slot + ".";
+            }
         }
-        return it;
+        return null;
+    }
+
+    static boolean isValidItemForSlot(int slot, ItemStack item) {
+        return item == null || isValidMaterialForSlot(slot, item.getType());
+    }
+
+    static boolean isValidMaterialForSlot(int slot, Material material) {
+        if (material == null || material == Material.AIR || material == Material.CAVE_AIR
+                || material == Material.VOID_AIR || !isEditableSlot(slot)) return true;
+        String name = material.name();
+        return switch (slot) {
+            case BOOTS_SLOT -> name.endsWith("_BOOTS");
+            case LEGGINGS_SLOT -> name.endsWith("_LEGGINGS");
+            case CHEST_SLOT -> name.endsWith("_CHESTPLATE") || name.equals("ELYTRA");
+            case HELMET_SLOT -> name.endsWith("_HELMET") || name.equals("CARVED_PUMPKIN");
+            default -> true;
+        };
+    }
+
+    static final class EditState {
+        private final ItemStack[] original;
+        private final int selectedHotbarSlot;
+
+        EditState(ItemStack[] original, int selectedHotbarSlot) {
+            this.original = copy(original, EDITABLE_SLOTS);
+            this.selectedHotbarSlot = selectedHotbarSlot;
+        }
+
+        static EditState capture(Bot bot) {
+            PlayerInventory inventory = bot.getBukkitEntity().getInventory();
+            ItemStack[] snapshot = new ItemStack[EDITABLE_SLOTS];
+            for (int i = 0; i < 36; i++) snapshot[i] = inventory.getItem(i);
+            snapshot[BOOTS_SLOT] = inventory.getBoots();
+            snapshot[LEGGINGS_SLOT] = inventory.getLeggings();
+            snapshot[CHEST_SLOT] = inventory.getChestplate();
+            snapshot[HELMET_SLOT] = inventory.getHelmet();
+            snapshot[OFFHAND_SLOT] = inventory.getItemInOffHand();
+            return new EditState(snapshot, bot.getBotInventory().getSelectedHotbarSlot());
+        }
+
+        boolean changed(ItemStack[] current) {
+            ItemStack[] normalized = copy(current, EDITABLE_SLOTS);
+            for (int i = 0; i < EDITABLE_SLOTS; i++) {
+                if (!Objects.equals(original[i], normalized[i])) return true;
+            }
+            return false;
+        }
+
+        int selectedHotbarSlot() {
+            return selectedHotbarSlot;
+        }
+    }
+
+    enum Control {
+        AUTO_EQUIP,
+        SAVE,
+        DISCARD,
+        CLOSE
+    }
+
+    private static ItemStack[] copy(ItemStack[] source, int length) {
+        ItemStack[] result = new ItemStack[length];
+        if (source == null) return result;
+        for (int i = 0; i < length && i < source.length; i++) {
+            result[i] = cloneOrNull(source[i]);
+        }
+        return result;
+    }
+
+    private static ItemStack cloneOrNull(ItemStack item) {
+        return item == null ? null : item.clone();
+    }
+
+    private static ItemStack safe(ItemStack item) {
+        return item == null || item.getType().isAir() ? new ItemStack(Material.AIR) : item.clone();
+    }
+
+    private static ItemStack filler() {
+        return item(Material.GRAY_STAINED_GLASS_PANE, " ");
+    }
+
+    private static ItemStack item(Material material, String name, String... lore) {
+        ItemStack item = new ItemStack(material);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.RESET + name);
+            if (lore.length > 0) {
+                java.util.List<String> lines = new java.util.ArrayList<>(lore.length);
+                for (String line : lore) lines.add(ChatColor.GRAY + line);
+                meta.setLore(lines);
+            }
+            item.setItemMeta(meta);
+        }
+        return item;
     }
 }

@@ -47,7 +47,7 @@ This matrix classifies major systems using the following buckets:
 | `BotInventory.java` | Do not touch without runtime tests | NMS direct-write path for fake-player inventory | Inventory state, equip logic, hotbar state | Protect |
 | `PresetManager.java` | Active/current 1v1 path | `/bot preset` persistence and apply | Saves and applies presets | Keep |
 | `BotInventoryGUI.java` | Active/current 1v1 path | Opened by command and synced through listener | Inventory editing GUI | Keep |
-| `BotInventoryListener.java` | Active/current 1v1 path | Syncs GUI edits back to bots | GUI close/apply propagation | Keep |
+| `BotInventoryListener.java` | Active/current 1v1 path | Applies explicit saves and discards every other close path | Editor locks, validation, and lifecycle cleanup | Keep |
 | `BotCommand.java` | Active/current 1v1 path + archive candidate from default strategy | Registered command root with wide surface | Main player/admin bot command set | Reclassify docs first |
 | `AICommand.java` | Training-only | Exposes movement brain, reinforcement, evaluation flows | AI/training/admin surface | Keep; document as training |
 | `BotEnvironmentCommand.java` | Active but legacy/protected | Registered and mutates `LegacyMats`/custom mob list | Environment override/admin tooling | Keep but archive from default user path |

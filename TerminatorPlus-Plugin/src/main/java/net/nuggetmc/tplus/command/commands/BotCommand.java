@@ -8,7 +8,6 @@ import net.nuggetmc.tplus.api.agent.legacyagent.LegacyMats;
 import net.nuggetmc.tplus.api.utils.ChatUtils;
 import net.nuggetmc.tplus.bot.Bot;
 import net.nuggetmc.tplus.bot.BotManagerImpl;
-import net.nuggetmc.tplus.bot.gui.BotInventoryGUI;
 import net.nuggetmc.tplus.bot.loadout.BotInventory;
 import net.nuggetmc.tplus.bot.navigation.MovementV2Settings;
 import net.nuggetmc.tplus.bot.preset.BotPreset;
@@ -1378,12 +1377,25 @@ public class BotCommand extends CommandInstance {
             sender.sendMessage(ChatColor.RED + "This command can only be run by a player.");
             return;
         }
-        Bot bot = findBot(name, player.getLocation());
-        if (bot == null) {
+        List<Bot> matches = manager.fetch().stream()
+                .filter(t -> t instanceof Bot)
+                .map(t -> (Bot) t)
+                .filter(bot -> name.equalsIgnoreCase(bot.getBotName()))
+                .toList();
+        if (matches.isEmpty()) {
             sender.sendMessage("Could not find bot " + ChatColor.GREEN + name + ChatColor.RESET + "!");
             return;
         }
-        new BotInventoryGUI(bot).open(player);
+        if (matches.size() > 1) {
+            sender.sendMessage(ChatColor.RED + "Inventory editing is ambiguous: multiple bots use the name "
+                    + ChatColor.YELLOW + name + ChatColor.RED + ". Select the exact bot in /bot first.");
+            return;
+        }
+        if (plugin.getInventoryListener() == null) {
+            sender.sendMessage(ChatColor.RED + "The bot inventory editor is unavailable right now.");
+            return;
+        }
+        plugin.getInventoryListener().open(player, matches.get(0));
     }
 
     public List<String> inventoryAutofill(CommandSender sender, String[] args) {
