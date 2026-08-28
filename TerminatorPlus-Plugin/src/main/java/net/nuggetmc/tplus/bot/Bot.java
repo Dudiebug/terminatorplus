@@ -113,7 +113,7 @@ public class Bot extends ServerPlayer implements Terminator {
     private List<Block> standingOn = new ArrayList<>();
     private UUID targetPlayer = null;
     private boolean inPlayerList;
-    private Location originalSpawnLocation;
+    private Location respawnAnchor;
     private SkinData skinData;
     private final BotInventory botInventory;
     private final Cooldowns cooldowns;
@@ -211,7 +211,6 @@ public class Bot extends ServerPlayer implements Terminator {
         GameProfile profile = CustomGameProfile.create(uuid, ChatUtils.trim16(name), skin);
 
         Bot bot = new Bot(nmsServer, nmsWorld, profile, addPlayerList);
-        bot.originalSpawnLocation = loc.clone();
         bot.skinData = skin;
 
         bot.connection = new ServerGamePacketListenerImpl(nmsServer, new MockConnection(), bot, CommonListenerCookie.createInitial(bot.getGameProfile(), false));
@@ -748,6 +747,7 @@ public class Bot extends ServerPlayer implements Terminator {
         } else {
             groundTicks = 0;
         }
+        captureRespawnAnchor(onTheGround);
         // Vanilla Player.attack() reads this.fallDistance and this.onGround()
         // to decide whether an attack is a crit (1.5× damage + particles). We
         // override doTick() to skip aiStep(), which is where vanilla advances
@@ -1400,10 +1400,23 @@ public class Bot extends ServerPlayer implements Terminator {
     @Override
     public void setAutoRespawnAllowed(boolean allowed) {
         this.autoRespawnAllowed = allowed;
+        if (!allowed && plugin.getManager() != null) {
+            plugin.getManager().cancelPendingRespawn(getUUID());
+        }
     }
 
-    Location originalSpawnLocation() {
-        return originalSpawnLocation == null ? getLocation().clone() : originalSpawnLocation.clone();
+    private void captureRespawnAnchor(boolean onTheGround) {
+        if (respawnAnchor != null || !onTheGround) return;
+        respawnAnchor = RespawnSafety.captureAnchor(
+                null,
+                getLocation(),
+                true,
+                RespawnSafety::isSafeGrounded
+        );
+    }
+
+    Location respawnAnchor() {
+        return respawnAnchor == null ? null : respawnAnchor.clone();
     }
 
     SkinData skinData() {
@@ -1443,7 +1456,9 @@ public class Bot extends ServerPlayer implements Terminator {
     private void dieCheck() {
         if (removeOnDeath) {
 
-            plugin.getManager().remove(this);
+            if (!plugin.getManager().hasPendingRespawn(getUUID())) {
+                plugin.getManager().remove(this);
+            }
 
             scheduleBotTask(this::removeBot, 20);
 

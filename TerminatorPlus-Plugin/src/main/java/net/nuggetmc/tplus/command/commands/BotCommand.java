@@ -10,6 +10,7 @@ import net.nuggetmc.tplus.bot.Bot;
 import net.nuggetmc.tplus.bot.BotManagerImpl;
 import net.nuggetmc.tplus.bot.gui.BotInventoryGUI;
 import net.nuggetmc.tplus.bot.loadout.BotInventory;
+import net.nuggetmc.tplus.bot.navigation.MovementV2Settings;
 import net.nuggetmc.tplus.bot.preset.BotPreset;
 import net.nuggetmc.tplus.bot.preset.PresetManager;
 import net.nuggetmc.tplus.command.CommandHandler;
@@ -23,6 +24,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.PotionMeta;
+import org.bukkit.block.data.Waterlogged;
 import org.bukkit.potion.PotionType;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
@@ -36,6 +38,7 @@ public class BotCommand extends CommandInstance {
 
     private static final String ADMIN_PERMISSION = "terminatorplus.admin";
     static final double DEFAULT_SCATTER_RADIUS = 8.0;
+    static final double MIN_SCATTER_RADIUS = 1.0;
     static final double MAX_SCATTER_RADIUS = 64.0;
     private static final double SCATTER_MIN_SEPARATION = 0.75;
 
@@ -60,7 +63,11 @@ public class BotCommand extends CommandInstance {
 
     @Command
     public void root(CommandSender sender) {
-        commandHandler.sendRootInfo(this, sender);
+        if (sender instanceof Player player) {
+            plugin.getManagementUI().openMain(player);
+        } else {
+            commandHandler.sendRootInfo(this, sender);
+        }
     }
 
     @Command(
@@ -113,6 +120,45 @@ public class BotCommand extends CommandInstance {
         if ("true".equalsIgnoreCase(value)) return true;
         if ("false".equalsIgnoreCase(value)) return false;
         return null;
+    }
+
+    @Command(
+            name = "movementv2",
+            desc = "Enable, disable, or show Movement V2.",
+            autofill = "movementV2Autofill"
+    )
+    @Require(ADMIN_PERMISSION)
+    public void movementV2(CommandSender sender, @OptArg("on-off-status") String action) {
+        MovementV2Action parsed = MovementV2Action.parse(action);
+        if (parsed == null) {
+            sender.sendMessage(ChatColor.RED + "Usage: /bot movementv2 on|off|status");
+            return;
+        }
+        if (parsed != MovementV2Action.STATUS) {
+            MovementV2Settings.setEnabled(plugin, parsed == MovementV2Action.ON);
+        }
+        boolean enabled = MovementV2Settings.isEnabled(plugin);
+        sender.sendMessage("Movement V2 is "
+                + (enabled ? ChatColor.GREEN + "enabled" : ChatColor.RED + "disabled")
+                + ChatColor.RESET + ".");
+    }
+
+    public List<String> movementV2Autofill(CommandSender sender, String[] args) {
+        return args.length == 2 ? List.of("on", "off", "status") : List.of();
+    }
+
+    enum MovementV2Action {
+        ON, OFF, STATUS;
+
+        static MovementV2Action parse(String value) {
+            if (value == null) return STATUS;
+            return switch (value.toLowerCase(Locale.ENGLISH)) {
+                case "on" -> ON;
+                case "off" -> OFF;
+                case "status" -> STATUS;
+                default -> null;
+            };
+        }
     }
 
     private void createBots(CommandSender sender, String name, String skin, String loc, int amount) {
@@ -327,9 +373,9 @@ public class BotCommand extends CommandInstance {
             desc = "Information about loaded bots.",
             autofill = "infoAutofill"
     )
-    public void info(CommandSender sender, @Arg("bot-name") String name) {
+    public void info(CommandSender sender, @OptArg("bot-name") String name) {
         if (name == null) {
-            sender.sendMessage(ChatColor.YELLOW + "Bot GUI coming soon!");
+            commandHandler.sendRootInfo(this, sender);
             return;
         }
 
@@ -809,12 +855,12 @@ public class BotCommand extends CommandInstance {
         try {
             radius = Double.parseDouble(radiusText);
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Radius must be a number greater than 0 and no more than "
-                    + MAX_SCATTER_RADIUS + ".");
+            throw new IllegalArgumentException("Radius must be a number from " + MIN_SCATTER_RADIUS
+                    + " to " + MAX_SCATTER_RADIUS + ".");
         }
-        if (!Double.isFinite(radius) || radius <= 0 || radius > MAX_SCATTER_RADIUS) {
-            throw new IllegalArgumentException("Radius must be a number greater than 0 and no more than "
-                    + MAX_SCATTER_RADIUS + ".");
+        if (!Double.isFinite(radius) || radius < MIN_SCATTER_RADIUS || radius > MAX_SCATTER_RADIUS) {
+            throw new IllegalArgumentException("Radius must be a number from " + MIN_SCATTER_RADIUS
+                    + " to " + MAX_SCATTER_RADIUS + ".");
         }
         return radius;
     }
@@ -929,14 +975,14 @@ public class BotCommand extends CommandInstance {
         World world = center.getWorld();
         double x = center.getX() + offset.x();
         double z = center.getZ() + offset.z();
+        if (!isInsideScatterBorder(world, x, z)) return null;
         int blockX = Location.locToBlock(x);
         int blockZ = Location.locToBlock(z);
         if (blockX == center.getBlockX() && blockZ == center.getBlockZ()) return null;
 
         int top = Math.min(world.getMaxHeight() - 2, world.getHighestBlockYAt(blockX, blockZ) + 1);
         for (int y = top; y > world.getMinHeight(); y--) {
-            Block below = world.getBlockAt(blockX, y - 1, blockZ);
-            if (!isSafeScatterFloor(below)) continue;
+            if (!isSafeScatterFloor(world, x, y, z)) continue;
             if (!isSafeScatterBody(world, x, y, z)) continue;
             return new Location(world, x, y, z, center.getYaw(), center.getPitch());
         }
@@ -958,24 +1004,54 @@ public class BotCommand extends CommandInstance {
     private static boolean isSafeScatterFloor(Block block) {
         Material material = block.getType();
         return !isScatterHazard(material)
+                && !block.isLiquid()
+                && (!(block.getBlockData() instanceof Waterlogged waterlogged) || !waterlogged.isWaterlogged())
+                && Math.abs(block.getBoundingBox().getMaxY() - (block.getY() + 1.0)) < 1.0e-6
                 && (LegacyMats.isSolid(material) || LegacyMats.canStandOn(material));
     }
 
-    private static boolean isSafeScatterClear(Block block) {
-        return !isScatterHazard(block.getType()) && block.isPassable();
+    private static boolean isSafeScatterFloor(World world, double x, int y, double z) {
+        for (double dx : new double[]{-0.3, 0.3}) {
+            for (double dz : new double[]{-0.3, 0.3}) {
+                Block floor = world.getBlockAt(
+                        Location.locToBlock(x + dx), y - 1, Location.locToBlock(z + dz));
+                if (!isSafeScatterFloor(floor)) return false;
+            }
+        }
+        return true;
     }
 
-    private static boolean isScatterHazard(Material material) {
+    private static boolean isSafeScatterClear(Block block) {
+        return !isScatterHazard(block.getType())
+                && !block.isLiquid()
+                && (!(block.getBlockData() instanceof Waterlogged waterlogged) || !waterlogged.isWaterlogged())
+                && block.isPassable();
+    }
+
+    static boolean isScatterHazard(Material material) {
         return material == Material.WATER
                 || material == Material.LAVA
                 || material == Material.FIRE
                 || material == Material.SOUL_FIRE
+                || material == Material.CAMPFIRE
+                || material == Material.SOUL_CAMPFIRE
                 || material == Material.CACTUS
                 || material == Material.MAGMA_BLOCK
                 || material == Material.SWEET_BERRY_BUSH
                 || material == Material.POWDER_SNOW
+                || material == Material.POINTED_DRIPSTONE
                 || material == Material.WITHER_ROSE
-                || material.name().endsWith("_CAMPFIRE");
+                || material == Material.COBWEB
+                || material == Material.VINE;
+    }
+
+    private static boolean isInsideScatterBorder(World world, double x, double z) {
+        for (double dx : new double[]{-0.3, 0.3}) {
+            for (double dz : new double[]{-0.3, 0.3}) {
+                if (!world.getWorldBorder().isInside(new Location(world, x + dx, 0, z + dz))) return false;
+            }
+        }
+        return true;
     }
 
     private static double angleDifference(double first, double second) {

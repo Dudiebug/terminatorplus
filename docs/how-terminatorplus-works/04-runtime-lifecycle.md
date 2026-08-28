@@ -125,11 +125,14 @@ It:
 
 Automatic respawning is a runtime-only manager option exposed by
 `/bot respawn [true|false]` and defaults to disabled. When enabled, a bot death
-captures its original spawn point, UUID, skin, inventory/loadout, selected
-slot, target, network, kill count, and player-list mode. Drops are suppressed,
-the dead entity completes normal cleanup, and a replacement is created after
-20 ticks. Bots owned by an active training generation opt out so respawning
-cannot interfere with population turnover.
+captures the first safe grounded location observed during a tick, then keeps
+that anchor permanently despite later movement or teleportation. It also
+captures the UUID, skin, inventory/loadout, selected slot, target, network, kill
+count, and player-list mode. Drops are suppressed, the dead entity completes
+normal cleanup, and a replacement is created after 20 ticks at the anchor or a
+bounded nearby location with a valid floor and clear body/head space. Bots owned
+by an active training generation opt out so respawning cannot interfere with
+population turnover.
 
 This is one of the clearest "do not simplify casually" areas in the codebase.
 

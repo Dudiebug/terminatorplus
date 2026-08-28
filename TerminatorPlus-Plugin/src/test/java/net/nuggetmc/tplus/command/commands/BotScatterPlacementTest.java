@@ -1,6 +1,7 @@
 package net.nuggetmc.tplus.command.commands;
 
 import org.junit.jupiter.api.Test;
+import org.bukkit.Material;
 
 import java.util.List;
 
@@ -9,6 +10,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BotScatterPlacementTest {
+
+    @Test
+    void rejectsCommonFloorAndBodyHazards() {
+        assertTrue(BotCommand.isScatterHazard(Material.CAMPFIRE));
+        assertTrue(BotCommand.isScatterHazard(Material.SOUL_CAMPFIRE));
+        assertTrue(BotCommand.isScatterHazard(Material.COBWEB));
+        assertTrue(BotCommand.isScatterHazard(Material.VINE));
+        assertTrue(BotCommand.isScatterHazard(Material.WATER));
+    }
 
     @Test
     void defaultAndExplicitRadiusAreAccepted() {
@@ -20,6 +30,7 @@ class BotScatterPlacementTest {
     void invalidRadiusIsRejected() {
         assertThrows(IllegalArgumentException.class, () -> BotCommand.parseScatterRadius("not-a-number"));
         assertThrows(IllegalArgumentException.class, () -> BotCommand.parseScatterRadius("0"));
+        assertThrows(IllegalArgumentException.class, () -> BotCommand.parseScatterRadius("0.5"));
         assertThrows(IllegalArgumentException.class, () -> BotCommand.parseScatterRadius("-2"));
         assertThrows(IllegalArgumentException.class, () -> BotCommand.parseScatterRadius("NaN"));
         assertThrows(IllegalArgumentException.class, () -> BotCommand.parseScatterRadius("65"));

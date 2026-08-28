@@ -2,7 +2,9 @@ package net.nuggetmc.tplus.bot;
 
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.NeuralNetwork;
 import net.nuggetmc.tplus.api.utils.SkinData;
+import org.bukkit.Particle;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 
@@ -28,11 +30,14 @@ record BotRespawnState(
 ) {
 
     static BotRespawnState capture(Bot bot) {
+        Location anchor = bot.respawnAnchor();
+        if (anchor == null) return null;
+
         PlayerInventory inventory = bot.getBukkitEntity().getInventory();
         return new BotRespawnState(
                 bot.getUUID(),
                 bot.getBotName(),
-                bot.originalSpawnLocation(),
+                anchor,
                 bot.skinData(),
                 copy(inventory.getStorageContents()),
                 copy(inventory.getArmorContents()),
@@ -50,7 +55,10 @@ record BotRespawnState(
     }
 
     Bot respawn() {
-        Bot bot = Bot.createBot(spawnLocation.clone(), name, skin, uuid, inPlayerList);
+        Location location = RespawnSafety.findNearestSafe(spawnLocation);
+        if (location == null) return null;
+
+        Bot bot = Bot.createBot(location, name, skin, uuid, inPlayerList);
         PlayerInventory inventory = bot.getBukkitEntity().getInventory();
         inventory.setStorageContents(copy(storage));
         inventory.setArmorContents(copy(armor));
@@ -66,7 +74,15 @@ record BotRespawnState(
             bot.getBotInventory().markLoadoutApplied();
         }
         bot.getBukkitEntity().updateInventory();
+        RespawnSafety.emitPoof(bot.getLocation(), BotRespawnState::spawnPoof);
         return bot;
+    }
+
+    private static void spawnPoof(Location location) {
+        World world = location.getWorld();
+        if (world != null) {
+            world.spawnParticle(Particle.CLOUD, location, 12, 0.25, 0.35, 0.25, 0.02);
+        }
     }
 
     static ItemStack[] copy(ItemStack[] contents) {

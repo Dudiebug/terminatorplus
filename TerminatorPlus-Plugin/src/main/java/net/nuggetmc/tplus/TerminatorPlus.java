@@ -7,6 +7,7 @@ import net.nuggetmc.tplus.bot.BotManagerImpl;
 import net.nuggetmc.tplus.bot.combat.CombatDebugger;
 import net.nuggetmc.tplus.bot.combat.CombatDirector;
 import net.nuggetmc.tplus.bot.gui.BotInventoryListener;
+import net.nuggetmc.tplus.bot.gui.BotManagementUI;
 import net.nuggetmc.tplus.bot.movement.MovementOutputApplier;
 import net.nuggetmc.tplus.bot.preset.PresetManager;
 import net.nuggetmc.tplus.bridge.InternalBridgeImpl;
@@ -32,6 +33,7 @@ public class TerminatorPlus extends JavaPlugin {
     private CommandHandler handler;
     private CombatDirector combatDirector;
     private PresetManager presetManager;
+    private BotManagementUI managementUI;
 
     public static TerminatorPlus getInstance() {
         return instance;
@@ -65,6 +67,10 @@ public class TerminatorPlus extends JavaPlugin {
         return presetManager;
     }
 
+    public BotManagementUI getManagementUI() {
+        return managementUI;
+    }
+
     @Override
     public void onEnable() {
         instance = this;
@@ -79,13 +85,14 @@ public class TerminatorPlus extends JavaPlugin {
         this.manager = new BotManagerImpl();
         this.combatDirector = new CombatDirector();
         this.presetManager = new PresetManager(this);
+        this.managementUI = new BotManagementUI(this);
         this.handler = new CommandHandler(this);
 
         TerminatorPlusAPI.setBotManager(manager);
         TerminatorPlusAPI.setInternalBridge(new InternalBridgeImpl());
 
         // Register event listeners
-        this.registerEvents(manager, new BotInventoryListener(this));
+        this.registerEvents(manager, new BotInventoryListener(this), managementUI);
 
         if (!correctVersion) {
             for (int i = 0; i < 20; i++) { // Kids are stupid so we need to make sure they see this
@@ -100,12 +107,16 @@ public class TerminatorPlus extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (managementUI != null) {
+            managementUI.shutdown();
+        }
         if (manager != null) {
             manager.reset();
         }
         handler = null;
         combatDirector = null;
         presetManager = null;
+        managementUI = null;
         manager = null;
         TerminatorPlusAPI.setBotManager(null);
         TerminatorPlusAPI.setInternalBridge(null);

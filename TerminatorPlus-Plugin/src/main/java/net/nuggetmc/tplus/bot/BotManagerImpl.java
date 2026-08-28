@@ -244,6 +244,9 @@ public class BotManagerImpl implements BotManager, Listener {
     @Override
     public void remove(Terminator bot) {
         if (bot == null) return;
+        if (bot instanceof Bot b) {
+            cancelPendingRespawn(b.getUUID());
+        }
         try {
             agent.onBotRemoved(bot);
         } finally {
@@ -264,13 +267,19 @@ public class BotManagerImpl implements BotManager, Listener {
         return pendingRespawns.size();
     }
 
+    boolean hasPendingRespawn(UUID botId) {
+        return botId != null && pendingRespawns.containsKey(botId);
+    }
+
     public void prepareRespawn(Bot bot) {
         if (!respawnEnabled || bot == null || !bot.isAutoRespawnAllowed()) return;
 
         UUID botId = bot.getUUID();
         if (pendingRespawns.containsKey(botId)) return;
 
-        pendingRespawns.put(botId, BotRespawnState.capture(bot));
+        BotRespawnState captured = BotRespawnState.capture(bot);
+        if (captured == null) return;
+        pendingRespawns.put(botId, captured);
         BukkitTask task = Bukkit.getScheduler().runTaskLater(TerminatorPlus.getInstance(), () -> {
             pendingRespawnTasks.remove(botId);
             BotRespawnState state = pendingRespawns.remove(botId);
@@ -281,13 +290,23 @@ public class BotManagerImpl implements BotManager, Listener {
             // scheduler ordering within this tick.
             try {
                 bot.removeBot();
-                state.respawn();
+                if (state.respawn() == null) {
+                    TerminatorPlus.getInstance().getLogger().warning(
+                            "Could not find a safe respawn location for " + state.name());
+                }
             } catch (RuntimeException error) {
                 TerminatorPlus.getInstance().getLogger().severe(
                         "Could not respawn bot " + state.name() + ": " + error.getMessage());
             }
         }, 20L);
         pendingRespawnTasks.put(botId, task);
+    }
+
+    void cancelPendingRespawn(UUID botId) {
+        if (botId == null) return;
+        BukkitTask task = pendingRespawnTasks.remove(botId);
+        if (task != null && !task.isCancelled()) task.cancel();
+        pendingRespawns.remove(botId);
     }
 
     private void cancelPendingRespawns() {

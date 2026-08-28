@@ -1,0 +1,1156 @@
+package net.nuggetmc.tplus.bot.gui;
+
+import net.nuggetmc.tplus.TerminatorPlus;
+import net.nuggetmc.tplus.api.Terminator;
+import net.nuggetmc.tplus.bot.navigation.MovementV2Settings;
+import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.Material;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.player.AsyncPlayerChatEvent;
+import org.bukkit.event.player.PlayerKickEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.scheduler.BukkitTask;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * Holder-based management menu for the commands already exposed by the plugin.
+ *
+ * <p>The UI is intentionally a command client: buttons either change pages or
+ * dispatch the same command a player would type.  That keeps parsing,
+ * permissions, and side effects in the existing command implementations.</p>
+ */
+public final class BotManagementUI implements Listener {
+
+    public static final long REFRESH_INTERVAL_TICKS = 5L;
+    public static final int INVENTORY_SIZE = 54;
+
+    static final String MANAGE_PERMISSION = "terminatorplus.manage";
+    static final String ADMIN_PERMISSION = "terminatorplus.admin";
+    static final int BOT_PAGE_SIZE = 28;
+    private static final int MAX_PROMPT_LENGTH = 256;
+    private static final String TITLE = ChatColor.GOLD + "TerminatorPlus Management";
+
+    private final TerminatorPlus plugin;
+    private final CommandDispatcher dispatcher;
+    private final Map<UUID, Session> sessions = new HashMap<>();
+    private final Map<UUID, PendingPrompt> prompts = new ConcurrentHashMap<>();
+    private final LifecycleState lifecycle = new LifecycleState();
+    private BukkitTask refreshTask;
+    private boolean shutdown;
+
+    public BotManagementUI(TerminatorPlus plugin) {
+        this(plugin, (playerId, command) -> {
+            Player player = Bukkit.getPlayer(playerId);
+            return player != null && Bukkit.dispatchCommand(player, command);
+        });
+    }
+
+    BotManagementUI(TerminatorPlus plugin, CommandDispatcher dispatcher) {
+        this.plugin = plugin;
+        this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
+    }
+
+    BotManagementUI(CommandDispatcher dispatcher) {
+        this(null, dispatcher);
+    }
+
+    /** Opens or reuses the management session and always starts at the main page. */
+    public void open(Player player) {
+        if (player == null || shutdown || plugin == null) return;
+        if (!Bukkit.isPrimaryThread()) {
+            Bukkit.getScheduler().runTask(plugin, () -> open(player));
+            return;
+        }
+
+        UUID playerId = player.getUniqueId();
+        Session session = sessions.get(playerId);
+        if (session == null) {
+            session = new Session(playerId);
+            sessions.put(playerId, session);
+            lifecycle.sessionOpened();
+        }
+        prompts.remove(playerId);
+        session.resetForOpen();
+        render(session);
+        player.openInventory(session.inventory);
+        ensureRefreshTask();
+    }
+
+    /** Lifecycle-friendly alias for callers that name the root page explicitly. */
+    public void openMain(Player player) {
+        open(player);
+    }
+
+    /** Cancels refresh, closes this UI's inventories, and is safe to call repeatedly. */
+    public void shutdown() {
+        if (shutdown) return;
+        shutdown = true;
+        if (plugin != null && !Bukkit.isPrimaryThread()) {
+            Bukkit.getScheduler().runTask(plugin, this::finishShutdown);
+            return;
+        }
+        finishShutdown();
+    }
+
+    @EventHandler
+    public void onInventoryClick(InventoryClickEvent event) {
+        Inventory top = event.getView().getTopInventory();
+        if (!(top.getHolder() instanceof Session session)) return;
+
+        // Cancel before inspecting the slot: this includes bottom inventory,
+        // shift-click, number-key, double-click, creative, and outside clicks.
+        event.setCancelled(true);
+        if (!(event.getWhoClicked() instanceof Player player)
+                || !session.playerId.equals(player.getUniqueId())) return;
+
+        Button button = session.buttons.get(event.getRawSlot());
+        if (button != null) handle(session, button);
+    }
+
+    @EventHandler
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (event.getView().getTopInventory().getHolder() instanceof Session) {
+            // A drag can contain both top and bottom raw slots; cancel the
+            // entire operation rather than trying to filter individual slots.
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onInventoryClose(InventoryCloseEvent event) {
+        if (!(event.getView().getTopInventory().getHolder() instanceof Session session)) return;
+        if (!(event.getPlayer() instanceof Player player)
+                || !session.playerId.equals(player.getUniqueId())) return;
+        if (!session.awaitingPrompt) removeSession(session.playerId, false);
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        removeSession(event.getPlayer().getUniqueId(), false);
+    }
+
+    @EventHandler
+    public void onPlayerKick(PlayerKickEvent event) {
+        removeSession(event.getPlayer().getUniqueId(), false);
+    }
+
+    @EventHandler
+    public void onChat(AsyncPlayerChatEvent event) {
+        UUID playerId = event.getPlayer().getUniqueId();
+        if (prompts.get(playerId) == null) return;
+
+        event.setCancelled(true);
+        if (plugin == null) return;
+        String message = event.getMessage();
+        Bukkit.getScheduler().runTask(plugin, () -> finishPrompt(playerId, message));
+    }
+
+    private void handle(Session session, Button button) {
+        UiAction action = button.action();
+        switch (action) {
+            case OPEN_BOTS -> page(session, Page.BOTS, "Bot list");
+            case OPEN_CREATE -> page(session, Page.CREATE, "Create bots");
+            case OPEN_MOVEMENT -> page(session, Page.MOVEMENT, "Movement");
+            case OPEN_AI -> page(session, Page.AI, "AI");
+            case OPEN_COMBAT -> page(session, Page.COMBAT, "Combat and loadouts");
+            case OPEN_ADMIN -> page(session, Page.ADMIN, "Admin");
+            case OPEN_ENVIRONMENT -> page(session, Page.ENVIRONMENT, "Environment");
+            case OPEN_HELP -> page(session, Page.HELP, "Help and plugin info");
+            case BACK -> back(session);
+            case NEXT_PAGE -> nextBotPage(session);
+            case CLOSE -> closeSession(session.playerId, true);
+            case SELECT_BOT -> selectBot(session, button.payload());
+            case CONFIRM -> confirm(session);
+            case CANCEL -> cancelConfirmation(session);
+            default -> runAction(session, button);
+        }
+    }
+
+    private void runAction(Session session, Button button) {
+        UiAction action = button.action();
+        if (action.command() == null) return;
+
+        Player player = Bukkit.getPlayer(session.playerId);
+        if (player == null) {
+            removeSession(session.playerId, false);
+            return;
+        }
+        if (action.requiresAdmin() && !player.hasPermission(ADMIN_PERMISSION)) {
+            setStatus(session, "Admin permission required.");
+            return;
+        }
+        if (action.prompt()) {
+            beginPrompt(session, action, promptHint(action));
+            return;
+        }
+
+        String command = commandFor(action, button.payload());
+        if (action.destructive()) {
+            requestConfirmation(session, action, command);
+        } else {
+            dispatch(session, command);
+        }
+    }
+
+    private void selectBot(Session session, String payload) {
+        UUID botId;
+        try {
+            botId = UUID.fromString(payload);
+        } catch (IllegalArgumentException | NullPointerException ignored) {
+            setStatus(session, "That bot selection is no longer valid.");
+            return;
+        }
+
+        Terminator bot = findBot(botId);
+        if (bot == null) {
+            setStatus(session, "That bot is no longer active.");
+            return;
+        }
+        session.selectedBot = botId;
+        session.state.navigate(Page.BOT_DETAIL);
+        session.status = "Selected " + bot.getBotName();
+        render(session);
+    }
+
+    private void page(Session session, Page page, String status) {
+        session.state.navigate(page);
+        session.status = status;
+        render(session);
+    }
+
+    private void back(Session session) {
+        session.confirmation = null;
+        session.state.back();
+        session.status = "Back";
+        render(session);
+    }
+
+    private void nextBotPage(Session session) {
+        if (session.state.page != Page.BOTS) return;
+        int pageCount = pageCount(currentBots().size());
+        if (session.state.pageIndex + 1 >= pageCount) return;
+        session.state.pageIndex++;
+        session.status = "Bot page " + (session.state.pageIndex + 1) + "/" + pageCount;
+        render(session);
+    }
+
+    private void beginPrompt(Session session, UiAction action, String hint) {
+        prompts.put(session.playerId, new PendingPrompt(action, hint));
+        session.awaitingPrompt = true;
+        session.status = "Waiting for chat input";
+        Player player = Bukkit.getPlayer(session.playerId);
+        if (player != null) {
+            player.sendMessage(ChatColor.YELLOW + "Enter " + hint + ChatColor.GRAY + ", or type cancel.");
+        }
+        render(session);
+        if (player != null) player.closeInventory();
+        stopRefreshIfNoOpenSessions();
+    }
+
+    private void finishPrompt(UUID playerId, String message) {
+        Session session = sessions.get(playerId);
+        PendingPrompt pending = prompts.get(playerId);
+        Player player = Bukkit.getPlayer(playerId);
+        if (session == null || pending == null || player == null) {
+            prompts.remove(playerId);
+            return;
+        }
+
+        if (message != null && message.trim().equalsIgnoreCase("cancel")) {
+            prompts.remove(playerId, pending);
+            session.awaitingPrompt = false;
+            session.status = "Prompt cancelled";
+            render(session);
+            reopen(session, player);
+            return;
+        }
+        if (!isSafePromptInput(message)) {
+            player.sendMessage(ChatColor.RED + "Input is too long or contains control characters.");
+            return;
+        }
+
+        if (!prompts.remove(playerId, pending)) return;
+        session.awaitingPrompt = false;
+        String command = commandFor(pending.action(), message);
+        if (pending.action().destructive()) {
+            requestConfirmation(session, pending.action(), command);
+            reopen(session, player);
+        } else {
+            // The existing CommandInstance parser validates numbers, materials,
+            // locations, and all other command-specific input.
+            dispatch(session, command);
+            if (pending.action() == UiAction.BOT_INVENTORY_INPUT) {
+                removeSession(playerId, false);
+            } else {
+                reopen(session, player);
+            }
+        }
+    }
+
+    private void requestConfirmation(Session session, UiAction action, String command) {
+        Player player = Bukkit.getPlayer(session.playerId);
+        if (player == null) {
+            removeSession(session.playerId, false);
+            return;
+        }
+        if (!player.hasPermission(requiredPermission(action))) {
+            setStatus(session, "Permission recheck failed.");
+            return;
+        }
+
+        session.confirmation = new Confirmation(action, command, session.state.page);
+        session.state.page = Page.CONFIRM;
+        session.status = "Confirm: " + action.label();
+        render(session);
+    }
+
+    private void confirm(Session session) {
+        Confirmation confirmation = session.confirmation;
+        if (confirmation == null) return;
+
+        Player player = Bukkit.getPlayer(session.playerId);
+        if (player == null) {
+            removeSession(session.playerId, false);
+            return;
+        }
+        if (!player.hasPermission(requiredPermission(confirmation.action()))) {
+            session.confirmation = null;
+            session.state.page = confirmation.returnPage();
+            session.status = "Permission recheck failed; nothing changed.";
+            render(session);
+            return;
+        }
+
+        session.confirmation = null;
+        session.state.page = confirmation.returnPage();
+        dispatch(session, confirmation.command());
+    }
+
+    private void cancelConfirmation(Session session) {
+        if (session.confirmation == null) return;
+        session.state.page = session.confirmation.returnPage();
+        session.confirmation = null;
+        session.status = "Action cancelled";
+        render(session);
+    }
+
+    private void dispatch(Session session, String command) {
+        boolean accepted;
+        try {
+            accepted = dispatcher.dispatch(session.playerId, command);
+        } catch (RuntimeException error) {
+            accepted = false;
+        }
+        String shown = command.length() > 48 ? command.substring(0, 45) + "..." : command;
+        session.status = (accepted ? "Ran /" : "Rejected /") + shown;
+        render(session);
+    }
+
+    private void setStatus(Session session, String status) {
+        session.status = status;
+        render(session);
+    }
+
+    private void refreshAll() {
+        if (shutdown || !hasOpenSessions()) {
+            stopRefreshTask();
+            return;
+        }
+
+        for (Session session : new ArrayList<>(sessions.values())) {
+            Player player = Bukkit.getPlayer(session.playerId);
+            if (player == null) {
+                removeSession(session.playerId, false);
+                continue;
+            }
+            if (session.awaitingPrompt) continue;
+            if (player.getOpenInventory().getTopInventory().getHolder() != session) {
+                removeSession(session.playerId, false);
+                continue;
+            }
+            refreshSession(session);
+        }
+    }
+
+    private void refreshSession(Session session) {
+        if (session.selectedBot != null && findBot(session.selectedBot) == null) {
+            // End this bot-bound refresh session so no stale UUID can act on a
+            // replacement with the same name.
+            removeSession(session.playerId, true);
+            return;
+        }
+        render(session);
+    }
+
+    private void ensureRefreshTask() {
+        if (plugin == null || shutdown || !hasOpenSessions() || refreshTask != null) return;
+        refreshTask = Bukkit.getScheduler().runTaskTimer(plugin, this::refreshAll,
+                REFRESH_INTERVAL_TICKS, REFRESH_INTERVAL_TICKS);
+    }
+
+    private void stopRefreshTask() {
+        BukkitTask task = refreshTask;
+        refreshTask = null;
+        if (task != null && !task.isCancelled()) task.cancel();
+    }
+
+    private void removeSession(UUID playerId, boolean closeInventory) {
+        Session removed = sessions.remove(playerId);
+        prompts.remove(playerId);
+        if (removed == null) return;
+
+        lifecycle.sessionClosed();
+        if (closeInventory) closeInventoryIfOwned(removed);
+        if (!lifecycle.shouldRefresh()) stopRefreshTask();
+    }
+
+    private void closeSession(UUID playerId, boolean closeInventory) {
+        removeSession(playerId, closeInventory);
+    }
+
+    private void reopen(Session session, Player player) {
+        if (shutdown || session == null || player == null || !player.isOnline()) return;
+        player.openInventory(session.inventory);
+        ensureRefreshTask();
+    }
+
+    private boolean hasOpenSessions() {
+        if (!lifecycle.shouldRefresh()) return false;
+        for (Session session : sessions.values()) {
+            Player player = Bukkit.getPlayer(session.playerId);
+            if (!session.awaitingPrompt && player != null
+                    && player.getOpenInventory().getTopInventory().getHolder() == session) return true;
+        }
+        return false;
+    }
+
+    private void stopRefreshIfNoOpenSessions() {
+        if (!hasOpenSessions()) stopRefreshTask();
+    }
+
+    private void finishShutdown() {
+        Collection<Session> active = new ArrayList<>(sessions.values());
+        sessions.clear();
+        prompts.clear();
+        lifecycle.shutdown();
+        stopRefreshTask();
+        for (Session session : active) closeInventoryIfOwned(session);
+    }
+
+    private void closeInventoryIfOwned(Session session) {
+        Player player = Bukkit.getPlayer(session.playerId);
+        if (player != null && player.getOpenInventory().getTopInventory().getHolder() == session) {
+            player.closeInventory();
+        }
+    }
+
+    private void render(Session session) {
+        Set<Integer> previousSlots = new HashSet<>(session.renderedSlots);
+        session.renderedSlots.clear();
+        session.buttons.clear();
+
+        switch (session.state.page) {
+            case MAIN -> renderMain(session);
+            case BOTS -> renderBots(session);
+            case BOT_DETAIL -> renderBotDetail(session);
+            case CREATE -> renderCreate(session);
+            case MOVEMENT -> renderMovement(session);
+            case AI -> renderAi(session);
+            case COMBAT -> renderCombat(session);
+            case ADMIN -> renderAdmin(session);
+            case ENVIRONMENT -> renderEnvironment(session);
+            case HELP -> renderHelp(session);
+            case CONFIRM -> renderConfirmation(session);
+        }
+        renderFooter(session);
+        previousSlots.removeAll(session.renderedSlots);
+        previousSlots.forEach(slot -> updateIfChanged(session.inventory, slot, null));
+    }
+
+    private void renderMain(Session session) {
+        put(session, 10, Material.PLAYER_HEAD, "Bots and status", UiAction.OPEN_BOTS, null,
+                "Browse active bots and live status");
+        put(session, 11, Material.CHEST, "Create / multi", UiAction.OPEN_CREATE, null,
+                "Create normal, random, or training bots");
+        put(session, 12, Material.FEATHER, "Movement", UiAction.OPEN_MOVEMENT, null,
+                "Gather, circular scatter, respawn, Movement V2");
+        put(session, 13, Material.REDSTONE, "AI", UiAction.OPEN_AI, null,
+                "Brains, training, evaluation, and info");
+        put(session, 14, Material.DIAMOND_SWORD, "Combat / loadouts", UiAction.OPEN_COMBAT, null,
+                "Weapons, presets, and inventory commands");
+        put(session, 15, Material.COMPARATOR, "Debug / admin", UiAction.OPEN_ADMIN, null,
+                "Administrative and debug commands");
+        put(session, 16, Material.GRASS_BLOCK, "Environment", UiAction.OPEN_ENVIRONMENT, null,
+                "Materials, mobs, and environment lists");
+        put(session, 17, Material.BOOK, "Help / plugin info", UiAction.OPEN_HELP, null,
+                "Show existing help and plugin information");
+        put(session, 19, Material.ENDER_PEARL, "Gather all", UiAction.BOT_GATHER, null,
+                "/bot gather");
+        put(session, 20, Material.COMPASS, "Circular scatter", UiAction.BOT_SCATTER, null,
+                "/bot scatter (default radius)");
+        put(session, 21, Material.PAPER, "Count bots", UiAction.BOT_COUNT, null,
+                "/bot count");
+    }
+
+    private void renderBots(Session session) {
+        List<Terminator> bots = currentBots();
+        int pageCount = pageCount(bots.size());
+        session.state.pageIndex = Math.min(session.state.pageIndex, pageCount - 1);
+        int start = session.state.pageIndex * BOT_PAGE_SIZE;
+        int end = Math.min(start + BOT_PAGE_SIZE, bots.size());
+        int slot = 10;
+        for (int index = start; index < end; index++) {
+            Terminator bot = bots.get(index);
+            UUID id = botId(bot);
+            if (id == null) continue;
+            String location = bot.getLocation() == null || bot.getLocation().getWorld() == null
+                    ? "unknown world"
+                    : bot.getLocation().getWorld().getName();
+            put(session, slot++, Material.PLAYER_HEAD, bot.getBotName(), UiAction.SELECT_BOT,
+                    id.toString(), (bot.isBotAlive() ? ChatColor.GREEN + "alive" : ChatColor.RED + "dead")
+                            + ChatColor.GRAY + " | " + location,
+                    "Click for status and actions");
+        }
+        session.status = "Bots " + (bots.size()) + " | page " + (session.state.pageIndex + 1) + "/" + pageCount;
+    }
+
+    private void renderBotDetail(Session session) {
+        Terminator bot = findBot(session.selectedBot);
+        if (bot == null) {
+            session.state.resetTo(Page.BOTS);
+            session.selectedBot = null;
+            session.status = "Selected bot disappeared; detail closed";
+            renderBots(session);
+            return;
+        }
+
+        String world = bot.getLocation() == null || bot.getLocation().getWorld() == null
+                ? "unknown" : bot.getLocation().getWorld().getName();
+        put(session, 10, Material.PLAYER_HEAD, "Status: " + bot.getBotName(), null, null,
+                "UUID: " + botId(bot),
+                "Health: " + bot.getBotHealth() + "/" + bot.getBotMaxHealth(),
+                "Alive: " + bot.isBotAlive(),
+                "World: " + world);
+        if (!isUniqueBotName(bot.getBotName(), currentBots().stream().map(Terminator::getBotName).toList())) {
+            put(session, 12, Material.BARRIER, "Duplicate bot name", null, null,
+                    "Selected actions are disabled because commands target bots by name.",
+                    "Use a unique bot name to avoid affecting the wrong bot.");
+            return;
+        }
+        put(session, 11, Material.PAPER, "Bot info", UiAction.BOT_INFO, bot.getBotName(),
+                "/bot info " + bot.getBotName());
+        put(session, 12, Material.REDSTONE, "AI info", UiAction.AI_INFO, bot.getBotName(),
+                "/ai info " + bot.getBotName());
+        put(session, 13, Material.DIAMOND_SWORD, "Weapon status", UiAction.BOT_WEAPONS, bot.getBotName(),
+                "/bot weapons " + bot.getBotName());
+        put(session, 14, Material.CHEST, "Edit inventory", UiAction.BOT_INVENTORY, bot.getBotName(),
+                "/bot inventory " + bot.getBotName());
+        put(session, 15, Material.OBSERVER, "Combat debug on", UiAction.BOT_COMBAT_DEBUG,
+                bot.getBotName() + " on", "/bot combatdebug " + bot.getBotName() + " on");
+        put(session, 16, Material.BARRIER, "Combat debug off", UiAction.BOT_COMBAT_DEBUG,
+                bot.getBotName() + " off", "/bot combatdebug " + bot.getBotName() + " off");
+        put(session, 17, Material.SHULKER_BOX, "Apply loadout...", UiAction.BOT_LOADOUT, null,
+                "Enter loadout [bot-name]");
+    }
+
+    private void renderCreate(Session session) {
+        put(session, 10, Material.PLAYER_HEAD, "Create one", UiAction.BOT_CREATE, null,
+                "name [skin] [x y z world]");
+        put(session, 11, Material.CHEST, "Create multiple", UiAction.BOT_MULTI, null,
+                "amount name [skin] [x y z world]");
+        put(session, 12, Material.REDSTONE, "Random AI bots", UiAction.AI_RANDOM, null,
+                "amount name [skin] [x y z world]");
+        put(session, 13, Material.FEATHER, "Movement V2 bots", UiAction.AI_MOVEMENT, null,
+                "amount name [skin] [x y z world]");
+        put(session, 14, Material.EXPERIENCE_BOTTLE, "Training session", UiAction.AI_REINFORCEMENT, null,
+                "population name [skin] [mode] [round-minutes]");
+    }
+
+    private void renderMovement(Session session) {
+        boolean respawnEnabled = plugin != null && plugin.getManager() != null
+                && plugin.getManager().isRespawnEnabled();
+        boolean movementV2Enabled = plugin != null && MovementV2Settings.isEnabled(plugin);
+        put(session, 10, Material.ENDER_PEARL, "Gather all bots", UiAction.BOT_GATHER, null,
+                "Teleport living bots to you");
+        put(session, 11, Material.COMPASS, "Circular scatter", UiAction.BOT_SCATTER, null,
+                "Use the default safe circular radius");
+        put(session, 12, Material.SPYGLASS, "Scatter radius...", UiAction.BOT_SCATTER_RADIUS, null,
+                "Enter a radius; command validates it");
+        put(session, 13, Material.TOTEM_OF_UNDYING,
+                "Respawn: " + (respawnEnabled ? "enabled" : "disabled"), UiAction.BOT_RESPAWN, null,
+                "/bot respawn");
+        put(session, 14, Material.LIME_DYE, "Enable respawn", UiAction.BOT_RESPAWN, "true",
+                "/bot respawn true");
+        put(session, 15, Material.RED_DYE, "Disable respawn", UiAction.BOT_RESPAWN, "false",
+                "/bot respawn false");
+        put(session, 16, Material.FEATHER,
+                "Movement V2: " + (movementV2Enabled ? "enabled" : "disabled"), UiAction.BOT_MOVEMENT_V2, "status",
+                "/bot movementv2 status");
+        put(session, 17, Material.LIME_WOOL, "Enable Movement V2", UiAction.BOT_MOVEMENT_V2, "on",
+                "/bot movementv2 on");
+        put(session, 18, Material.RED_WOOL, "Disable Movement V2", UiAction.BOT_MOVEMENT_V2, "off",
+                "/bot movementv2 off");
+    }
+
+    private void renderAi(Session session) {
+        put(session, 10, Material.REDSTONE, "Random AI bots...", UiAction.AI_RANDOM, null,
+                "Create random-network bots");
+        put(session, 11, Material.EXPERIENCE_BOTTLE, "Start training...", UiAction.AI_REINFORCEMENT, null,
+                "Begin an AI training session");
+        put(session, 12, Material.BARRIER, "Stop training", UiAction.AI_STOP, null,
+                "Confirmation required");
+        put(session, 13, Material.BOOK, "Brain status", UiAction.AI_BRAIN_STATUS, null,
+                "/ai brain status");
+        put(session, 14, Material.HOPPER, "Load brain", UiAction.AI_BRAIN_LOAD, null,
+                "/ai brain load");
+        if (session.selectedBot != null) {
+            Terminator bot = findBot(session.selectedBot);
+            put(session, 15, Material.WRITABLE_BOOK, "Save selected brain", UiAction.AI_BRAIN_SAVE,
+                    bot == null ? null : bot.getBotName(), "/ai brain save <selected bot>");
+            put(session, 19, Material.REDSTONE, "AI info (selected)", UiAction.AI_INFO,
+                    bot == null ? null : bot.getBotName(), "/ai info <selected bot>");
+        } else {
+            put(session, 15, Material.WRITABLE_BOOK, "Save brain...", UiAction.AI_BRAIN_SAVE_INPUT, null,
+                    "Enter optional bot name");
+            put(session, 19, Material.REDSTONE, "AI info...", UiAction.AI_INFO_INPUT, null,
+                    "Enter bot name");
+        }
+        put(session, 16, Material.TNT, "Reset brain", UiAction.AI_BRAIN_RESET, null,
+                "Confirmation required");
+        put(session, 17, Material.FEATHER, "Movement bots...", UiAction.AI_MOVEMENT, null,
+                "Create movement-controller bots");
+        put(session, 18, Material.MAP, "List evaluations", UiAction.AI_EVALUATE, "list",
+                "/ai evaluate list");
+        put(session, 20, Material.PAPER, "Run evaluation...", UiAction.AI_EVALUATE_INPUT, null,
+                "Enter optional variant scenario seeds");
+    }
+
+    private void renderCombat(Session session) {
+        put(session, 10, Material.DIAMOND_SWORD, "Weapons (all)", UiAction.BOT_WEAPONS, null,
+                "/bot weapons");
+        put(session, 11, Material.IRON_SWORD, "Weapons (selected)", UiAction.BOT_WEAPONS,
+                selectedName(session), "/bot weapons <selected bot>");
+        put(session, 12, Material.CHEST, "Give item...", UiAction.BOT_GIVE, null,
+                "item [bot-name] [slot]");
+        put(session, 13, Material.BRICKS, "Placement material...", UiAction.BOT_PLACE, null,
+                "material");
+        put(session, 14, Material.IRON_CHESTPLATE, "Armor tier...", UiAction.BOT_ARMOR, null,
+                "none, leather, chain, gold, iron, diamond, netherite");
+        put(session, 15, Material.SHULKER_BOX, "Loadout...", UiAction.BOT_LOADOUT, null,
+                "name [bot-name]");
+        put(session, 16, Material.ENDER_CHEST, "Loadout mix...", UiAction.BOT_LOADOUT_MIX, null,
+                "alltypes, core, or problem [bot-prefix]");
+        put(session, 17, Material.BOOK, "List presets", UiAction.BOT_PRESET_LIST, null,
+                "/bot preset list");
+        put(session, 18, Material.WRITABLE_BOOK, "Save preset...", UiAction.BOT_PRESET_SAVE, null,
+                "preset-name bot-name");
+        put(session, 19, Material.ENCHANTED_BOOK, "Apply preset...", UiAction.BOT_PRESET_APPLY, null,
+                "preset-name [bot-name]");
+        put(session, 20, Material.TNT, "Delete preset...", UiAction.BOT_PRESET_DELETE, null,
+                "Confirmation required");
+        String selectedName = selectedName(session);
+        put(session, 21, Material.CHEST, selectedName == null ? "Open inventory..." : "Open selected inventory",
+                selectedName == null ? UiAction.BOT_INVENTORY_INPUT : UiAction.BOT_INVENTORY,
+                selectedName, selectedName == null ? "Enter bot-name" : "/bot inventory <selected bot>");
+        put(session, 22, Material.PAPER, "Count bots", UiAction.BOT_COUNT, null,
+                "/bot count");
+    }
+
+    private void renderAdmin(Session session) {
+        put(session, 10, Material.TNT, "Reset all bots", UiAction.BOT_RESET, null,
+                "Confirmation and permission recheck required");
+        put(session, 11, Material.LIME_DYE, "Mob targeting on", UiAction.BOT_SETTINGS, "mobtarget true",
+                "/bot settings mobtarget true");
+        put(session, 12, Material.RED_DYE, "Mob targeting off", UiAction.BOT_SETTINGS, "mobtarget false",
+                "/bot settings mobtarget false");
+        put(session, 13, Material.LIME_DYE, "Player-list on", UiAction.BOT_SETTINGS, "addplayerlist true",
+                "/bot settings addplayerlist true");
+        put(session, 14, Material.RED_DYE, "Player-list off", UiAction.BOT_SETTINGS, "addplayerlist false",
+                "/bot settings addplayerlist false");
+        put(session, 15, Material.COMPASS, "Set target goal...", UiAction.BOT_SETTINGS_INPUT, null,
+                "setgoal value");
+        put(session, 16, Material.BEACON, "Set region...", UiAction.BOT_SETTINGS_REGION_INPUT, null,
+                "region bounds and weights");
+        put(session, 17, Material.BARRIER, "Clear region", UiAction.BOT_SETTINGS_REGION_CLEAR, null,
+                "Confirmation required");
+        put(session, 18, Material.COMPARATOR, "Debug expression...", UiAction.BOT_DEBUG, null,
+                "Existing debugger expression");
+        put(session, 19, Material.OBSERVER, "Combat debug all on", UiAction.BOT_COMBAT_DEBUG, "all on",
+                "/bot combatdebug all on");
+        put(session, 20, Material.REDSTONE_TORCH, "Combat debug all off", UiAction.BOT_COMBAT_DEBUG, "all off",
+                "/bot combatdebug all off");
+        put(session, 21, Material.PAPER, "Combat debug args...", UiAction.BOT_COMBAT_DEBUG_INPUT, null,
+                "bot-name|all on|off");
+    }
+
+    private void renderEnvironment(Session session) {
+        put(session, 10, Material.BOOK, "Environment help", UiAction.ENV_HELP, null,
+                "/botenvironment help");
+        put(session, 11, Material.BOOK, "Block help", UiAction.ENV_HELP, "blocks",
+                "/botenvironment help blocks");
+        put(session, 12, Material.BOOK, "Mob help", UiAction.ENV_HELP, "mobs",
+                "/botenvironment help mobs");
+        put(session, 13, Material.COMPASS, "Get material...", UiAction.ENV_GET_MATERIAL, null,
+                "x y z (relative values supported)");
+        put(session, 14, Material.BRICKS, "Add solid...", UiAction.ENV_ADD_SOLID, null,
+                "material or x y z");
+        put(session, 15, Material.BARRIER, "Remove solid...", UiAction.ENV_REMOVE_SOLID, null,
+                "material or x y z");
+        put(session, 16, Material.PAPER, "List solids", UiAction.ENV_LIST_SOLIDS, null,
+                "/botenvironment listSolids");
+        put(session, 17, Material.TNT, "Clear solids", UiAction.ENV_CLEAR_SOLIDS, null,
+                "Confirmation required");
+        put(session, 18, Material.ZOMBIE_HEAD, "Add custom mob...", UiAction.ENV_ADD_CUSTOM_MOB, null,
+                "entity type");
+        put(session, 19, Material.BARRIER, "Remove custom mob...", UiAction.ENV_REMOVE_CUSTOM_MOB, null,
+                "entity type");
+        put(session, 20, Material.PAPER, "List custom mobs", UiAction.ENV_LIST_CUSTOM_MOBS, null,
+                "/botenvironment listCustomMobs");
+        put(session, 21, Material.TNT, "Clear custom mobs", UiAction.ENV_CLEAR_CUSTOM_MOBS, null,
+                "Confirmation required");
+        put(session, 22, Material.COMPARATOR, "Mob list type...", UiAction.ENV_MOB_LIST_TYPE, null,
+                "custom list mode");
+        put(session, 23, Material.FEATHER, "Movement V2 status", UiAction.ENV_MOVEMENT_V2_STATUS, null,
+                "/botenvironment movementV2Status [bot-name]");
+    }
+
+    private void renderHelp(Session session) {
+        put(session, 10, Material.BOOK, "Plugin information", UiAction.MAIN_INFO, null,
+                "/terminatorplus");
+        put(session, 11, Material.WRITABLE_BOOK, "Upload debug info", UiAction.MAIN_DEBUG_INFO, null,
+                "/terminatorplus debuginfo");
+        put(session, 12, Material.PLAYER_HEAD, "Bot command help", UiAction.BOT_HELP, null,
+                "/bot");
+        put(session, 13, Material.REDSTONE, "AI command help", UiAction.AI_HELP, null,
+                "/ai");
+        put(session, 14, Material.GRASS_BLOCK, "Environment help", UiAction.ENV_HELP, null,
+                "/botenvironment help");
+    }
+
+    private void renderConfirmation(Session session) {
+        Confirmation confirmation = session.confirmation;
+        String command = confirmation == null ? "" : confirmation.command();
+        put(session, 22, Material.TNT, "Confirm " + (confirmation == null ? "action" : confirmation.action().label()),
+                null, null, "This dispatches:", "/" + command, "Permission is checked again.");
+        put(session, 29, Material.LIME_WOOL, "Confirm", UiAction.CONFIRM, null,
+                "Run the existing command");
+        put(session, 31, Material.RED_WOOL, "Cancel", UiAction.CANCEL, null,
+                "Return without changing anything");
+    }
+
+    private void renderFooter(Session session) {
+        if (session.state.page != Page.MAIN && session.state.page != Page.CONFIRM) {
+            put(session, 45, Material.ARROW, "Back", UiAction.BACK, null);
+        }
+        if (session.state.page == Page.BOTS) {
+            int pages = pageCount(currentBots().size());
+            if (session.state.pageIndex + 1 < pages) {
+                put(session, 51, Material.SPECTRAL_ARROW, "Next page", UiAction.NEXT_PAGE, null,
+                        "Page " + (session.state.pageIndex + 2) + "/" + pages);
+            }
+        }
+        put(session, 49, Material.PAPER, "Status", null, null, session.status);
+        put(session, 53, Material.BARRIER, "Close", UiAction.CLOSE, null);
+    }
+
+    private void put(Session session, int slot, Material material, String name,
+                     UiAction action, String payload, String... lore) {
+        session.renderedSlots.add(slot);
+        ItemStack item = item(material, name, lore);
+        updateIfChanged(session.inventory, slot, item);
+        if (action != null) session.buttons.put(slot, new Button(action, payload));
+    }
+
+    private static ItemStack item(Material material, String name, String... lore) {
+        ItemStack item = new ItemStack(material);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.RESET + name);
+            if (lore != null && lore.length > 0) {
+                List<String> lines = new ArrayList<>(lore.length);
+                for (String line : lore) lines.add(ChatColor.GRAY + String.valueOf(line));
+                meta.setLore(lines);
+            }
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    static boolean updateIfChanged(Inventory inventory, int slot, ItemStack next) {
+        ItemStack current = inventory.getItem(slot);
+        if (Objects.equals(current, next)) return false;
+        inventory.setItem(slot, next == null ? null : next.clone());
+        return true;
+    }
+
+    static boolean shouldUpdate(ItemStack current, ItemStack next) {
+        return changedOnly(current, next);
+    }
+
+    static boolean changedOnly(Object current, Object next) {
+        return !Objects.equals(current, next);
+    }
+
+    static boolean isSafePromptInput(String input) {
+        if (input == null || input.length() > MAX_PROMPT_LENGTH) return false;
+        for (int i = 0; i < input.length(); i++) {
+            if (Character.isISOControl(input.charAt(i))) return false;
+        }
+        return true;
+    }
+
+    static String commandFor(UiAction action) {
+        return action == null ? null : action.command();
+    }
+
+    static String commandFor(UiAction action, String arguments) {
+        String command = commandFor(action);
+        if (command == null) return null;
+        if (arguments == null || arguments.isBlank()) return command;
+        return command + " " + arguments.trim();
+    }
+
+    static boolean requiresConfirmation(UiAction action) {
+        return action != null && action.destructive();
+    }
+
+    static long refreshIntervalTicks() {
+        return REFRESH_INTERVAL_TICKS;
+    }
+
+    static Page initialPage() {
+        return Page.MAIN;
+    }
+
+    static boolean detailStillValid(UUID selectedBot, Collection<UUID> activeBotIds) {
+        return selectedBot != null && activeBotIds != null && activeBotIds.contains(selectedBot);
+    }
+
+    static boolean isUniqueBotName(String selected, Collection<String> names) {
+        if (selected == null || names == null) return false;
+        return names.stream().filter(name -> selected.equalsIgnoreCase(name)).limit(2).count() == 1;
+    }
+
+    private String promptHint(UiAction action) {
+        return switch (action) {
+            case BOT_CREATE -> "name [skin] [x y z world]";
+            case BOT_MULTI, AI_RANDOM, AI_MOVEMENT -> "amount name [skin] [x y z world]";
+            case AI_REINFORCEMENT -> "population-size name [skin] [mode] [round-minutes]";
+            case BOT_GIVE -> "item [bot-name] [slot]";
+            case BOT_PLACE -> "material";
+            case BOT_ARMOR -> "armor tier";
+            case BOT_SCATTER_RADIUS -> "radius";
+            case AI_BRAIN_SAVE_INPUT -> "optional bot-name";
+            case AI_EVALUATE_INPUT -> "variant [scenario] [seed[,seed...]]";
+            case AI_INFO_INPUT -> "bot-name";
+            case BOT_LOADOUT -> "loadout [bot-name]";
+            case BOT_LOADOUT_MIX -> "alltypes|core|problem [bot-prefix]";
+            case BOT_PRESET_SAVE -> "preset-name bot-name";
+            case BOT_PRESET_APPLY -> "preset-name [bot-name]";
+            case BOT_PRESET_DELETE -> "preset-name";
+            case BOT_SETTINGS_INPUT -> "settings arguments";
+            case BOT_SETTINGS_REGION_INPUT -> "region bounds and weights";
+            case BOT_DEBUG -> "debug expression";
+            case BOT_COMBAT_DEBUG_INPUT -> "bot-name|all on|off";
+            case ENV_GET_MATERIAL -> "x y z";
+            case ENV_ADD_SOLID, ENV_REMOVE_SOLID -> "material or x y z";
+            case ENV_ADD_CUSTOM_MOB, ENV_REMOVE_CUSTOM_MOB -> "entity type";
+            case ENV_MOB_LIST_TYPE -> "custom list mode";
+            default -> "command arguments";
+        };
+    }
+
+    private String requiredPermission(UiAction action) {
+        return action.requiresAdmin() ? ADMIN_PERMISSION : MANAGE_PERMISSION;
+    }
+
+    private List<Terminator> currentBots() {
+        if (plugin == null || plugin.getManager() == null) return List.of();
+        return plugin.getManager().fetch().stream()
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(Terminator::getBotName, String.CASE_INSENSITIVE_ORDER))
+                .toList();
+    }
+
+    private Terminator findBot(UUID id) {
+        if (id == null) return null;
+        for (Terminator bot : currentBots()) {
+            if (id.equals(botId(bot))) return bot;
+        }
+        return null;
+    }
+
+    private static UUID botId(Terminator bot) {
+        return bot == null || bot.getBukkitEntity() == null ? null : bot.getBukkitEntity().getUniqueId();
+    }
+
+    private static int pageCount(int count) {
+        return Math.max(1, (count + BOT_PAGE_SIZE - 1) / BOT_PAGE_SIZE);
+    }
+
+    private String selectedName(Session session) {
+        Terminator bot = findBot(session.selectedBot);
+        return bot == null ? null : bot.getBotName();
+    }
+
+    enum Page {
+        MAIN,
+        BOTS,
+        BOT_DETAIL,
+        CREATE,
+        MOVEMENT,
+        AI,
+        COMBAT,
+        ADMIN,
+        ENVIRONMENT,
+        HELP,
+        CONFIRM
+    }
+
+    enum UiAction {
+        OPEN_BOTS(null, false, false, false, "Bots and status"),
+        OPEN_CREATE(null, false, false, false, "Create bots"),
+        OPEN_MOVEMENT(null, false, false, false, "Movement"),
+        OPEN_AI(null, false, false, false, "AI"),
+        OPEN_COMBAT(null, false, false, false, "Combat and loadouts"),
+        OPEN_ADMIN(null, false, false, false, "Debug and admin"),
+        OPEN_ENVIRONMENT(null, false, false, false, "Environment"),
+        OPEN_HELP(null, false, false, false, "Help and plugin info"),
+        BACK(null, false, false, false, "Back"),
+        NEXT_PAGE(null, false, false, false, "Next page"),
+        CLOSE(null, false, false, false, "Close"),
+        SELECT_BOT(null, false, false, false, "Select bot"),
+        CONFIRM(null, false, false, false, "Confirm"),
+        CANCEL(null, false, false, false, "Cancel"),
+
+        BOT_HELP("bot info", false, false, false, "Bot help"),
+        BOT_CREATE("bot create", true, false, false, "Create bot"),
+        BOT_MULTI("bot multi", true, false, false, "Create multiple bots"),
+        BOT_RESPAWN("bot respawn", false, false, true, "Respawn"),
+        BOT_MOVEMENT_V2("bot movementv2", false, false, true, "Movement V2"),
+        BOT_GIVE("bot give", true, false, false, "Give item"),
+        BOT_PLACE("bot place", true, false, false, "Placement material"),
+        BOT_ARMOR("bot armor", true, false, false, "Armor"),
+        BOT_INFO("bot info", false, false, false, "Bot info"),
+        BOT_COUNT("bot count", false, false, false, "Count bots"),
+        BOT_RESET("bot reset", false, true, true, "Reset all bots"),
+        BOT_SETTINGS("bot settings", false, false, false, "Bot settings"),
+        BOT_SETTINGS_INPUT("bot settings", true, false, false, "Bot settings"),
+        BOT_SETTINGS_REGION_INPUT("bot settings region", true, false, false, "Set region"),
+        BOT_SETTINGS_REGION_CLEAR("bot settings region clear", false, true, false, "Clear region"),
+        BOT_DEBUG("bot debug", true, false, true, "Debug expression"),
+        BOT_WEAPONS("bot weapons", false, false, false, "Weapon status"),
+        BOT_COMBAT_DEBUG("bot combatdebug", false, false, true, "Combat debug"),
+        BOT_COMBAT_DEBUG_INPUT("bot combatdebug", true, false, true, "Combat debug"),
+        BOT_GATHER("bot gather", false, false, false, "Gather"),
+        BOT_SCATTER("bot scatter", false, false, false, "Circular scatter"),
+        BOT_SCATTER_RADIUS("bot scatter", true, false, false, "Scatter radius"),
+        BOT_INVENTORY("bot inventory", false, false, false, "Inventory"),
+        BOT_INVENTORY_INPUT("bot inventory", true, false, false, "Inventory"),
+        BOT_PRESET_SAVE("bot preset save", true, false, false, "Save preset"),
+        BOT_PRESET_APPLY("bot preset apply", true, false, false, "Apply preset"),
+        BOT_PRESET_LIST("bot preset list", false, false, false, "List presets"),
+        BOT_PRESET_DELETE("bot preset delete", true, true, true, "Delete preset"),
+        BOT_LOADOUT("bot loadout", true, false, false, "Loadout"),
+        BOT_LOADOUT_MIX("bot loadoutmix", true, false, false, "Loadout mix"),
+
+        AI_HELP("ai", false, false, false, "AI help"),
+        AI_RANDOM("ai random", true, false, false, "Random AI bots"),
+        AI_REINFORCEMENT("ai reinforcement", true, false, false, "Training session"),
+        AI_STOP("ai stop", false, true, false, "Stop training"),
+        AI_BRAIN_STATUS("ai brain status", false, false, false, "Brain status"),
+        AI_BRAIN_LOAD("ai brain load", false, false, false, "Load brain"),
+        AI_BRAIN_SAVE("ai brain save", false, false, false, "Save brain"),
+        AI_BRAIN_SAVE_INPUT("ai brain save", true, false, false, "Save brain"),
+        AI_BRAIN_RESET("ai brain reset", false, true, false, "Reset brain"),
+        AI_MOVEMENT("ai movement", true, false, false, "Movement bots"),
+        AI_EVALUATE("ai evaluate", false, false, false, "Evaluate"),
+        AI_EVALUATE_INPUT("ai evaluate", true, false, false, "Evaluate"),
+        AI_INFO("ai info", false, false, false, "AI info"),
+        AI_INFO_INPUT("ai info", true, false, false, "AI info"),
+
+        MAIN_INFO("terminatorplus", false, false, false, "Plugin information"),
+        MAIN_DEBUG_INFO("terminatorplus debuginfo", false, false, false, "Debug upload"),
+
+        ENV_HELP("botenvironment help", false, false, false, "Environment help"),
+        ENV_GET_MATERIAL("botenvironment getMaterial", true, false, false, "Get material"),
+        ENV_ADD_SOLID("botenvironment addSolid", true, false, false, "Add solid"),
+        ENV_REMOVE_SOLID("botenvironment removeSolid", true, true, false, "Remove solid"),
+        ENV_LIST_SOLIDS("botenvironment listSolids", false, false, false, "List solids"),
+        ENV_CLEAR_SOLIDS("botenvironment clearSolids", false, true, false, "Clear solids"),
+        ENV_ADD_CUSTOM_MOB("botenvironment addCustomMob", true, false, false, "Add custom mob"),
+        ENV_REMOVE_CUSTOM_MOB("botenvironment removeCustomMob", true, true, false, "Remove custom mob"),
+        ENV_LIST_CUSTOM_MOBS("botenvironment listCustomMobs", false, false, false, "List custom mobs"),
+        ENV_CLEAR_CUSTOM_MOBS("botenvironment clearCustomMobs", false, true, false, "Clear custom mobs"),
+        ENV_MOB_LIST_TYPE("botenvironment mobListType", true, false, false, "Mob list type"),
+        ENV_MOVEMENT_V2_STATUS("botenvironment movementV2Status", false, false, false, "Movement V2 status");
+
+        private final String command;
+        private final boolean prompt;
+        private final boolean destructive;
+        private final boolean requiresAdmin;
+        private final String label;
+
+        UiAction(String command, boolean prompt, boolean destructive, boolean requiresAdmin, String label) {
+            this.command = command;
+            this.prompt = prompt;
+            this.destructive = destructive;
+            this.requiresAdmin = requiresAdmin;
+            this.label = label;
+        }
+
+        String command() {
+            return command;
+        }
+
+        boolean prompt() {
+            return prompt;
+        }
+
+        boolean destructive() {
+            return destructive;
+        }
+
+        boolean requiresAdmin() {
+            return requiresAdmin;
+        }
+
+        String label() {
+            return label;
+        }
+    }
+
+    static final class PageState {
+        private Page page = initialPage();
+        private int pageIndex;
+        private final Deque<Page> history = new ArrayDeque<>();
+
+        void navigate(Page next) {
+            if (next == null || next == page || next == Page.CONFIRM) return;
+            history.push(page);
+            page = next;
+            if (next != Page.BOTS) pageIndex = 0;
+        }
+
+        void back() {
+            page = history.isEmpty() ? initialPage() : history.pop();
+            if (page != Page.BOTS) pageIndex = 0;
+        }
+
+        void reset() {
+            history.clear();
+            page = initialPage();
+            pageIndex = 0;
+        }
+
+        void resetTo(Page next) {
+            history.clear();
+            page = next == null ? initialPage() : next;
+            pageIndex = 0;
+        }
+
+        Page page() {
+            return page;
+        }
+
+        int pageIndex() {
+            return pageIndex;
+        }
+    }
+
+    static final class LifecycleState {
+        private int sessions;
+        private boolean refreshDemand;
+
+        void sessionOpened() {
+            sessions++;
+            refreshDemand = true;
+        }
+
+        void sessionClosed() {
+            if (sessions > 0) sessions--;
+            refreshDemand = sessions > 0;
+        }
+
+        void shutdown() {
+            sessions = 0;
+            refreshDemand = false;
+        }
+
+        int sessionCount() {
+            return sessions;
+        }
+
+        boolean shouldRefresh() {
+            return refreshDemand && sessions > 0;
+        }
+    }
+
+    @FunctionalInterface
+    interface CommandDispatcher {
+        boolean dispatch(UUID playerId, String command);
+    }
+
+    private record Button(UiAction action, String payload) {
+    }
+
+    private record PendingPrompt(UiAction action, String hint) {
+    }
+
+    private record Confirmation(UiAction action, String command, Page returnPage) {
+    }
+
+    private final class Session implements InventoryHolder {
+        private final UUID playerId;
+        private final Inventory inventory;
+        private final PageState state = new PageState();
+        private final Map<Integer, Button> buttons = new HashMap<>();
+        private final Set<Integer> renderedSlots = new HashSet<>();
+        private UUID selectedBot;
+        private String status = "Ready";
+        private Confirmation confirmation;
+        private boolean awaitingPrompt;
+
+        private Session(UUID playerId) {
+            this.playerId = playerId;
+            this.inventory = Bukkit.createInventory(this, INVENTORY_SIZE, TITLE);
+        }
+
+        private void resetForOpen() {
+            state.reset();
+            selectedBot = null;
+            confirmation = null;
+            awaitingPrompt = false;
+            status = "Ready";
+        }
+
+        @Override
+        public Inventory getInventory() {
+            return inventory;
+        }
+    }
+}
