@@ -63,7 +63,7 @@ Only non-empty slots are written; missing keys deserialize as `AIR`.
 You can open a preset file in any text editor. To drop an item, delete its key. To add one, you need a valid Base64 blob — the easiest way to produce one is:
 
 1. `/bot create T1`
-2. Edit T1's inventory with `/bot inventory T1` (place the exact item you want).
+2. Edit T1's inventory with `/bot equipment inventory T1`, then click **Save changes** (place the exact item you want).
 3. `/bot preset save scratch T1`
 4. Copy the relevant key from `scratch.yml` into your real preset.
 

@@ -18,7 +18,8 @@ movement path unless it was spawned by `/ai movement`.
 ## Edit and Save a Kit
 
 ```text
-/bot inventory TestBot
+/bot equipment inventory TestBot
+# edit the working copy, then click Save changes
 /bot preset save mykit TestBot
 /bot create T2
 /bot preset apply mykit T2

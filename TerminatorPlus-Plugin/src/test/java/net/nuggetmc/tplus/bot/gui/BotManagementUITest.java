@@ -35,6 +35,24 @@ class BotManagementUITest {
     }
 
     @Test
+    void botPagesClampAtBothBoundariesIncludingEmptyLists() {
+        assertEquals(1, BotManagementUI.pageCount(0));
+        assertEquals(1, BotManagementUI.pageCount(1));
+        assertEquals(2, BotManagementUI.pageCount(BotManagementUI.BOT_PAGE_SIZE + 1));
+        assertEquals(0, BotManagementUI.clampPageIndex(-1, 1));
+        assertEquals(0, BotManagementUI.clampPageIndex(99, 1));
+        assertEquals(1, BotManagementUI.clampPageIndex(1, 2));
+        assertEquals(1, BotManagementUI.clampPageIndex(99, 2));
+
+        BotManagementUI.PageState state = new BotManagementUI.PageState();
+        state.navigate(BotManagementUI.Page.BOTS);
+        state.setPageIndex(99, 2);
+        assertEquals(1, state.pageIndex());
+        state.setPageIndex(-1, 2);
+        assertEquals(0, state.pageIndex());
+    }
+
+    @Test
     void commandMappingUsesExistingPlayerCommands() {
         assertEquals("bot spawn single", BotManagementUI.commandFor(BotManagementUI.UiAction.BOT_CREATE));
         assertEquals("bot spawn multiple 3 bot", BotManagementUI.commandFor(
@@ -55,6 +73,23 @@ class BotManagementUITest {
         assertTrue(BotManagementUI.requiresConfirmation(BotManagementUI.UiAction.BOT_PRESET_DELETE));
         assertFalse(BotManagementUI.requiresConfirmation(BotManagementUI.UiAction.BOT_GATHER));
         assertTrue(BotManagementUI.UiAction.BOT_RESET.requiresAdmin());
+    }
+
+    @Test
+    void adminOnlyActionsAreHiddenWithoutAdminPermission() {
+        assertTrue(BotManagementUI.visibleForPermission(BotManagementUI.UiAction.BOT_RESET, true));
+        assertFalse(BotManagementUI.visibleForPermission(BotManagementUI.UiAction.BOT_RESET, false));
+        assertTrue(BotManagementUI.visibleForPermission(BotManagementUI.UiAction.BOT_GATHER, false));
+    }
+
+    @Test
+    void dispatchFeedbackDistinguishesAcceptedFromRejectedCommands() {
+        assertEquals("Dispatched /bot move gather",
+                BotManagementUI.dispatchStatus(true, "bot move gather"));
+        assertEquals("Rejected /bot move gather",
+                BotManagementUI.dispatchStatus(false, "bot move gather"));
+        assertTrue(BotManagementUI.dispatchStatus(true, "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz")
+                .endsWith("..."));
     }
 
     @Test
@@ -108,5 +143,22 @@ class BotManagementUITest {
         assertTrue(BotManagementUI.isSafePromptInput("12 bot-name 1 2 3"));
         assertFalse(BotManagementUI.isSafePromptInput("bot\nreset"));
         assertFalse(BotManagementUI.isSafePromptInput("x\u0000y"));
+    }
+
+    @Test
+    void promptsHaveARealTimeoutAndCancellationIsObservable() {
+        assertEquals(1200L, BotManagementUI.promptTimeoutTicks());
+        BotManagementUI.PendingPrompt pending = new BotManagementUI.PendingPrompt(
+                BotManagementUI.UiAction.BOT_CREATE, "name");
+        BotManagementUI.PendingPrompt replacement = new BotManagementUI.PendingPrompt(
+                BotManagementUI.UiAction.BOT_MULTI, "amount name");
+        assertEquals(BotManagementUI.UiAction.BOT_CREATE, pending.action());
+        assertEquals("name", pending.hint());
+        assertTrue(BotManagementUI.isCurrentPrompt(pending, pending));
+        assertFalse(BotManagementUI.isCurrentPrompt(replacement, pending));
+        assertFalse(pending.cancelled());
+        pending.cancel();
+        assertTrue(pending.cancelled());
+        assertFalse(BotManagementUI.isCurrentPrompt(pending, pending));
     }
 }

@@ -34,6 +34,7 @@ public class TerminatorPlus extends JavaPlugin {
     private CombatDirector combatDirector;
     private PresetManager presetManager;
     private BotManagementUI managementUI;
+    private BotInventoryListener inventoryListener;
 
     public static TerminatorPlus getInstance() {
         return instance;
@@ -71,6 +72,10 @@ public class TerminatorPlus extends JavaPlugin {
         return managementUI;
     }
 
+    public BotInventoryListener getInventoryListener() {
+        return inventoryListener;
+    }
+
     @Override
     public void onEnable() {
         instance = this;
@@ -85,6 +90,7 @@ public class TerminatorPlus extends JavaPlugin {
         this.manager = new BotManagerImpl();
         this.combatDirector = new CombatDirector();
         this.presetManager = new PresetManager(this);
+        this.inventoryListener = new BotInventoryListener(this);
         this.managementUI = new BotManagementUI(this);
         this.handler = new CommandHandler(this);
 
@@ -92,7 +98,7 @@ public class TerminatorPlus extends JavaPlugin {
         TerminatorPlusAPI.setInternalBridge(new InternalBridgeImpl());
 
         // Register event listeners
-        this.registerEvents(manager, new BotInventoryListener(this), managementUI);
+        this.registerEvents(manager, inventoryListener, managementUI);
 
         if (!correctVersion) {
             for (int i = 0; i < 20; i++) { // Kids are stupid so we need to make sure they see this
@@ -110,6 +116,9 @@ public class TerminatorPlus extends JavaPlugin {
         if (managementUI != null) {
             managementUI.shutdown();
         }
+        if (inventoryListener != null) {
+            inventoryListener.shutdown();
+        }
         if (manager != null) {
             manager.reset();
         }
@@ -117,6 +126,7 @@ public class TerminatorPlus extends JavaPlugin {
         combatDirector = null;
         presetManager = null;
         managementUI = null;
+        inventoryListener = null;
         manager = null;
         TerminatorPlusAPI.setBotManager(null);
         TerminatorPlusAPI.setInternalBridge(null);

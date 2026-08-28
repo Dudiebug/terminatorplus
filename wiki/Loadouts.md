@@ -168,4 +168,7 @@ configured `family=<name>` for all candidates.
 
 ## Saving your own
 
-Edit a bot's inventory with `/bot inventory <name>` and then run `/bot preset save <name> <bot>`. That YAML file can be re-applied via `/bot preset apply <name> [bot]`. See [Presets](Presets) for the file format.
+Edit a bot's inventory with `/bot equipment inventory <name>`, click **Save
+changes**, and then run `/bot preset save <name> <bot>`. That YAML file can be
+re-applied via `/bot preset apply <name> [bot]`. See [Presets](Presets) for the
+file format.

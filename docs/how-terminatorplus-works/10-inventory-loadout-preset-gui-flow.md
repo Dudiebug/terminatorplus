@@ -129,19 +129,21 @@ templates. They can mutate broader runtime behavior when applied.
 
 `BotInventoryGUI.java` creates a chest-style GUI for editing bot inventory.
 
-`BotInventoryListener.java` handles inventory click/close events and syncs GUI
-state back to the bot on close.
+`BotInventoryListener.java` handles inventory click, drag, transfer, close, and
+lifecycle events. It keeps edits in a working copy and writes them back only
+when the user clicks the explicit Save control.
 
 The GUI sync flow is roughly:
 
 1. player opens bot inventory GUI
 2. filler slots and mirrored slots are displayed
 3. player edits inventory view
-4. on close, GUI contents are translated back into bot inventory state
-5. main inventory is pushed through NMS-backed snapshot application
-6. armor/offhand are applied through equipment-aware methods
-7. `autoEquip()` and loadout-state markers are updated
-8. matching same-name bots may also receive the synced inventory
+4. normal left/right clicks edit the working copy; bypass shortcuts are cancelled
+5. Save validates and translates the exact 41-slot snapshot into bot inventory state
+6. main inventory is pushed through NMS-backed snapshot application
+7. armor/offhand are applied through equipment-aware methods
+8. optional auto-equip and loadout-state markers are updated only on Save
+9. close, disconnect, removal, permission loss, or shutdown discards unsaved edits
 
 This is much more than a cosmetic editor. It is a real state mutation path into
 high-risk inventory code.
