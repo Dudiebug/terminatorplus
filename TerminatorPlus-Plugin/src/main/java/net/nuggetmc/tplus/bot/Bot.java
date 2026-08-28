@@ -1420,6 +1420,10 @@ public class Bot extends ServerPlayer implements Terminator {
         return respawnAnchor == null ? null : respawnAnchor.clone();
     }
 
+    public void setRespawnAnchor(Location location) {
+        respawnAnchor = location == null ? null : location.clone();
+    }
+
     SkinData skinData() {
         return skinData;
     }
