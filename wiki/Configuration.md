@@ -14,6 +14,7 @@ ai:
   movement:
     enabled: true
     mode: movement_controller
+    neural-enabled: false
     layer-shape: [37, 32, 16, 8]
     legacy-brain-path: ai/brain.json
     bank:
@@ -34,6 +35,7 @@ ai:
 | --- | --- | --- |
 | `ai.movement.enabled` | `true` | Enables movement-controller evaluation for bots spawned with a movement bank. |
 | `ai.movement.mode` | `movement_controller` | Current movement-controller mode name. |
+| `ai.movement.neural-enabled` | `false` | Enables movement-brain evaluation. When false, Movement V2 routing and deterministic baseline movement remain active. |
 | `ai.movement.layer-shape` | `[37, 32, 16, 8]` | Input count, hidden layers, output count. Changing it invalidates existing brains. |
 | `ai.movement.legacy-brain-path` | `ai/brain.json` | Legacy import source. |
 | `ai.movement.bank.manifest-path` | `ai/movement/manifest.json` | Bank manifest path. |

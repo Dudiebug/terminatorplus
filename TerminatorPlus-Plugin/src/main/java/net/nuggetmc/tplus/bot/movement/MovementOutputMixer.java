@@ -49,7 +49,7 @@ public final class MovementOutputMixer {
                 blend(baseline.forwardPressure(), nn.forwardPressure(), RESIDUAL_WEIGHT),
                 blend(baseline.strafePressure(), nn.strafePressure(), RESIDUAL_WEIGHT),
                 blend(baseline.jumpDesire(), nn.jumpDesire(), RESIDUAL_WEIGHT),
-                blend(baseline.sprintDesire(), nn.sprintDesire(), RESIDUAL_WEIGHT),
+                Math.max(baseline.sprintDesire(), blend(baseline.sprintDesire(), nn.sprintDesire(), RESIDUAL_WEIGHT)),
                 Math.max(baseline.retreatDesire(), nn.retreatDesire() * NN_WEIGHT),
                 blend(baseline.facingAdjustment(), nn.facingAdjustment(), RESIDUAL_WEIGHT),
                 Math.max(baseline.urgency(), nn.urgency() * NN_WEIGHT),

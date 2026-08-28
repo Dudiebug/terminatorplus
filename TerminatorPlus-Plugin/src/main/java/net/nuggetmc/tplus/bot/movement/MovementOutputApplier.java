@@ -9,6 +9,7 @@ import net.nuggetmc.tplus.bot.combat.CombatDebugger;
 import net.nuggetmc.tplus.bot.combat.CombatIntent;
 import net.nuggetmc.tplus.bot.combat.MovementState;
 import org.bukkit.Location;
+import org.bukkit.configuration.Configuration;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.util.Vector;
 
@@ -85,7 +86,9 @@ public final class MovementOutputApplier {
         boolean nnAvailable = false;
         String fallbackReason = "";
 
-        if (bank == null) {
+        if (!neuralEnabled()) {
+            fallbackReason = "neural-disabled";
+        } else if (bank == null) {
             fallbackReason = "missing-bank";
         } else {
             MovementBrainRouter.RouteResult route = router.route(bot, bank);
@@ -309,6 +312,15 @@ public final class MovementOutputApplier {
             return plugin.getConfig().getBoolean("ai.movement.bank.enabled");
         }
         return plugin.getConfig().getBoolean("ai.movement.enabled", true);
+    }
+
+    private static boolean neuralEnabled() {
+        TerminatorPlus plugin = TerminatorPlus.getInstance();
+        return plugin != null && neuralEnabled(plugin.getConfig());
+    }
+
+    static boolean neuralEnabled(Configuration config) {
+        return config != null && config.getBoolean("ai.movement.neural-enabled", false);
     }
 
     public record ApplyResult(boolean applied, boolean fallback, boolean held, String reason, MovementOutput output) {

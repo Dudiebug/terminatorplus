@@ -1,5 +1,6 @@
 package net.nuggetmc.tplus.bot.movement;
 
+import org.bukkit.configuration.MemoryConfiguration;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -7,6 +8,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MovementOutputApplierTest {
+
+    @Test
+    void neuralMovementIsOptIn() {
+        MemoryConfiguration config = new MemoryConfiguration();
+
+        assertFalse(MovementOutputApplier.neuralEnabled(config));
+        config.set("ai.movement.neural-enabled", true);
+        assertTrue(MovementOutputApplier.neuralEnabled(config));
+    }
 
     @Test
     void validatedRouteTraversalAlwaysSprints() {

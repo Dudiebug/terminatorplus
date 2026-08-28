@@ -3,6 +3,9 @@ ai:
     # Movement-controller brains are locomotion-only. CombatDirector owns all combat actions.
     enabled: true
     mode: movement_controller
+    # Keep Movement V2 routing and deterministic baseline movement without
+    # evaluating movement-brain neural networks unless explicitly enabled.
+    neural-enabled: false
     # Must match MovementNetworkShape: 37 inputs, hidden layers, 8 movement outputs.
     layer-shape: [37, 32, 16, 8]
     # Legacy import source. Compatible files import as general_fallback.
