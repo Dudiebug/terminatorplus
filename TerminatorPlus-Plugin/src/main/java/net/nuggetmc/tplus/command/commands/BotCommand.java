@@ -4,11 +4,13 @@ import net.nuggetmc.tplus.TerminatorPlus;
 import net.nuggetmc.tplus.api.Terminator;
 import net.nuggetmc.tplus.api.agent.legacyagent.EnumTargetGoal;
 import net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent;
+import net.nuggetmc.tplus.api.agent.legacyagent.LegacyMats;
 import net.nuggetmc.tplus.api.utils.ChatUtils;
 import net.nuggetmc.tplus.bot.Bot;
 import net.nuggetmc.tplus.bot.BotManagerImpl;
 import net.nuggetmc.tplus.bot.gui.BotInventoryGUI;
 import net.nuggetmc.tplus.bot.loadout.BotInventory;
+import net.nuggetmc.tplus.bot.navigation.MovementV2Settings;
 import net.nuggetmc.tplus.bot.preset.BotPreset;
 import net.nuggetmc.tplus.bot.preset.PresetManager;
 import net.nuggetmc.tplus.command.CommandHandler;
@@ -16,11 +18,13 @@ import net.nuggetmc.tplus.command.CommandInstance;
 import net.nuggetmc.tplus.command.annotation.*;
 import net.nuggetmc.tplus.utils.Debugger;
 import org.bukkit.*;
+import org.bukkit.block.Block;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.PotionMeta;
+import org.bukkit.block.data.Waterlogged;
 import org.bukkit.potion.PotionType;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
@@ -33,6 +37,10 @@ import java.util.stream.Collectors;
 public class BotCommand extends CommandInstance {
 
     private static final String ADMIN_PERMISSION = "terminatorplus.admin";
+    static final double DEFAULT_SCATTER_RADIUS = 8.0;
+    static final double MIN_SCATTER_RADIUS = 1.0;
+    static final double MAX_SCATTER_RADIUS = 64.0;
+    private static final double SCATTER_MIN_SEPARATION = 0.75;
 
     private final TerminatorPlus plugin;
     private final BotManagerImpl manager;
@@ -55,7 +63,11 @@ public class BotCommand extends CommandInstance {
 
     @Command
     public void root(CommandSender sender) {
-        commandHandler.sendRootInfo(this, sender);
+        if (sender instanceof Player player) {
+            plugin.getManagementUI().openMain(player);
+        } else {
+            commandHandler.sendRootInfo(this, sender);
+        }
     }
 
     @Command(
@@ -72,6 +84,81 @@ public class BotCommand extends CommandInstance {
     )
     public void multi(CommandSender sender, @Arg("amount") int amount, @Arg("name") String name, @OptArg("skin") String skin, @TextArg @OptArg("loc") String loc) {
         createBots(sender, name, skin, loc, amount);
+    }
+
+    @Command(
+            name = "respawn",
+            desc = "Enable, disable, or show automatic bot respawning.",
+            autofill = "respawnAutofill"
+    )
+    @Require(ADMIN_PERMISSION)
+    public void respawn(CommandSender sender, @OptArg("enabled") String value) {
+        if (value == null) {
+            sender.sendMessage("Automatic bot respawning is "
+                    + (manager.isRespawnEnabled() ? ChatColor.GREEN + "enabled" : ChatColor.RED + "disabled")
+                    + ChatColor.RESET + ". Pending: " + manager.pendingRespawnCount() + ".");
+            return;
+        }
+
+        Boolean enabled = parseBoolean(value);
+        if (enabled == null) {
+            sender.sendMessage(ChatColor.RED + "You must specify true or false.");
+            return;
+        }
+
+        manager.setRespawnEnabled(enabled);
+        sender.sendMessage("Automatic bot respawning is now "
+                + (enabled ? ChatColor.GREEN + "enabled" : ChatColor.RED + "disabled")
+                + ChatColor.RESET + ".");
+    }
+
+    public List<String> respawnAutofill(CommandSender sender, String[] args) {
+        return args.length == 2 ? List.of("true", "false") : List.of();
+    }
+
+    static Boolean parseBoolean(String value) {
+        if ("true".equalsIgnoreCase(value)) return true;
+        if ("false".equalsIgnoreCase(value)) return false;
+        return null;
+    }
+
+    @Command(
+            name = "movementv2",
+            desc = "Enable, disable, or show Movement V2.",
+            autofill = "movementV2Autofill"
+    )
+    @Require(ADMIN_PERMISSION)
+    public void movementV2(CommandSender sender, @OptArg("on-off-status") String action) {
+        MovementV2Action parsed = MovementV2Action.parse(action);
+        if (parsed == null) {
+            sender.sendMessage(ChatColor.RED + "Usage: /bot movementv2 on|off|status");
+            return;
+        }
+        if (parsed != MovementV2Action.STATUS) {
+            MovementV2Settings.setEnabled(plugin, parsed == MovementV2Action.ON);
+        }
+        boolean enabled = MovementV2Settings.isEnabled(plugin);
+        sender.sendMessage("Movement V2 is "
+                + (enabled ? ChatColor.GREEN + "enabled" : ChatColor.RED + "disabled")
+                + ChatColor.RESET + ".");
+    }
+
+    public List<String> movementV2Autofill(CommandSender sender, String[] args) {
+        return args.length == 2 ? List.of("on", "off", "status") : List.of();
+    }
+
+    enum MovementV2Action {
+        ON, OFF, STATUS;
+
+        static MovementV2Action parse(String value) {
+            if (value == null) return STATUS;
+            return switch (value.toLowerCase(Locale.ENGLISH)) {
+                case "on" -> ON;
+                case "off" -> OFF;
+                case "status" -> STATUS;
+                default -> null;
+            };
+        }
     }
 
     private void createBots(CommandSender sender, String name, String skin, String loc, int amount) {
@@ -286,9 +373,9 @@ public class BotCommand extends CommandInstance {
             desc = "Information about loaded bots.",
             autofill = "infoAutofill"
     )
-    public void info(CommandSender sender, @Arg("bot-name") String name) {
+    public void info(CommandSender sender, @OptArg("bot-name") String name) {
         if (name == null) {
-            sender.sendMessage(ChatColor.YELLOW + "Bot GUI coming soon!");
+            commandHandler.sendRootInfo(this, sender);
             return;
         }
 
@@ -705,6 +792,273 @@ public class BotCommand extends CommandInstance {
         }
         sender.sendMessage(ChatColor.YELLOW.toString() + moved + ChatColor.RESET
                 + " bot(s) gathered to you.");
+    }
+
+    @Command(
+            name = "scatter",
+            desc = "Distribute every living bot around your current location within an optional radius."
+    )
+    public void scatter(CommandSender sender, @OptArg("radius") String radiusText) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(ChatColor.RED + "This command can only be run by a player.");
+            return;
+        }
+
+        final double radius;
+        try {
+            radius = parseScatterRadius(radiusText);
+        } catch (IllegalArgumentException e) {
+            sender.sendMessage(ChatColor.RED + e.getMessage());
+            sender.sendMessage(ChatColor.GRAY + "Usage: /bot scatter [radius] (default "
+                    + DEFAULT_SCATTER_RADIUS + ").");
+            return;
+        }
+
+        List<Terminator> bots = manager.fetch().stream()
+                .filter(Terminator::isBotAlive)
+                .toList();
+        if (bots.isEmpty()) {
+            sender.sendMessage(ChatColor.RED + "No living bots selected to scatter.");
+            return;
+        }
+
+        List<Location> destinations = findScatterDestinations(player.getLocation(), bots.size(), radius);
+        if (destinations.size() < bots.size()) {
+            sender.sendMessage(ChatColor.RED + "Only found " + destinations.size()
+                    + " safe, unique position(s) for " + bots.size()
+                    + " bot(s); no bots were moved.");
+            return;
+        }
+
+        World world = player.getWorld();
+        int moved = 0;
+        for (int i = 0; i < bots.size(); i++) {
+            Terminator bot = bots.get(i);
+            if (bot.getBukkitEntity().teleport(destinations.get(i))) {
+                moved++;
+                world.spawnParticle(Particle.CLOUD, destinations.get(i), 100, 1, 1, 1, 0.5);
+            }
+        }
+        if (moved == 0) {
+            sender.sendMessage(ChatColor.RED + "No selected bots could be teleported; no bots were moved.");
+            return;
+        }
+        sender.sendMessage(ChatColor.YELLOW.toString() + moved + ChatColor.RESET
+                + " bot(s) teleported into a circular spread within radius "
+                + ChatColor.YELLOW + radius + ChatColor.RESET + ".");
+    }
+
+    static double parseScatterRadius(String radiusText) {
+        if (radiusText == null || radiusText.isBlank()) return DEFAULT_SCATTER_RADIUS;
+
+        final double radius;
+        try {
+            radius = Double.parseDouble(radiusText);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Radius must be a number from " + MIN_SCATTER_RADIUS
+                    + " to " + MAX_SCATTER_RADIUS + ".");
+        }
+        if (!Double.isFinite(radius) || radius < MIN_SCATTER_RADIUS || radius > MAX_SCATTER_RADIUS) {
+            throw new IllegalArgumentException("Radius must be a number from " + MIN_SCATTER_RADIUS
+                    + " to " + MAX_SCATTER_RADIUS + ".");
+        }
+        return radius;
+    }
+
+    static List<ScatterOffset> evenlySpacedOffsets(int count, double radius) {
+        if (count <= 0 || !Double.isFinite(radius) || radius <= 0) return List.of();
+
+        List<ScatterOffset> offsets = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            double distance = radius * Math.sqrt((i + 1.0) / count);
+            double angle = i * Math.PI * (3.0 - Math.sqrt(5.0));
+            offsets.add(new ScatterOffset(Math.cos(angle) * distance, Math.sin(angle) * distance));
+        }
+        return offsets;
+    }
+
+    static List<ScatterOffset> selectScatterOffsets(List<ScatterOffset> candidates, int count, double radius) {
+        if (count <= 0 || candidates == null || candidates.isEmpty()) return List.of();
+
+        List<ScatterOffset> remaining = new ArrayList<>(new LinkedHashSet<>(candidates));
+        List<ScatterOffset> ideals = evenlySpacedOffsets(count, radius);
+        List<ScatterOffset> selected = new ArrayList<>(Collections.nCopies(count, null));
+
+        // Preserve exact ideal points whenever they are safe and spaced apart.
+        for (int i = 0; i < ideals.size(); i++) {
+            ScatterOffset ideal = ideals.get(i);
+            if (remaining.contains(ideal) && isScatterSpacingAvailable(selected, ideal)) {
+                remaining.remove(ideal);
+                selected.set(i, ideal);
+            }
+        }
+
+        for (int i = 0; i < ideals.size(); i++) {
+            if (selected.get(i) != null || remaining.isEmpty()) continue;
+
+            ScatterOffset ideal = ideals.get(i);
+            ScatterOffset best = null;
+            double bestScore = Double.POSITIVE_INFINITY;
+            for (ScatterOffset candidate : remaining) {
+                double distance = Math.hypot(candidate.x(), candidate.z());
+                if (distance > radius + 1.0e-6 || distance < 1.0e-6) continue;
+                if (!isScatterSpacingAvailable(selected, candidate)) continue;
+
+                double desiredDistance = Math.hypot(ideal.x(), ideal.z());
+                double angleScore = desiredDistance < 1.0e-6 ? 0.0
+                        : angleDifference(
+                                Math.atan2(candidate.z(), candidate.x()),
+                                Math.atan2(ideal.z(), ideal.x())) * Math.max(1.0, radius) * 4;
+                double score = angleScore + Math.abs(distance - desiredDistance);
+                if (score < bestScore) {
+                    best = candidate;
+                    bestScore = score;
+                }
+            }
+            if (best != null) {
+                selected.set(i, best);
+                remaining.remove(best);
+            }
+        }
+
+        return selected.stream().filter(Objects::nonNull).toList();
+    }
+
+    private static List<Location> findScatterDestinations(Location center, int count, double radius) {
+        if (center == null || center.getWorld() == null || count <= 0) return List.of();
+
+        Map<ScatterOffset, Location> candidates = new LinkedHashMap<>();
+        for (ScatterOffset offset : evenlySpacedOffsets(count, radius)) {
+            addScatterCandidate(center, offset, candidates);
+        }
+
+        int minX = (int) Math.floor(center.getX() - radius);
+        int maxX = (int) Math.floor(center.getX() + radius);
+        int minZ = (int) Math.floor(center.getZ() - radius);
+        int maxZ = (int) Math.floor(center.getZ() + radius);
+
+        // Deterministic block-center fallbacks cover blocked ideal points.
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                double candidateX = x + 0.5;
+                double candidateZ = z + 0.5;
+                double offsetX = candidateX - center.getX();
+                double offsetZ = candidateZ - center.getZ();
+                if (offsetX * offsetX + offsetZ * offsetZ > radius * radius
+                        || (x == center.getBlockX() && z == center.getBlockZ())) continue;
+                addScatterCandidate(center, new ScatterOffset(offsetX, offsetZ), candidates);
+            }
+        }
+
+        return selectScatterOffsets(new ArrayList<>(candidates.keySet()), count, radius).stream()
+                .map(candidates::get)
+                .toList();
+    }
+
+    private static boolean isScatterSpacingAvailable(List<ScatterOffset> selected, ScatterOffset candidate) {
+        for (ScatterOffset existing : selected) {
+            if (existing != null && Math.hypot(existing.x() - candidate.x(), existing.z() - candidate.z())
+                    < SCATTER_MIN_SEPARATION) return false;
+        }
+        return true;
+    }
+
+    private static void addScatterCandidate(Location center, ScatterOffset offset,
+                                            Map<ScatterOffset, Location> candidates) {
+        Location destination = findSafeScatterLocation(center, offset);
+        if (destination == null) return;
+
+        candidates.putIfAbsent(offset, destination);
+    }
+
+    private static Location findSafeScatterLocation(Location center, ScatterOffset offset) {
+        World world = center.getWorld();
+        double x = center.getX() + offset.x();
+        double z = center.getZ() + offset.z();
+        if (!isInsideScatterBorder(world, x, z)) return null;
+        int blockX = Location.locToBlock(x);
+        int blockZ = Location.locToBlock(z);
+        if (blockX == center.getBlockX() && blockZ == center.getBlockZ()) return null;
+
+        int top = Math.min(world.getMaxHeight() - 2, world.getHighestBlockYAt(blockX, blockZ) + 1);
+        for (int y = top; y > world.getMinHeight(); y--) {
+            if (!isSafeScatterFloor(world, x, y, z)) continue;
+            if (!isSafeScatterBody(world, x, y, z)) continue;
+            return new Location(world, x, y, z, center.getYaw(), center.getPitch());
+        }
+        return null;
+    }
+
+    private static boolean isSafeScatterBody(World world, double x, int y, double z) {
+        for (double dx : new double[]{-0.3, 0.0, 0.3}) {
+            for (double dz : new double[]{-0.3, 0.0, 0.3}) {
+                if (!isSafeScatterClear(world.getBlockAt(Location.locToBlock(x + dx), y,
+                        Location.locToBlock(z + dz)))) return false;
+                if (!isSafeScatterClear(world.getBlockAt(Location.locToBlock(x + dx), y + 1,
+                        Location.locToBlock(z + dz)))) return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isSafeScatterFloor(Block block) {
+        Material material = block.getType();
+        return !isScatterHazard(material)
+                && !block.isLiquid()
+                && (!(block.getBlockData() instanceof Waterlogged waterlogged) || !waterlogged.isWaterlogged())
+                && Math.abs(block.getBoundingBox().getMaxY() - (block.getY() + 1.0)) < 1.0e-6
+                && (LegacyMats.isSolid(material) || LegacyMats.canStandOn(material));
+    }
+
+    private static boolean isSafeScatterFloor(World world, double x, int y, double z) {
+        for (double dx : new double[]{-0.3, 0.3}) {
+            for (double dz : new double[]{-0.3, 0.3}) {
+                Block floor = world.getBlockAt(
+                        Location.locToBlock(x + dx), y - 1, Location.locToBlock(z + dz));
+                if (!isSafeScatterFloor(floor)) return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isSafeScatterClear(Block block) {
+        return !isScatterHazard(block.getType())
+                && !block.isLiquid()
+                && (!(block.getBlockData() instanceof Waterlogged waterlogged) || !waterlogged.isWaterlogged())
+                && block.isPassable();
+    }
+
+    static boolean isScatterHazard(Material material) {
+        return material == Material.WATER
+                || material == Material.LAVA
+                || material == Material.FIRE
+                || material == Material.SOUL_FIRE
+                || material == Material.CAMPFIRE
+                || material == Material.SOUL_CAMPFIRE
+                || material == Material.CACTUS
+                || material == Material.MAGMA_BLOCK
+                || material == Material.SWEET_BERRY_BUSH
+                || material == Material.POWDER_SNOW
+                || material == Material.POINTED_DRIPSTONE
+                || material == Material.WITHER_ROSE
+                || material == Material.COBWEB
+                || material == Material.VINE;
+    }
+
+    private static boolean isInsideScatterBorder(World world, double x, double z) {
+        for (double dx : new double[]{-0.3, 0.3}) {
+            for (double dz : new double[]{-0.3, 0.3}) {
+                if (!world.getWorldBorder().isInside(new Location(world, x + dx, 0, z + dz))) return false;
+            }
+        }
+        return true;
+    }
+
+    private static double angleDifference(double first, double second) {
+        return Math.abs(Math.atan2(Math.sin(first - second), Math.cos(first - second)));
+    }
+
+    record ScatterOffset(double x, double z) {
     }
 
     @Command(

@@ -18,6 +18,26 @@ ai:
       quarantine-bad-files: true
       legacy-import-behavior: import-compatible-or-reset
       debug-logging: false
+    # Movement V2 actively plans within the bot's current chunk plus all eight
+    # neighbouring chunks. Keep the outer gate off until the Paper arena matrix
+    # has been recorded.
+    v2:
+      enabled: false
+      max-nodes: 2048
+      max-micros: 2000
+      # Ordinary movement is hard-capped at three. Only a planned clutch may
+      # use the deeper limit below.
+      max-normal-drop: 3
+      max-clutch-drop: 48
+      max-parkour-distance: 4
+      allow-open: true
+      allow-parkour: true
+      allow-clutch-drop: true
+      allow-place: true
+      allow-pillar: true
+      # A complete no-break search always runs first. Search-budget exhaustion
+      # never escalates into breaking.
+      allow-break: true
   training:
     # Per-generation reinforcement round cap in minutes. Set 0 for unlimited.
     max-round-minutes: 1

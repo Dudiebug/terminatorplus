@@ -1,6 +1,7 @@
 package net.nuggetmc.tplus.command.commands;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import org.bukkit.ChatColor;
@@ -10,10 +11,14 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 
+import net.nuggetmc.tplus.TerminatorPlus;
 import net.nuggetmc.tplus.api.agent.legacyagent.CustomListMode;
 import net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent;
 import net.nuggetmc.tplus.api.agent.legacyagent.LegacyMats;
 import net.nuggetmc.tplus.api.utils.ChatUtils;
+import net.nuggetmc.tplus.bot.Bot;
+import net.nuggetmc.tplus.bot.navigation.BukkitNavigationContext;
+import net.nuggetmc.tplus.bot.navigation.MovementV2Controller;
 import net.nuggetmc.tplus.command.CommandHandler;
 import net.nuggetmc.tplus.command.CommandInstance;
 import net.nuggetmc.tplus.command.annotation.Arg;
@@ -273,6 +278,52 @@ public class BotEnvironmentCommand extends CommandInstance {
             sender.sendMessage("Usage: " + ChatColor.YELLOW + "/botenvironment mobListType (" + CustomListMode.listModes() + ")" + ChatColor.RESET);
     }
 
+    @Command(
+            name = "movementV2Status",
+            desc = "Shows Movement V2 route and fallback status for active bots.",
+            aliases = {"movementv2status", "mv2"},
+            autofill = "autofill"
+    )
+    public void movementV2Status(CommandSender sender, List<String> args) {
+        TerminatorPlus plugin = TerminatorPlus.getInstance();
+        boolean enabled = plugin.getConfig().getBoolean("ai.movement.v2.enabled", false);
+        String requested = args.isEmpty() ? null : args.get(0);
+        List<Bot> bots = plugin.getManager().fetch().stream()
+                .filter(Bot.class::isInstance)
+                .map(Bot.class::cast)
+                .filter(bot -> requested == null || bot.getBotName().equalsIgnoreCase(requested))
+                .sorted(Comparator.comparing(Bot::getBotName, String.CASE_INSENSITIVE_ORDER))
+                .toList();
+
+        sender.sendMessage(ChatUtils.LINE);
+        sender.sendMessage(ChatColor.GOLD + "Movement V2" + ChatColor.RESET
+                + " enabled=" + enabled
+                + " context=" + (BukkitNavigationContext.CHUNK_RADIUS * 2 + 1)
+                + "x" + (BukkitNavigationContext.CHUNK_RADIUS * 2 + 1) + " chunks");
+        if (bots.isEmpty()) {
+            sender.sendMessage(requested == null
+                    ? "No active bots."
+                    : "No active bot named " + ChatColor.YELLOW + requested + ChatColor.RESET + ".");
+        }
+        for (Bot bot : bots) {
+            MovementV2Controller.Status status = bot.movementV2Status();
+            String plan = status.lastPlan() == null
+                    ? "none"
+                    : status.lastPlan().status().name().toLowerCase(Locale.ENGLISH)
+                    + "/" + status.lastPlan().phase().name().toLowerCase(Locale.ENGLISH)
+                    + "/" + status.lastPlan().expandedNodes() + " nodes";
+            sender.sendMessage(ChatColor.YELLOW + bot.getBotName() + ChatColor.RESET
+                    + " route=" + status.routeIndex() + "/" + status.routeLength()
+                    + " plans=" + status.plans()
+                    + " replans=" + status.replans()
+                    + " fallbacks=" + status.fallbacks()
+                    + " actionFailures=" + status.actionFailures()
+                    + " last=" + status.lastReason()
+                    + " plan=" + plan);
+        }
+        sender.sendMessage(ChatUtils.LINE);
+    }
+
     public List<String> autofill(CommandSender sender, String[] args) {
         List<String> output = new ArrayList<>();
         if (args.length == 2) {
@@ -290,6 +341,8 @@ public class BotEnvironmentCommand extends CommandInstance {
             } else if (matches(args[0], "mobListType")) {
                 for (CustomListMode mode : CustomListMode.values())
                     output.add(mode.name().toLowerCase(Locale.ENGLISH));
+            } else if (matches(args[0], "movementV2Status") || matches(args[0], "mv2")) {
+                output.addAll(TerminatorPlus.getInstance().getManager().fetchNames());
             }
         }
         return output;

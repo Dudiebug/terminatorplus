@@ -93,6 +93,13 @@ public interface Terminator {
 
     void removeBot();
 
+    default boolean isAutoRespawnAllowed() {
+        return true;
+    }
+
+    default void setAutoRespawnAllowed(boolean allowed) {
+    }
+
     int getKills();
 
     void incrementKills();
@@ -161,6 +168,25 @@ public interface Terminator {
 
     default boolean tryMovementControllerMove(LivingEntity target) {
         return false;
+    }
+
+    /**
+     * Give the opt-in Movement V2 layer first refusal for routed pursuit. A
+     * null target lets an implementation finish an action that was already in
+     * progress; it must not begin a new route. Implementations return false to
+     * preserve the exact legacy/controller movement path.
+     */
+    default boolean tryMovementV2Move(LivingEntity target, Location routeTarget) {
+        return false;
+    }
+
+    /** Whether an opt-in traversal action currently owns the bot's hands. */
+    default boolean movementV2ActionActive() {
+        return false;
+    }
+
+    /** Cancel any opt-in traversal action when its target/lifecycle ends. */
+    default void cancelMovementV2Action(String reason) {
     }
 
     default boolean executePlannedCombat(LivingEntity target) {

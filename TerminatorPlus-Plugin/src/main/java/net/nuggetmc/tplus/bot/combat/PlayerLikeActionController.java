@@ -151,9 +151,14 @@ public final class PlayerLikeActionController {
 
     public boolean blocksCombatAction() {
         return switch (state) {
-            case USING_CONSUMABLE, DRINKING_POTION, THROWING_PROJECTILE, PLACING_BLOCK, USING_PEARL -> true;
+            case USING_CONSUMABLE, DRINKING_POTION, THROWING_PROJECTILE, OPENING,
+                    PLACING_BLOCK, PILLARING, MINING, FALL_CLUTCH, USING_PEARL -> true;
             default -> false;
         };
+    }
+
+    public boolean isMovementV2TraversalAction() {
+        return active() && source.startsWith("movement-v2-");
     }
 
     public int remainingTicks() {

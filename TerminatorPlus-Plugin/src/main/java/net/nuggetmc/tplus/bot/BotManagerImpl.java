@@ -23,6 +23,7 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityTargetLivingEntityEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
 import java.text.NumberFormat;
@@ -39,6 +40,9 @@ public class BotManagerImpl implements BotManager, Listener {
     public boolean joinMessages = false;
     private boolean mobTarget = false;
     private boolean addPlayerList = false;
+    private boolean respawnEnabled = false;
+    private final Map<UUID, BotRespawnState> pendingRespawns = new HashMap<>();
+    private final Map<UUID, BukkitTask> pendingRespawnTasks = new HashMap<>();
 
     public BotManagerImpl() {
         this.agent = new LegacyAgent(this, TerminatorPlus.getInstance());
@@ -240,6 +244,9 @@ public class BotManagerImpl implements BotManager, Listener {
     @Override
     public void remove(Terminator bot) {
         if (bot == null) return;
+        if (bot instanceof Bot b) {
+            cancelPendingRespawn(b.getUUID());
+        }
         try {
             agent.onBotRemoved(bot);
         } finally {
@@ -247,8 +254,72 @@ public class BotManagerImpl implements BotManager, Listener {
         }
     }
 
+    public boolean isRespawnEnabled() {
+        return respawnEnabled;
+    }
+
+    public void setRespawnEnabled(boolean enabled) {
+        respawnEnabled = enabled;
+        if (!enabled) cancelPendingRespawns();
+    }
+
+    public int pendingRespawnCount() {
+        return pendingRespawns.size();
+    }
+
+    boolean hasPendingRespawn(UUID botId) {
+        return botId != null && pendingRespawns.containsKey(botId);
+    }
+
+    public void prepareRespawn(Bot bot) {
+        if (!respawnEnabled || bot == null || !bot.isAutoRespawnAllowed()) return;
+
+        UUID botId = bot.getUUID();
+        if (pendingRespawns.containsKey(botId)) return;
+
+        BotRespawnState captured = BotRespawnState.capture(bot);
+        if (captured == null) return;
+        pendingRespawns.put(botId, captured);
+        BukkitTask task = Bukkit.getScheduler().runTaskLater(TerminatorPlus.getInstance(), () -> {
+            pendingRespawnTasks.remove(botId);
+            BotRespawnState state = pendingRespawns.remove(botId);
+            if (!respawnEnabled || state == null) return;
+
+            // The normal death path also schedules cleanup at 20 ticks. Ensure
+            // the old entity is gone before reusing its UUID, regardless of
+            // scheduler ordering within this tick.
+            try {
+                bot.removeBot();
+                if (state.respawn() == null) {
+                    TerminatorPlus.getInstance().getLogger().warning(
+                            "Could not find a safe respawn location for " + state.name());
+                }
+            } catch (RuntimeException error) {
+                TerminatorPlus.getInstance().getLogger().severe(
+                        "Could not respawn bot " + state.name() + ": " + error.getMessage());
+            }
+        }, 20L);
+        pendingRespawnTasks.put(botId, task);
+    }
+
+    void cancelPendingRespawn(UUID botId) {
+        if (botId == null) return;
+        BukkitTask task = pendingRespawnTasks.remove(botId);
+        if (task != null && !task.isCancelled()) task.cancel();
+        pendingRespawns.remove(botId);
+    }
+
+    private void cancelPendingRespawns() {
+        pendingRespawnTasks.values().stream()
+                .filter(task -> task != null && !task.isCancelled())
+                .forEach(BukkitTask::cancel);
+        pendingRespawnTasks.clear();
+        pendingRespawns.clear();
+    }
+
     @Override
     public void reset() {
+        cancelPendingRespawns();
         if (!bots.isEmpty()) {
             new HashSet<>(bots).forEach(Terminator::removeBot);
             bots.clear();
@@ -313,6 +384,10 @@ public class BotManagerImpl implements BotManager, Listener {
         Terminator bot = getBot(bukkitEntity.getEntityId());
         if (bot != null) {
             agent.onBotDeath(new BotDeathEvent(event, bot));
+            if (pendingRespawns.containsKey(bukkitEntity.getUniqueId())) {
+                event.getDrops().clear();
+                event.setDroppedExp(0);
+            }
         }
     }
 
