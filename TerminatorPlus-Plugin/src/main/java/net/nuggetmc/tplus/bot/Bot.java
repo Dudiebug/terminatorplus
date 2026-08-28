@@ -473,6 +473,8 @@ public class Bot extends ServerPlayer implements Terminator {
                 capabilities.canPillar(),
                 capabilities.canBreak()
         );
+        int replanStaggerTicks = Math.max(1, Math.min(20,
+                plugin.getConfig().getInt("ai.movement.v2.replan-stagger-ticks", 10)));
 
         MovementV2Controller.Decision decision = movementV2Controller.decide(
                 getLocation(),
@@ -480,6 +482,7 @@ public class Bot extends ServerPlayer implements Terminator {
                 routeTarget,
                 getCombatIntent(),
                 getAliveTicks(),
+                MovementV2Controller.planningAllowed(getAliveTicks(), getId(), replanStaggerTicks),
                 context,
                 capabilities,
                 policy

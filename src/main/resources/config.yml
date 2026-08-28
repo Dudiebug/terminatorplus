@@ -27,6 +27,9 @@ ai:
       enabled: true
       max-nodes: 2048
       max-micros: 2000
+      # Spread fresh plans across stable per-bot phases. 1 disables staggering;
+      # 10 adds at most nine ticks before a bot starts a new plan.
+      replan-stagger-ticks: 10
       # Ordinary movement is hard-capped at three. Only a planned clutch may
       # use the deeper limit below.
       max-normal-drop: 3

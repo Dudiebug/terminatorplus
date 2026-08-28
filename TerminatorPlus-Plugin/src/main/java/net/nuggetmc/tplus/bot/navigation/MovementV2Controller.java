@@ -42,6 +42,7 @@ public final class MovementV2Controller {
             Location targetLocation,
             CombatIntent intent,
             int tick,
+            boolean planThisTick,
             BukkitNavigationContext context,
             MovementV2Planner.Capabilities capabilities,
             MovementV2Planner.Policy policy
@@ -92,7 +93,13 @@ public final class MovementV2Controller {
         boolean targetChanged = targetId == null || !targetId.equals(currentTargetId);
         boolean targetMoved = plannedTarget == null || plannedTarget.distance(targetPos) > 2.0;
 
-        if (route.isEmpty() || routeIndex >= route.size() || contextChanged || targetChanged || targetMoved) {
+        boolean needsPlan = route.isEmpty() || routeIndex >= route.size()
+                || contextChanged || targetChanged || targetMoved;
+        if (needsPlan && !planThisTick) {
+            lastReason = "plan-staggered";
+            return Decision.hold(lastReason);
+        }
+        if (needsPlan) {
             if (!route.isEmpty()) replans++;
             MovementV2Planner.Result result = planner.plan(
                     context,
@@ -161,6 +168,10 @@ public final class MovementV2Controller {
     public void recordActionResult(ActionOutcome outcome, String reason) {
         actionOutcome = outcome == null ? ActionOutcome.FAILED : outcome;
         actionReason = token(reason);
+    }
+
+    public static boolean planningAllowed(int tick, int botId, int staggerTicks) {
+        return staggerTicks <= 1 || Math.floorMod((long) tick + botId, staggerTicks) == 0;
     }
 
     public void reset() {
