@@ -27,6 +27,9 @@ tasks {
     javadoc {
         options.encoding = Charsets.UTF_8.name()
     }
+    test {
+        useJUnitPlatform()
+    }
     processResources {
         filteringCharset = Charsets.UTF_8.name()
     }
