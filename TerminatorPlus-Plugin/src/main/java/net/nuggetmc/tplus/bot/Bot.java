@@ -115,6 +115,10 @@ public class Bot extends ServerPlayer implements Terminator {
     private UUID targetPlayer = null;
     private boolean inPlayerList;
     private Location respawnAnchor;
+    private Location pinnedSpawn;
+    private Location originLocation;
+    private boolean respawnFallGrace;
+    private int belowWorldTicks;
     private SkinData skinData;
     private final BotInventory botInventory;
     private final Cooldowns cooldowns;
@@ -213,6 +217,7 @@ public class Bot extends ServerPlayer implements Terminator {
 
         Bot bot = new Bot(nmsServer, nmsWorld, profile, addPlayerList);
         bot.skinData = skin;
+        bot.originLocation = loc.clone();
 
         bot.connection = new ServerGamePacketListenerImpl(nmsServer, new MockConnection(), bot, CommonListenerCookie.createInitial(bot.getGameProfile(), false));
 
@@ -473,6 +478,8 @@ public class Bot extends ServerPlayer implements Terminator {
                 capabilities.canPillar(),
                 capabilities.canBreak()
         );
+        int replanStaggerTicks = Math.max(1, Math.min(20,
+                plugin.getConfig().getInt("ai.movement.v2.replan-stagger-ticks", 10)));
 
         MovementV2Controller.Decision decision = movementV2Controller.decide(
                 getLocation(),
@@ -480,6 +487,7 @@ public class Bot extends ServerPlayer implements Terminator {
                 routeTarget,
                 getCombatIntent(),
                 getAliveTicks(),
+                MovementV2Controller.planningAllowed(getAliveTicks(), getId(), replanStaggerTicks),
                 context,
                 capabilities,
                 policy
@@ -749,6 +757,7 @@ public class Bot extends ServerPlayer implements Terminator {
         super.tick();
 
         if (!isAlive()) return;
+        if (rescueFromVoid()) return;
 
         aliveTicks++;
 
@@ -770,7 +779,7 @@ public class Bot extends ServerPlayer implements Terminator {
         // velocity and ground tracker so natural falls and mace dives register
         // as vanilla crits, and so mace smashes get their fall-distance bonus.
         this.setOnGround(onTheGround);
-        if (onTheGround) {
+        if (onTheGround || respawnFallGrace) {
             this.fallDistance = 0f;
         } else if (velocity.getY() < 0) {
             this.fallDistance += (float) -velocity.getY();
@@ -842,10 +851,36 @@ public class Bot extends ServerPlayer implements Terminator {
                 found.setAccessible(true);
             } catch (NoSuchFieldException ignored) {
                 // Intentionally null — loadChunks() will no-op below.
+                TerminatorPlus plugin = TerminatorPlus.getInstance();
+                if (plugin != null) {
+                    plugin.getLogger().warning("LevelChunk.loaded was not found on this Paper build; "
+                            + "bots in unloaded chunks may fall through the world.");
+                }
             }
         }
         CHUNK_LOADED_FIELD = found;
     }
+
+    /**
+     * Kill a bot that is far below the world and still alive, e.g. when the
+     * server has void damage turned off, so the normal death/respawn path runs
+     * instead of the bot falling forever.
+     */
+    private boolean rescueFromVoid() {
+        if (getY() >= level().getMinY() - VOID_RESCUE_DEPTH) {
+            belowWorldTicks = 0;
+            return false;
+        }
+        if (++belowWorldTicks < VOID_RESCUE_TICKS) return false;
+
+        belowWorldTicks = 0;
+        ServerLevel level = (ServerLevel) level();
+        hurtServer(level, damageSources().fellOutOfWorld(), Float.MAX_VALUE);
+        return !isAlive();
+    }
+
+    private static final int VOID_RESCUE_DEPTH = 128;
+    private static final int VOID_RESCUE_TICKS = 40;
 
     private static void markChunkLoaded(LevelChunk chunk) {
         if (CHUNK_LOADED_FIELD == null) return;
@@ -874,6 +909,11 @@ public class Bot extends ServerPlayer implements Terminator {
     }
 
     private void fallDamageCheck() {
+        if (respawnFallGrace) {
+            // A mid-air setspawn drops the bot; its first landing is free.
+            if (groundTicks != 0) respawnFallGrace = false;
+            return;
+        }
         if (groundTicks != 0 && noFallTicks == 0 && !(oldVelocity.getY() >= -0.8) && isFallBlocked()) {
             actionController.recordDirectShortcut(this, BotActionState.FALL_CLUTCH,
                     "legacy-environment-fall-block", botInventory.getSelectedHotbarSlot());
@@ -1435,6 +1475,23 @@ public class Bot extends ServerPlayer implements Terminator {
 
     public void setRespawnAnchor(Location location) {
         respawnAnchor = location == null ? null : location.clone();
+    }
+
+    Location pinnedSpawn() {
+        return pinnedSpawn == null ? null : pinnedSpawn.clone();
+    }
+
+    /** Respawn point from {@code /bot setspawn}; kept across deaths, may be mid-air. */
+    public void setPinnedSpawn(Location location) {
+        pinnedSpawn = location == null ? null : location.clone();
+    }
+
+    Location originLocation() {
+        return originLocation == null ? null : originLocation.clone();
+    }
+
+    void grantRespawnFallGrace() {
+        respawnFallGrace = true;
     }
 
     SkinData skinData() {

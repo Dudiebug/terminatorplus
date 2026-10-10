@@ -22,6 +22,7 @@ public final class BukkitNavigationContext implements MovementV2Planner.WorldVie
 
     public static final int CHUNK_RADIUS = MovementV2Planner.CONTEXT_CHUNK_RADIUS;
     public static final int CHUNK_COUNT = MovementV2Planner.CONTEXT_CHUNK_COUNT;
+    private static final int CHUNK_DIAMETER = CHUNK_RADIUS * 2 + 1;
 
     private static final Set<String> HAZARDS = Set.of(
             "LAVA", "FIRE", "SOUL_FIRE", "CACTUS", "SWEET_BERRY_BUSH",
@@ -42,6 +43,7 @@ public final class BukkitNavigationContext implements MovementV2Planner.WorldVie
     private final double borderMaxX;
     private final double borderMinZ;
     private final double borderMaxZ;
+    private final LoadedChunkCache loadedChunks;
     private final Map<MovementV2Planner.Pos, MovementV2Planner.Cell> cells = new HashMap<>();
 
     public BukkitNavigationContext(Location center) {
@@ -52,6 +54,7 @@ public final class BukkitNavigationContext implements MovementV2Planner.WorldVie
         this.world = center.getWorld();
         this.centerChunkX = center.getBlockX() >> 4;
         this.centerChunkZ = center.getBlockZ() >> 4;
+        this.loadedChunks = new LoadedChunkCache(world, centerChunkX, centerChunkZ);
         this.minX = (centerChunkX - CHUNK_RADIUS) << 4;
         this.maxX = ((centerChunkX + CHUNK_RADIUS + 1) << 4) - 1;
         this.minZ = (centerChunkZ - CHUNK_RADIUS) << 4;
@@ -92,7 +95,7 @@ public final class BukkitNavigationContext implements MovementV2Planner.WorldVie
         if (centerX < borderMinX || centerX > borderMaxX
                 || centerZ < borderMinZ || centerZ > borderMaxZ) return false;
         if (pos.y() < world.getMinHeight() || pos.y() >= world.getMaxHeight()) return false;
-        return world.isChunkLoaded(pos.x() >> 4, pos.z() >> 4);
+        return loadedChunks.isLoaded(pos.x() >> 4, pos.z() >> 4);
     }
 
     @Override
@@ -131,6 +134,34 @@ public final class BukkitNavigationContext implements MovementV2Planner.WorldVie
         if (box.getVolume() <= 1.0e-7) return false;
         double expectedTop = block.getY() + 1.0;
         return Math.abs(box.getMaxY() - expectedTop) <= 0.03125;
+    }
+
+    /** The context is immutable and spans exactly nine chunks, so each answer is read once. */
+    static final class LoadedChunkCache {
+        private final World world;
+        private final int minChunkX;
+        private final int minChunkZ;
+        private final boolean[] checked = new boolean[CHUNK_COUNT];
+        private final boolean[] loaded = new boolean[CHUNK_COUNT];
+
+        LoadedChunkCache(World world, int centerChunkX, int centerChunkZ) {
+            this.world = world;
+            this.minChunkX = centerChunkX - CHUNK_RADIUS;
+            this.minChunkZ = centerChunkZ - CHUNK_RADIUS;
+        }
+
+        boolean isLoaded(int chunkX, int chunkZ) {
+            int localX = chunkX - minChunkX;
+            int localZ = chunkZ - minChunkZ;
+            if (localX < 0 || localX >= CHUNK_DIAMETER
+                    || localZ < 0 || localZ >= CHUNK_DIAMETER) return false;
+            int index = localX * CHUNK_DIAMETER + localZ;
+            if (!checked[index]) {
+                loaded[index] = world.isChunkLoaded(chunkX, chunkZ);
+                checked[index] = true;
+            }
+            return loaded[index];
+        }
     }
 
     private static void requirePrimaryThread() {

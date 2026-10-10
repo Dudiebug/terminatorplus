@@ -278,28 +278,91 @@ public class BotManagerImpl implements BotManager, Listener {
         if (pendingRespawns.containsKey(botId)) return;
 
         BotRespawnState captured = BotRespawnState.capture(bot);
-        if (captured == null) return;
+        if (captured == null) {
+            TerminatorPlus.getInstance().getLogger().warning(
+                    bot.getBotName() + " died with no known spawn point and will not respawn.");
+            return;
+        }
+        if (bot.pinnedSpawn() == null && bot.respawnAnchor() == null) {
+            TerminatorPlus.getInstance().getLogger().info(bot.getBotName()
+                    + " died before landing safely; respawning it where it was created.");
+        }
         pendingRespawns.put(botId, captured);
+        scheduleRespawnAttempt(bot, botId, 1);
+    }
+
+    private void scheduleRespawnAttempt(Bot bot, UUID botId, int attempt) {
         BukkitTask task = Bukkit.getScheduler().runTaskLater(TerminatorPlus.getInstance(), () -> {
             pendingRespawnTasks.remove(botId);
+            // Take the state out before removeBot(): removal cancels any
+            // respawn still registered for this UUID.
             BotRespawnState state = pendingRespawns.remove(botId);
             if (!respawnEnabled || state == null) return;
 
-            // The normal death path also schedules cleanup at 20 ticks. Ensure
-            // the old entity is gone before reusing its UUID, regardless of
-            // scheduler ordering within this tick.
+            boolean finalAttempt = isFinalRespawnAttempt(attempt);
             try {
+                // The normal death path also schedules cleanup at 20 ticks. Ensure
+                // the old entity is gone before reusing its UUID, regardless of
+                // scheduler ordering within this tick.
                 bot.removeBot();
-                if (state.respawn() == null) {
-                    TerminatorPlus.getInstance().getLogger().warning(
-                            "Could not find a safe respawn location for " + state.name());
-                }
+                if (state.respawn(finalAttempt) != null) return;
             } catch (RuntimeException error) {
+                // Not retried: the new bot may already exist, and a retry would duplicate it.
                 TerminatorPlus.getInstance().getLogger().severe(
                         "Could not respawn bot " + state.name() + ": " + error.getMessage());
+                return;
             }
-        }, 20L);
+
+            if (finalAttempt) {
+                TerminatorPlus.getInstance().getLogger().severe("Could not respawn bot " + state.name()
+                        + " near " + describe(state.spawnLocation()) + " or at world spawn after "
+                        + attempt + " attempts. Use /bot setspawn to give bots a safe spawn point.");
+                return;
+            }
+            TerminatorPlus.getInstance().getLogger().warning("No safe respawn spot for " + state.name()
+                    + " near " + describe(state.spawnLocation()) + " yet; retrying ("
+                    + attempt + "/" + MAX_RESPAWN_ATTEMPTS + ").");
+            pendingRespawns.put(botId, state);
+            scheduleRespawnAttempt(bot, botId, attempt + 1);
+        }, respawnDelayTicks(attempt));
         pendingRespawnTasks.put(botId, task);
+    }
+
+    static final int MAX_RESPAWN_ATTEMPTS = 5;
+
+    static long respawnDelayTicks(int attempt) {
+        return attempt <= 1 ? 20L : 40L;
+    }
+
+    /** The last attempt also falls back to the world spawn. */
+    static boolean isFinalRespawnAttempt(int attempt) {
+        return attempt >= MAX_RESPAWN_ATTEMPTS;
+    }
+
+    private static String describe(Location location) {
+        if (location == null) return "unknown";
+        String world = location.isWorldLoaded() ? location.getWorld().getName() : "unloaded world";
+        return world + " " + location.getBlockX() + ", " + location.getBlockY() + ", " + location.getBlockZ();
+    }
+
+    public SpawnCheck checkPinnedSpawn(Location spawn) {
+        return RespawnSafety.checkPinnedSpawn(spawn);
+    }
+
+    /**
+     * Point bots that are dead and waiting to respawn at a new setspawn point.
+     *
+     * @return how many pending respawns were updated
+     */
+    public int pinPendingSpawns(String botName, Location spawn) {
+        int updated = 0;
+        for (Map.Entry<UUID, BotRespawnState> entry : pendingRespawns.entrySet()) {
+            if (botName == null || entry.getValue().name().equalsIgnoreCase(botName)) {
+                entry.setValue(entry.getValue().withPinnedSpawn(spawn));
+                updated++;
+            }
+        }
+        return updated;
     }
 
     void cancelPendingRespawn(UUID botId) {

@@ -8,9 +8,11 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BotRespawnStateTest {
 
@@ -75,6 +77,45 @@ class BotRespawnStateTest {
 
         assertEquals(new RespawnSafety.Offset(-1, 0), selected);
         assertNull(RespawnSafety.firstSafe(offsets, ignored -> false));
+    }
+
+    @Test
+    void prefersPinnedSpawnThenAnchorThenOrigin() {
+        org.bukkit.Location pinned = new LocationCandidate(1, 100, 1).location();
+        org.bukkit.Location anchor = new LocationCandidate(2, 64, 2).location();
+        org.bukkit.Location origin = new LocationCandidate(3, 70, 3).location();
+
+        assertEquals(pinned, BotRespawnState.chooseSpawn(pinned, anchor, origin));
+        assertEquals(anchor, BotRespawnState.chooseSpawn(null, anchor, origin));
+        assertEquals(origin, BotRespawnState.chooseSpawn(null, null, origin));
+        assertNull(BotRespawnState.chooseSpawn(null, null, null));
+        assertNotSame(pinned, BotRespawnState.chooseSpawn(pinned, anchor, origin));
+    }
+
+    @Test
+    void searchesFloorsNearestToTheAnchorPreferringBelow() {
+        // Standing at y=64 means the floor block is y=63.
+        assertEquals(List.of(63, 62, 64, 61, 65, 60, 59),
+                RespawnSafety.verticalCandidates(64, 2, 4, -64, 320));
+    }
+
+    @Test
+    void clampsFloorSearchToTheWorldHeightRange() {
+        assertEquals(List.of(-63, -64),
+                RespawnSafety.verticalCandidates(-62, 0, 16, -64, 320));
+        // Floor 318 would put the bot's head above the build limit.
+        assertEquals(List.of(316, 315, 317),
+                RespawnSafety.verticalCandidates(317, 2, 1, -64, 320));
+    }
+
+    @Test
+    void retriesBeforeFallingBackToWorldSpawn() {
+        assertEquals(20L, BotManagerImpl.respawnDelayTicks(1));
+        assertEquals(40L, BotManagerImpl.respawnDelayTicks(2));
+        for (int attempt = 1; attempt < BotManagerImpl.MAX_RESPAWN_ATTEMPTS; attempt++) {
+            assertFalse(BotManagerImpl.isFinalRespawnAttempt(attempt));
+        }
+        assertTrue(BotManagerImpl.isFinalRespawnAttempt(BotManagerImpl.MAX_RESPAWN_ATTEMPTS));
     }
 
     @Test
