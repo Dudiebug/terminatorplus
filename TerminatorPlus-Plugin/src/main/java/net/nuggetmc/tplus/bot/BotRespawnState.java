@@ -2,18 +2,21 @@ package net.nuggetmc.tplus.bot;
 
 import net.nuggetmc.tplus.api.agent.legacyagent.ai.NeuralNetwork;
 import net.nuggetmc.tplus.api.utils.SkinData;
+import org.bukkit.Bukkit;
 import org.bukkit.Particle;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 
+import java.util.List;
 import java.util.UUID;
 
 record BotRespawnState(
         UUID uuid,
         String name,
         Location spawnLocation,
+        Location pinnedSpawn,
         SkinData skin,
         ItemStack[] storage,
         ItemStack[] armor,
@@ -30,14 +33,16 @@ record BotRespawnState(
 ) {
 
     static BotRespawnState capture(Bot bot) {
-        Location anchor = bot.respawnAnchor();
-        if (anchor == null) return null;
+        Location pinned = bot.pinnedSpawn();
+        Location spawn = chooseSpawn(pinned, bot.respawnAnchor(), bot.originLocation());
+        if (spawn == null) return null;
 
         var botInventory = bot.getBotInventory();
         return new BotRespawnState(
                 bot.getUUID(),
                 bot.getBotName(),
-                anchor,
+                spawn,
+                pinned,
                 bot.skinData(),
                 botInventory.respawnStorageContents(),
                 botInventory.respawnArmorContents(),
@@ -54,8 +59,35 @@ record BotRespawnState(
         );
     }
 
-    Bot respawn() {
-        Location location = RespawnSafety.findNearestSafe(spawnLocation);
+    /**
+     * A setspawn point wins, then the auto-captured landing spot, then the
+     * point the bot was created at (covers bots that die before ever landing).
+     */
+    static Location chooseSpawn(Location pinned, Location anchor, Location origin) {
+        for (Location candidate : new Location[]{pinned, anchor, origin}) {
+            if (candidate != null) return candidate.clone();
+        }
+        return null;
+    }
+
+    BotRespawnState withPinnedSpawn(Location pinned) {
+        Location copy = pinned == null ? null : pinned.clone();
+        return new BotRespawnState(uuid, name, copy == null ? spawnLocation : copy, copy, skin, storage, armor,
+                extra, selectedHotbarSlot, defaultItem, network, shield, targetPlayer, kills, respectLoadout,
+                trainingLoadout, inPlayerList);
+    }
+
+    /**
+     * @param useWorldSpawnFallback when the usual spot is unusable, try the
+     *                              world spawn instead of giving up
+     */
+    Bot respawn(boolean useWorldSpawnFallback) {
+        Location location = pinnedSpawn != null
+                ? RespawnSafety.resolvePinned(pinnedSpawn)
+                : RespawnSafety.findNearestSafe(spawnLocation);
+        if (location == null && useWorldSpawnFallback) {
+            location = RespawnSafety.findNearestSafe(worldSpawn());
+        }
         if (location == null) return null;
 
         Bot bot = Bot.createBot(location, name, skin, uuid, inPlayerList);
@@ -70,6 +102,8 @@ record BotRespawnState(
         bot.setTargetPlayer(targetPlayer);
         bot.restoreKills(kills);
         bot.restoreTrainingLoadout(trainingLoadout);
+        bot.setPinnedSpawn(pinnedSpawn);
+        bot.grantRespawnFallGrace();
         if (respectLoadout) {
             bot.getBotInventory().markLoadoutApplied();
         } else {
@@ -78,6 +112,16 @@ record BotRespawnState(
         bot.getBukkitEntity().updateInventory();
         RespawnSafety.emitPoof(bot.getLocation(), BotRespawnState::spawnPoof);
         return bot;
+    }
+
+    private Location worldSpawn() {
+        World world = spawnLocation != null && spawnLocation.isWorldLoaded() ? spawnLocation.getWorld() : null;
+        if (world == null) {
+            List<World> worlds = Bukkit.getWorlds();
+            if (worlds.isEmpty()) return null;
+            world = worlds.get(0);
+        }
+        return world.getSpawnLocation();
     }
 
     private static void spawnPoof(Location location) {

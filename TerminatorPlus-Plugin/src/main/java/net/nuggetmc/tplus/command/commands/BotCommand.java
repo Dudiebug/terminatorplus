@@ -8,6 +8,7 @@ import net.nuggetmc.tplus.api.agent.legacyagent.LegacyMats;
 import net.nuggetmc.tplus.api.utils.ChatUtils;
 import net.nuggetmc.tplus.bot.Bot;
 import net.nuggetmc.tplus.bot.BotManagerImpl;
+import net.nuggetmc.tplus.bot.SpawnCheck;
 import net.nuggetmc.tplus.bot.loadout.BotInventory;
 import net.nuggetmc.tplus.bot.navigation.MovementV2Settings;
 import net.nuggetmc.tplus.bot.preset.BotPreset;
@@ -337,7 +338,7 @@ public class BotCommand extends CommandInstance {
 
     @Command(
             name = "setspawn",
-            desc = "Set the respawn anchor for all living bots or one named bot.",
+            desc = "Set the respawn point for all bots or one named bot (mid-air is allowed over ground).",
             aliases = "set-spawn",
             autofill = "setSpawnAutofill",
             visible = false
@@ -349,23 +350,46 @@ public class BotCommand extends CommandInstance {
             return;
         }
 
+        Location spawn = player.getLocation();
+        SpawnCheck check = manager.checkPinnedSpawn(spawn);
+        String refusal = setSpawnRefusal(check.problem());
+        if (refusal != null) {
+            sender.sendMessage(ChatColor.RED + refusal);
+            return;
+        }
+
         List<Bot> bots = manager.fetch().stream()
                 .filter(Bot.class::isInstance)
                 .map(Bot.class::cast)
                 .filter(Bot::isBotAlive)
                 .filter(bot -> botName == null || bot.getBotName().equalsIgnoreCase(botName))
                 .toList();
-        if (bots.isEmpty()) {
+        int pending = manager.pinPendingSpawns(botName, spawn);
+        if (bots.isEmpty() && pending == 0) {
             sender.sendMessage(ChatColor.RED + (botName == null
-                    ? "No living bots were found."
-                    : "No living bot named " + botName + " was found."));
+                    ? "No bots were found."
+                    : "No bot named " + botName + " was found."));
             return;
         }
 
-        Location spawn = player.getLocation();
-        bots.forEach(bot -> bot.setRespawnAnchor(spawn));
-        sender.sendMessage(ChatColor.YELLOW.toString() + bots.size() + ChatColor.RESET
-                + " bot respawn anchor(s) set to your location.");
+        bots.forEach(bot -> bot.setPinnedSpawn(spawn));
+        String message = ChatColor.YELLOW.toString() + (bots.size() + pending) + ChatColor.RESET
+                + " bot spawn point(s) set to your location.";
+        if (check.dropHeight() >= 1.0) {
+            message += " Bots will drop about " + Math.round(check.dropHeight()) + " block(s) to the ground.";
+        }
+        sender.sendMessage(message);
+    }
+
+    static String setSpawnRefusal(SpawnCheck.Problem problem) {
+        return switch (problem) {
+            case NONE -> null;
+            case OUTSIDE_WORLD -> "That spot is outside the world or the world border.";
+            case OBSTRUCTED -> "Bots would spawn inside a block or hazard there. Stand somewhere clear.";
+            case NO_GROUND -> "There is no ground below you, so bots would fall out of the world. "
+                    + "Stand above solid ground.";
+            case UNSAFE_LANDING -> "Bots would land in lava or another hazard below you.";
+        };
     }
 
     public List<String> setSpawnAutofill(CommandSender sender, String[] args) {
@@ -739,7 +763,7 @@ public class BotCommand extends CommandInstance {
             sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "target-region" + ChatUtils.BULLET_FORMATTED + "Set a region for the bots to prioritize entities inside.");
             sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "show-in-player-list" + ChatUtils.BULLET_FORMATTED + "Add newly spawned bots to the player list.");
             sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "auto-respawn" + ChatUtils.BULLET_FORMATTED + "Enable or disable automatic bot respawning.");
-            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "set-spawn" + ChatUtils.BULLET_FORMATTED + "Set bot respawn anchors to your location.");
+            sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "set-spawn" + ChatUtils.BULLET_FORMATTED + "Set bot respawn points to your location (mid-air is allowed over ground).");
             sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "movement-v2" + ChatUtils.BULLET_FORMATTED + "Enable, disable, or inspect Movement V2.");
             sender.sendMessage(ChatUtils.BULLET_FORMATTED + ChatColor.YELLOW + "placement-material" + ChatUtils.BULLET_FORMATTED + "Set the block bots use when placing blocks.");
             sender.sendMessage(ChatUtils.LINE);

@@ -131,7 +131,7 @@ These are public classes, but the movement system is still evolving. Pin to a sp
 
 ## Compatibility
 
-- Current 6.0.x jars are built for Paper 26.1.2 with Java 25.
+- Current 6.3.x jars are built for Paper 26.3 with Java 25 and Authlib 10.
 - Internal changes happen behind the `Terminator` interface; breaking API changes are called out in the [Changelog](Changelog).
 - Bots are real `ServerPlayer`s, so standard Bukkit APIs such as `bot.getBukkitEntity()` mostly work. Prefer `Terminator` methods for stability.
 

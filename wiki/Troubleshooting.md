@@ -6,7 +6,8 @@
 
 ## Version Mismatch
 
-Current 6.0.x release jars target Paper 26.1.2 only. Spigot and CraftBukkit are
+Current 6.3.x release jars target Paper 26.3 (including 26.3.x hotfixes) only.
+Use a 6.2.x `mc26.2` jar on 26.2. Spigot and CraftBukkit are
 not supported.
 
 ## Movement-Bank Bot Does Not Move

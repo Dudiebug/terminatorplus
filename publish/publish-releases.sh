@@ -6,7 +6,7 @@ set -euo pipefail
 OWNER="${OWNER:-Dudiebug}"
 REPO="${REPO:-terminatorplus}"
 VERSION="${1:-}"
-SUFFIX="${2:-mc26.2}"
+SUFFIX="${2:-mc26.3}"
 TARGET_BRANCH="${3:-master}"
 
 usage() {
@@ -15,7 +15,7 @@ Usage: bash publish/publish-releases.sh <version> [suffix] [target-branch]
 
 Examples:
   bash publish/publish-releases.sh 6.1.5
-  bash publish/publish-releases.sh 6.1.5 mc26.2 master
+  bash publish/publish-releases.sh 6.3.0 mc26.3 master
 
 The script publishes a prerelease. It never pushes source code. The current
 checkout must be clean, checked out on the target branch, and exactly match the

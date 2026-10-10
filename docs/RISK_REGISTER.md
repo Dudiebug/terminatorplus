@@ -15,4 +15,4 @@
 | Special moves override fundamentals | High | High | mace/trident/crystal/anchor | gate advanced tools | duel baseline test |
 | Debug logging too noisy | Low | Medium | debug systems | opt-in logs | console review |
 | Runtime-only bugs | High | High | all gameplay code | manual duel tests | live server test |
-| 1.21.11 vs 26.2 differences | High | Medium | Paper/NMS APIs | keep current work on master; explicitly scope compatibility branches | branch/version test |
+| 1.21.11 vs 26.x differences | High | Medium | Paper/NMS APIs | keep current work on master; explicitly scope compatibility branches | branch/version test |

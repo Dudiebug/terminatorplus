@@ -125,8 +125,12 @@ depleted inventory at death. Applying a loadout, saving the inventory editor,
 or using the give/armor commands updates that saved inventory.
 
 ### `/bot settings set-spawn [bot-name]` (legacy `/bot setspawn [bot-name]`)
-Set the permanent respawn anchor of every living bot, or one named bot, to your
-current location. **Requires** `terminatorplus.admin` and must be run by a player.
+Set the respawn point of every bot, or one named bot, to your current location.
+Bots waiting to respawn are updated too, and the point is kept across deaths
+until the server restarts. Mid-air spots are allowed: bots respawn there and
+drop to the ground without fall damage on that landing. Spots with no ground
+below (void), inside blocks or hazards, or above lava are refused.
+**Requires** `terminatorplus.admin` and must be run by a player.
 
 ### `/bot settings movement-v2 <on|off|status>`
 Enable, disable, or inspect Movement V2. **Requires** `terminatorplus.admin`.
