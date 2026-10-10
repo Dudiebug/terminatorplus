@@ -22,7 +22,7 @@ import java.util.Arrays;
 
 public class TerminatorPlus extends JavaPlugin {
 
-    public static final String REQUIRED_VERSION = "26.2";
+    public static final String REQUIRED_VERSION = "26.3";
 
     private static TerminatorPlus instance;
     private static String version;
@@ -51,6 +51,12 @@ public class TerminatorPlus extends JavaPlugin {
 
     public static String getMcVersion() {
         return mcVersion;
+    }
+
+    /** Accepts the required version and its hotfixes, e.g. 26.3 and 26.3.1. */
+    static boolean isSupportedVersion(String version) {
+        return version != null
+                && (version.equals(REQUIRED_VERSION) || version.startsWith(REQUIRED_VERSION + "."));
     }
 
     public BotManagerImpl getManager() {
@@ -85,7 +91,7 @@ public class TerminatorPlus extends JavaPlugin {
         MovementV2Settings.applyDefaultEnabledMigration(this);
 
         mcVersion = Bukkit.getServer().getMinecraftVersion();
-        correctVersion = mcVersion.equals(REQUIRED_VERSION);
+        correctVersion = isSupportedVersion(mcVersion);
         getLogger().info("Running on version: " + mcVersion + ", required version: " + REQUIRED_VERSION + ", correct version: " + correctVersion);
 
         // Create Instances

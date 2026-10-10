@@ -6,13 +6,13 @@
 
 ## Requirements
 
-- Paper 26.1.2. Current 6.0.x release jars are built only for the `mc26.1.2` target.
+- Paper 26.3 (or a 26.3.x hotfix). Current 6.3.x release jars are built only for the `mc26.3` target. Use a 6.2.x `mc26.2` jar on Paper or Purpur 26.2.
 - Java 25.
 - Spigot and CraftBukkit are not supported.
 
 ## Install
 
-1. Download the latest `TerminatorPlus-6.0.x-BETA-mc26.1.2.jar` from the releases page.
+1. Download the latest `TerminatorPlus-6.3.x-BETA-mc26.3.jar` from the releases page.
 2. Drop `TerminatorPlus-<version>.jar` into `plugins/`.
 3. Start or restart the server.
 4. Check the console banner for the server version and required target version.

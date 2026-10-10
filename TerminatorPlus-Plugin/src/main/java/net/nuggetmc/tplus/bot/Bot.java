@@ -1309,7 +1309,8 @@ public class Bot extends ServerPlayer implements Terminator {
     @Override
     public void punch() {
         CombatDebugger.punch(this);
-        swing(InteractionHand.MAIN_HAND);
+        // Same call vanilla makes for a player's arm-swing packet (26.3+).
+        swing(InteractionHand.MAIN_HAND, getItemInHand(InteractionHand.MAIN_HAND).getAttackAnimation(), false);
     }
 
     public boolean checkGround() {

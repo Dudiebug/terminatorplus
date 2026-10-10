@@ -3,6 +3,10 @@
 > See [Legacy Status](Legacy-Status) for this page's reference status and
 > [Current Strategy](Current-Strategy) for the current target.
 
+## 6.3.0 - Paper 26.3
+
+See [Release Notes 6.3.0](Release-Notes-6.3.0) for the full patch notes.
+
 ## 6.2.9 - Respawn Reliability
 
 See [Release Notes 6.2.9](Release-Notes-6.2.9) for the full patch notes.
